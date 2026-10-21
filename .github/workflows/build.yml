@@ -39,9 +39,7 @@ jobs:
 
   macos:
     name: macOS (universel)
-    # Runner auto-hébergé : un Mac avec les outils Xcode en ligne de commande.
-    # Rust y est installé par l'étape suivante s'il manque.
-    runs-on: [self-hosted, macOS]
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
