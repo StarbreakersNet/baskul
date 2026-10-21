@@ -1,6 +1,6 @@
 # Bascule
 
-Bascule partage **le clavier, la souris et le presse-papiers** de votre PC Windows avec votre Mac. Pour piloter le Mac, il suffit d'amener le curseur au bord de l'écran du PC.
+Bascule partage **le clavier, la souris et le presse-papiers** de votre PC Windows avec votre Mac. Pour piloter le Mac, il suffit d'amener le curseur au bord de l'écran du PC, ou d'appuyer sur un raccourci clavier (**Maj + F12** par défaut).
 
 - Le **clavier est transparent** : Bascule transmet la *position physique* de chaque touche. Il ne transmet jamais de caractère. C'est la disposition clavier du Mac qui produit les caractères, comme si le clavier était branché sur le Mac. **Ctrl reste Ctrl.** Aucune combinaison n'est convertie.
 - **Pas de bug des touches mortes**, contrairement à Deskflow / Synergy (voir [plus bas](#pourquoi-pas-de-bug-des-touches-mortes)). `^` puis `e` donne `ê`, et `¨` puis `i` donne `ï`.
@@ -8,7 +8,7 @@ Bascule partage **le clavier, la souris et le presse-papiers** de votre PC Windo
 - La **molette** est réglable : défilement par lignes ou au pixel, vitesse, inversion.
 - Le **presse-papiers** est partagé dans les deux sens : texte, texte mis en forme (HTML), images. Les mots de passe copiés depuis un gestionnaire de mots de passe sont ignorés.
 - La liaison est **chiffrée** (protocole Noise) et protégée par un secret partagé. Bascule se reconnecte automatiquement.
-- Tous les réglages se trouvent dans un fichier texte et se changent **sans recompiler**.
+- Tous les réglages se changent **sans recompiler**, dans une page de réglages qui s'ouvre dans le navigateur (ou directement dans le fichier texte).
 
 > Le sens Mac → PC (le Mac pilote le PC) est aussi prévu, mais il est **expérimental** (voir [Sens inverse](#sens-inverse-mac--pc-expérimental)).
 
@@ -21,8 +21,8 @@ Bascule partage **le clavier, la souris et le presse-papiers** de votre PC Windo
 1. Créez un dépôt **privé** sur GitHub et poussez-y ce dossier.
 2. Mettez à jour `version` dans `Cargo.toml` (c'est la version affichée par l'app macOS), puis créez un tag et poussez-le :
    ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
+   git tag v0.2.0
+   git push origin v0.2.0
    ```
    Le workflow `build` se lance dans l'onglet **Actions**.
 3. À la fin, une **Release** apparaît dans la page **Releases** du dépôt, avec :
@@ -63,23 +63,22 @@ Quittez CursorHop (ou tout autre logiciel de partage de souris) avant de lancer 
    - Faites un clic droit sur l'app, puis **Ouvrir**.
    - Sur macOS 15 et suivants, allez dans *Réglages Système → Confidentialité et sécurité*, puis cliquez sur **Ouvrir quand même** en bas de la page.
    - Autre solution, dans le Terminal : `xattr -dr com.apple.quarantine /Applications/Bascule.app`
-3. Bascule crée sa configuration et l'ouvre. `role = "secondary"` est déjà réglé. **Copiez la ligne `secret = "…"`**, vous en aurez besoin sur le PC. Ne touchez à rien d'autre.
+3. Bascule crée sa configuration et ouvre la **page de réglages** dans le navigateur. « Pilotée » est déjà sélectionné. **Copiez le secret partagé** (bouton « Copier »), vous en aurez besoin sur le PC. Notez aussi l'**adresse de cette machine** affichée par la page : c'est l'adresse IP du Mac. Ne touchez à rien d'autre.
 4. macOS demande l'autorisation **Accessibilité**. Ouvrez *Réglages Système → Confidentialité et sécurité → Accessibilité* et activez **Bascule**. Si macOS demande aussi d'accepter les connexions entrantes ou l'accès au réseau local, cliquez sur **Autoriser**.
-5. Notez l'adresse IP du Mac. Elle se trouve dans *Réglages Système → Wi-Fi (ou Réseau) → Détails*. Vous pouvez aussi taper `ipconfig getifaddr en0` dans le Terminal.
+5. Si la page n'affiche pas l'adresse IP du Mac, elle se trouve dans *Réglages Système → Wi-Fi (ou Réseau) → Détails*. Vous pouvez aussi taper `ipconfig getifaddr en0` dans le Terminal.
 
 L'icône ⌨︎ dans la barre des menus indique l'état. Son menu propose aussi « Autoriser Bascule (Accessibilité)… » si l'autorisation manque.
 
 ### Sur le PC
 
 1. Rangez `bascule.exe` dans un dossier définitif, par exemple `%LOCALAPPDATA%\Programs\Bascule\Bascule.exe`. Si SmartScreen s'affiche, cliquez sur **Informations complémentaires**, puis **Exécuter quand même**.
-2. Lancez-le. La configuration s'ouvre dans le Bloc-notes avec `role = "primary"`. Modifiez :
-   ```toml
-   connect = "192.168.1.30"          # l'adresse IP du Mac
-   secret = "…"                      # EXACTEMENT le même secret que sur le Mac
-   ```
-   Si le Mac n'est pas à droite du PC, réglez aussi `[screen] secondary_position` sur `"left"`, `"top"` ou `"bottom"`.
-3. Enregistrez. Faites un clic droit sur l'icône de Bascule dans la zone de notification (à côté de l'horloge), puis **Redémarrer Bascule**.
-4. L'icône devient **verte** une fois connectée. Amenez la souris au bord droit de l'écran : le curseur passe sur le Mac. 🎉
+2. Lancez-le. La page de réglages s'ouvre dans le navigateur, avec « Principale » sélectionné. Renseignez :
+   - **Se connecter à** : l'adresse IP du Mac (par exemple `192.168.1.30`) ;
+   - **Secret partagé** : collez EXACTEMENT le secret du Mac.
+
+   Si le Mac n'est pas à droite du PC, choisissez sa place dans « Position de l'autre écran ».
+3. Cliquez sur **Enregistrer et redémarrer**.
+4. L'icône de Bascule, dans la zone de notification (à côté de l'horloge), devient **verte** une fois connectée. Appuyez sur **Maj + F12**, ou amenez la souris au bord droit de l'écran : le curseur passe sur le Mac. 🎉
 5. Facultatif : dans le menu, cochez **Lancer au démarrage de Windows**. Sur le Mac, cochez **Ouvrir à l'ouverture de session**.
 
 ---
@@ -88,10 +87,13 @@ L'icône ⌨︎ dans la barre des menus indique l'état. Son menu propose aussi 
 
 | Action | Comment |
 |---|---|
-| Passer sur le Mac | Pousser le curseur contre le bord de l'écran du PC (sauf dans les 10 px des coins) |
-| Revenir sur le PC | Ramener le curseur par le même bord, côté Mac |
-| Retour d'urgence | **Ctrl + Alt + Maj + B**, ou le menu « Ramener le curseur sur ce PC » |
+| Passer sur le Mac | **Maj + F12** (le curseur reprend là où il était sur le Mac), ou pousser le curseur contre le bord de l'écran du PC (sauf dans les 10 px des coins) |
+| Revenir sur le PC | **Maj + F11**, ou ramener le curseur par le même bord, côté Mac |
 | Copier / coller entre machines | Copier normalement d'un côté, coller de l'autre |
+
+Les raccourcis se changent dans les réglages. Le même raccourci pour l'aller et le retour permet de passer d'une machine à l'autre avec une seule combinaison. Bascule ne les intercepte que lorsque les deux machines sont connectées. Attention, **Maj + F12** sert aussi dans VS Code (« Rechercher toutes les références ») : choisissez-en un autre si vous en avez besoin.
+
+Pour ne passer d'une machine à l'autre **qu'au clavier**, désactivez « Bascule par les bords de l'écran » dans les réglages.
 
 Si la connexion tombe, le curseur revient tout seul sur le PC. Tout ce qui était enfoncé est relâché côté Mac.
 
@@ -119,7 +121,15 @@ MetaLeft = "AltLeft"     # Windows du PC → ⌥
 
 ## 4. Réglages (sans recompiler)
 
-Ouvrez le fichier via le menu, **Modifier la configuration…**, puis faites **Redémarrer Bascule**. Le fichier complet et commenté est dans [`docs/config.exemple.toml`](docs/config.exemple.toml).
+Dans le menu de Bascule, choisissez **Réglages…** : une page s'ouvre dans le navigateur. Modifiez, puis cliquez sur **Enregistrer et redémarrer**.
+
+- La page n'est accessible que depuis cette machine (adresse `127.0.0.1`, protégée par un jeton aléatoire).
+- Les réglages qui ne servent que sur l'autre machine sont grisés.
+- Pour un raccourci, cliquez sur « Modifier » puis tapez la combinaison.
+- Le bouton « Ouvrir le fichier » donne accès au fichier texte, par exemple pour le remappage de touches. Quand la page enregistre, les commentaires du fichier sont conservés.
+- `bascule --settings` ouvre seulement la page, sans démarrer le partage.
+
+Le fichier complet et commenté est dans [`docs/config.exemple.toml`](docs/config.exemple.toml). Après une modification à la main, faites **Redémarrer Bascule** dans le menu.
 
 | Section | Réglage | Effet |
 |---|---|---|
@@ -133,8 +143,10 @@ Ouvrez le fichier via le menu, **Modifier la configuration…**, puis faites **R
 | `[keyboard]` (Mac) | `iso_swap = "auto"` / `"on"` / `"off"` | Touches `²` et `<` inversées ? Forcez `on` ou `off` |
 | | `[keyboard.remap]` | Remappage de touches physiques |
 | `[keyboard]` (PC) | `media_keys = "remote"` / `"local"` | Les touches volume et lecture agissent sur la machine où est le curseur, ou toujours sur le PC |
-| `[screen]` (PC) | `secondary_position`, `corner_size` | Position du Mac, et coins neutres |
-| `[hotkeys]` (PC) | `return_to_primary`, `toggle_lock` | Raccourcis : retour sur le PC, verrouillage du curseur (ex. `"ScrollLock"`) |
+| `[screen]` (PC) | `edge_switching` | Bascule par les bords de l'écran (`false` : seulement au clavier) |
+| | `secondary_position`, `corner_size` | Position du Mac, et coins neutres |
+| `[hotkeys]` (PC) | `switch_to_secondary`, `return_to_primary` | Raccourcis pour aller sur le Mac (`"Shift+F12"`) et revenir sur le PC (`"Shift+F11"`) |
+| | `toggle_lock` | Raccourci de verrouillage du curseur (ex. `"ScrollLock"`) |
 | `[clipboard]` | `enabled`, `images`, `html`, `max_size_mb`, `skip_sensitive` | Presse-papiers partagé |
 | `[log]` | `level = "debug"` | Journal détaillé, utile pour un diagnostic |
 
@@ -148,6 +160,7 @@ Pour le défilement, commencez par `mode = "lines"`. Si la vitesse varie trop d'
 - Le `secret` doit être **identique** des deux côtés. En cas d'erreur, le menu affiche « secret incorrect ».
 - Une seule machine doit avoir `connect` rempli, avec l'IP de l'autre.
 - Les rôles doivent être `primary` sur le PC et `secondary` sur le Mac. Le menu signale l'erreur si ce n'est pas le cas.
+- Les deux machines doivent avoir la **même version** de Bascule. Sinon, le menu affiche « versions incompatibles ».
 - Si le pare-feu du Mac est actif, autorisez Bascule : *Réglages → Réseau → Pare-feu → Options*.
 - Les deux machines doivent être sur le même réseau. Pensez à donner une IP fixe au Mac dans votre box (bail DHCP statique).
 
@@ -213,9 +226,11 @@ src/
   secondary.rs     logique de la machine pilotée (position, sortie par le bord…)
   clipboard.rs     presse-papiers (texte, HTML, PNG), anti-écho
   hotkey.rs        raccourcis
+  settings_ui.rs   page de réglages : serveur HTTP local (127.0.0.1) et API JSON
+  settings.html    la page elle-même (HTML/CSS/JS, intégrée à l'exécutable)
   platform/
     windows.rs     hooks bas niveau, masquage du curseur, SendInput, icône
     macos.rs       CGEventPost, gestes, Verr. Maj (IOKit), CGEventTap, barre des menus
 ```
 
-Tests : `cargo test` (54 tests, dont un test de bout en bout sur une vraie connexion TCP). Le code Windows et macOS se vérifie aussi depuis Linux avec `./scripts/xcheck.sh`.
+Tests : `cargo test` (67 tests, dont un test de bout en bout sur une vraie connexion TCP). Le code Windows et macOS se vérifie aussi depuis Linux avec `./scripts/xcheck.sh`.

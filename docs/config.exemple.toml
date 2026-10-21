@@ -25,6 +25,10 @@ connect = ""
 secret = "collez-ici-le-meme-secret-sur-les-deux-machines"
 
 [screen]
+# (Machine principale) Passer sur l'autre machine en poussant la souris
+# contre le bord de l'écran. false = uniquement avec les raccourcis
+# clavier (section [hotkeys]).
+edge_switching = true
 # (Machine principale) Où se trouve l'écran de la machine secondaire,
 # par rapport à la machine principale : "right", "left", "top" ou "bottom".
 secondary_position = "right"
@@ -87,9 +91,15 @@ max_size_mb = 32
 skip_sensitive = true
 
 [hotkeys]
-# (Machine principale) Ramène immédiatement le curseur sur la machine
-# principale. Laisser vide pour désactiver.
-return_to_primary = "Ctrl+Alt+Shift+B"
+# Format : modificateurs (Ctrl, Shift, Alt, Win / Cmd) puis une touche,
+# séparés par « + ». Exemples : "Shift+F12", "Ctrl+Alt+B". Vide = désactivé.
+#
+# (Machine principale) Envoie le curseur sur la machine secondaire, là où
+# il était la dernière fois.
+switch_to_secondary = "Shift+F12"
+# (Machine principale) Ramène le curseur sur la machine principale.
+# Astuce : le même raccourci que ci-dessus permet d'aller et venir.
+return_to_primary = "Shift+F11"
 # (Machine principale) Verrouille / déverrouille le curseur sur l'écran courant.
 # Exemple : "ScrollLock". Vide = désactivé.
 toggle_lock = ""

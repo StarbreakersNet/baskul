@@ -31,7 +31,7 @@ use std::collections::HashSet;
 use std::ffi::{c_char, c_void};
 use std::path::{Path, PathBuf};
 use std::ptr::{null, null_mut};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 // ---------------------------------------------------------------------------
@@ -959,6 +959,8 @@ thread_local! {
 
 static PEER_SOURCE: AtomicUsize = AtomicUsize::new(0);
 static MAIN_LOOP: AtomicUsize = AtomicUsize::new(0);
+/// Redémarrage demandé par la page de réglages (traité par `ui_tick`).
+static RESTART_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 fn wake_main() {
     let src = PEER_SOURCE.load(Ordering::Acquire);
@@ -1240,10 +1242,10 @@ define_class!(
             ui_tick(self.mtm());
         }
 
-        #[unsafe(method(openConfig:))]
-        fn open_config(&self, _sender: Option<&AnyObject>) {
+        #[unsafe(method(openSettings:))]
+        fn open_settings(&self, _sender: Option<&AnyObject>) {
             if let Some(p) = ui_value(|u| u.config_path.clone()) {
-                open_in_editor(&p);
+                super::open_settings(&p, false);
             }
         }
 
@@ -1394,6 +1396,11 @@ fn ui_force_refresh(mtm: MainThreadMarker) {
 }
 
 fn ui_tick(mtm: MainThreadMarker) {
+    if RESTART_REQUESTED.swap(false, Ordering::AcqRel) {
+        let args = ui_value(|u| u.args.clone()).unwrap_or_default();
+        shutdown();
+        super::relaunch(&args);
+    }
     let role = match ui_value(|u| u.role) {
         Some(r) => r,
         None => return,
@@ -1551,16 +1558,15 @@ pub fn fatal(msg: &str) -> ! {
 }
 
 pub fn first_run(path: &Path) {
-    open_in_editor(path);
-    let script = format!(
-        "display dialog {} with title \"Bascule\" buttons {{\"OK\"}} default button 1",
-        applescript_string(&super::first_run_text(path))
-    );
-    let _ = std::process::Command::new("/usr/bin/osascript").arg("-e").arg(script).spawn();
+    super::open_settings(path, true);
 }
 
 pub fn open_in_editor(path: &Path) {
     let _ = std::process::Command::new("/usr/bin/open").arg("-t").arg(path).spawn();
+}
+
+pub fn open_url(url: &str) {
+    let _ = std::process::Command::new("/usr/bin/open").arg(url).spawn();
 }
 
 pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
@@ -1578,6 +1584,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
     );
     std::mem::forget(activity);
 
+    crate::settings_ui::set_restart_handler(|| RESTART_REQUESTED.store(true, Ordering::Release));
     let controller = Controller::new(mtm);
     let item = NSStatusBar::systemStatusBar().statusItemWithLength(-1.0);
     let menu = NSMenu::new(mtm);
@@ -1599,7 +1606,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
     } else {
         None
     };
-    menu.addItem(&menu_item(mtm, "Modifier la configuration…", Some(sel!(openConfig:)), &controller));
+    menu.addItem(&menu_item(mtm, "Réglages…", Some(sel!(openSettings:)), &controller));
     menu.addItem(&menu_item(mtm, "Ouvrir le journal", Some(sel!(openLog:)), &controller));
     menu.addItem(&menu_item(mtm, "Ouvrir le dossier de Bascule", Some(sel!(openFolder:)), &controller));
     menu.addItem(&NSMenuItem::separatorItem(mtm));

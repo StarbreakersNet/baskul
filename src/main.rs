@@ -25,6 +25,7 @@ mod platform;
 mod primary;
 mod protocol;
 mod secondary;
+mod settings_ui;
 mod status;
 
 use std::fs::File;
@@ -39,6 +40,8 @@ pub struct Args {
     pub config: Option<PathBuf>,
     /// Journaux aussi sur la sortie d'erreur (Windows : console attachée).
     pub console: bool,
+    /// Ouvre seulement la page de réglages, sans démarrer le partage.
+    pub settings: bool,
 }
 
 impl Args {
@@ -51,6 +54,7 @@ impl Args {
                     a.config = Some(PathBuf::from(it.next().ok_or("--config attend un chemin")?));
                 }
                 "--console" => a.console = true,
+                "--settings" => a.settings = true,
                 "--print-config" => {
                     print!("{}", config::default_config_text(config::default_role(), &config::generate_secret()));
                     std::process::exit(0);
@@ -61,9 +65,10 @@ impl Args {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "bascule {VERSION}\n\nUsage : bascule [--config FICHIER] [--console]\n\n  \
+                        "bascule {VERSION}\n\nUsage : bascule [--config FICHIER] [--console] [--settings]\n\n  \
                          --config FICHIER  fichier de configuration (défaut : {})\n  \
                          --console         affiche aussi le journal dans le terminal\n  \
+                         --settings        ouvre seulement la page de réglages (sans démarrer le partage)\n  \
                          --print-config    affiche une configuration par défaut",
                         config::default_config_path().display()
                     );
@@ -129,6 +134,20 @@ fn main() {
     platform::early_init(&args);
 
     let path = args.config.clone().unwrap_or_else(config::default_config_path);
+    if args.settings {
+        // La page sert aussi à corriger un fichier invalide : pas de validation ici.
+        logging::init(config::log_dir().join("bascule.log"), log::LevelFilter::Info, args.console);
+        match settings_ui::url(&path, false) {
+            Ok(url) => {
+                println!("Réglages de Bascule : {url}");
+                platform::open_url(&url);
+            }
+            Err(e) => platform::fatal(&e),
+        }
+        loop {
+            std::thread::park();
+        }
+    }
     let (cfg, created) = match config::load_or_create(&path) {
         Ok(x) => x,
         Err(e) => platform::fatal(&format!("{e}\n\nFichier : {}", path.display())),

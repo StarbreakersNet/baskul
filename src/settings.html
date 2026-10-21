@@ -1,0 +1,868 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Réglages de Bascule</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f4f5f7;
+  --card: #ffffff;
+  --text: #1c1e21;
+  --muted: #646a73;
+  --border: #e3e5e9;
+  --field: #ffffff;
+  --field-border: #cdd1d8;
+  --accent: #2563eb;
+  --accent-text: #ffffff;
+  --accent-soft: #e9f0ff;
+  --ok: #157a3b;
+  --ok-soft: #e6f5ec;
+  --warn: #9a5b00;
+  --warn-soft: #fdf3e1;
+  --err: #c0262d;
+  --err-soft: #fdecec;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 1px 3px rgb(16 24 40 / 6%);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111317;
+    --card: #1a1d22;
+    --text: #e7e9ec;
+    --muted: #9aa1ab;
+    --border: #2a2e35;
+    --field: #14161a;
+    --field-border: #3b4048;
+    --accent: #6d9eff;
+    --accent-text: #0b1222;
+    --accent-soft: #1c2944;
+    --ok: #57d68b;
+    --ok-soft: #142a1d;
+    --warn: #f0b955;
+    --warn-soft: #2d2412;
+    --err: #ff8a8a;
+    --err-soft: #331a1b;
+    --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+.wrap { max-width: 780px; margin: 0 auto; padding: 0 16px; }
+
+/* En-tête */
+header { padding: 28px 0 8px; }
+header .wrap { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.logo {
+  width: 42px; height: 42px; border-radius: 11px; flex: none;
+  display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-text); font-size: 22px; font-weight: 700;
+}
+.brand { flex: 1; min-width: 200px; }
+h1 { margin: 0; font-size: 21px; letter-spacing: -0.01em; }
+.sub { margin: 0; color: var(--muted); font-size: 13px; }
+.pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 5px 12px; border-radius: 999px; font-size: 13px;
+  background: var(--card); border: 1px solid var(--border); max-width: 100%;
+}
+.pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.pill.ok::before { background: var(--ok); }
+.pill.wait::before { background: var(--warn); }
+
+/* Cartes et lignes */
+main { padding-bottom: 110px; }
+.card {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 6px 20px; margin: 16px 0;
+}
+.card > h2 { font-size: 16px; margin: 16px 0 4px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.card > .intro { margin: 0 0 10px; color: var(--muted); font-size: 13.5px; }
+.row {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: 8px 24px; align-items: center; padding: 14px 0; border-top: 1px solid var(--border);
+  transition: opacity .15s;
+}
+.card > h2 + .row, .card > .intro + .row, .roles + .row { border-top: 0; }
+.label { font-weight: 600; display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.help { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+.ctl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.row.off { opacity: .45; }
+.row.other .ctl { opacity: .55; }
+@media (max-width: 640px) {
+  .row { grid-template-columns: minmax(0, 1fr); }
+  .card { padding: 4px 14px; }
+}
+.tag {
+  font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 6px; background: var(--accent-soft); color: var(--accent);
+}
+.tag.other { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+
+/* Champs */
+input[type=text], input[type=number], select {
+  font: inherit; color: var(--text); background: var(--field);
+  border: 1px solid var(--field-border); border-radius: 8px; padding: 7px 10px;
+  min-width: 0; width: 100%;
+}
+input[type=number] { width: 110px; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; }
+.grow { flex: 1 1 100%; min-width: 0; }
+input:focus-visible, select:focus-visible, button:focus-visible, .seg input:focus-visible + span,
+.switch input:focus-visible + span, .role-card input:focus-visible ~ .role-title {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+input:invalid { border-color: var(--err); }
+.unit { color: var(--muted); font-size: 13px; }
+
+.btn {
+  font: inherit; font-weight: 600; cursor: pointer; border-radius: 8px; padding: 8px 14px;
+  border: 1px solid var(--field-border); background: var(--card); color: var(--text); white-space: nowrap;
+}
+.btn:hover:not(:disabled) { border-color: var(--accent); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn.small { padding: 6px 11px; font-size: 13.5px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.btn.ghost { background: transparent; }
+
+/* Interrupteur */
+.switch { position: relative; display: inline-block; width: 44px; height: 26px; flex: none; }
+.switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.switch span {
+  position: absolute; inset: 0; border-radius: 999px; background: var(--field-border);
+  transition: background .15s; pointer-events: none;
+}
+.switch span::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 25%); transition: transform .15s;
+}
+.switch input:checked + span { background: var(--accent); }
+.switch input:checked + span::after { transform: translateX(18px); }
+.switch input:disabled { cursor: default; }
+
+/* Choix segmentés */
+.seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--field-border); border-radius: 9px; padding: 3px; gap: 3px; background: var(--field); }
+.seg label { position: relative; }
+.seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.seg span { display: block; padding: 5px 12px; border-radius: 6px; font-size: 14px; color: var(--muted); }
+.seg input:checked + span { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+.seg input:disabled { cursor: default; }
+
+/* Rôle */
+.roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 6px 0 14px; }
+.role-card {
+  position: relative; display: block; cursor: pointer;
+  border: 1.5px solid var(--border); border-radius: 10px; padding: 12px 14px;
+}
+.role-card input { position: absolute; opacity: 0; }
+.role-card:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.role-title { display: block; font-weight: 700; }
+.role-desc { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+
+/* Position de l'autre écran */
+.pos { display: grid; grid-template-columns: repeat(3, auto); gap: 4px; justify-content: start; align-items: center; }
+.pos label { position: relative; }
+.pos input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.pos span {
+  display: block; text-align: center; font-size: 12.5px; padding: 5px 8px; border-radius: 7px;
+  border: 1px dashed var(--field-border); color: var(--muted); min-width: 74px;
+}
+.pos input:checked + span { border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.pos .me {
+  grid-column: 2; grid-row: 2; text-align: center; font-size: 12.5px; font-weight: 600;
+  padding: 12px 8px; border-radius: 7px; background: var(--field-border); color: var(--text);
+}
+.pos .p-top { grid-column: 2; grid-row: 1; }
+.pos .p-left { grid-column: 1; grid-row: 2; }
+.pos .p-right { grid-column: 3; grid-row: 2; }
+.pos .p-bottom { grid-column: 2; grid-row: 3; }
+
+/* Raccourcis */
+.hotkey { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.keys {
+  display: inline-flex; gap: 4px; align-items: center; min-height: 34px; padding: 3px 8px;
+  border: 1px solid var(--field-border); border-radius: 8px; background: var(--field); min-width: 120px;
+}
+.keys .none { color: var(--muted); font-size: 13.5px; }
+kbd {
+  font: 600 12.5px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 5px 7px; border-radius: 6px; border: 1px solid var(--field-border);
+  border-bottom-width: 2px; background: var(--card);
+}
+.hotkey.recording .keys { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* Messages */
+.note { border-radius: 10px; padding: 12px 16px; margin: 16px 0; font-size: 14px; }
+.note p { margin: 0 0 6px; }
+.note ol { margin: 6px 0; padding-left: 20px; }
+.note.info { background: var(--accent-soft); }
+.note.warn { background: var(--warn-soft); color: var(--warn); }
+.note.error { background: var(--err-soft); color: var(--err); }
+.inline-warn { color: var(--warn); font-size: 13px; margin: 0 0 12px; }
+code.addr { font-size: 15px; font-weight: 600; }
+
+/* Barre d'enregistrement */
+.actionbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  border-top: 1px solid var(--border);
+}
+.actionbar .wrap { display: flex; align-items: center; gap: 10px; padding-top: 12px; padding-bottom: 12px; }
+#msg { flex: 1; margin: 0; font-size: 13.5px; color: var(--muted); min-width: 0; }
+#msg.error { color: var(--err); }
+#msg.ok { color: var(--ok); }
+.done { text-align: center; padding: 36px 20px; }
+.done .check {
+  width: 52px; height: 52px; margin: 0 auto 12px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--ok-soft); color: var(--ok); font-size: 26px; font-weight: 700;
+}
+.done h2 { justify-content: center; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="logo" aria-hidden="true">⇄</div>
+    <div class="brand">
+      <h1>Réglages de Bascule</h1>
+      <p class="sub" id="machine">Chargement…</p>
+    </div>
+    <span class="pill" id="status" hidden></span>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="note info" id="welcome" hidden>
+    <p><strong>Bienvenue dans Bascule&nbsp;!</strong> Pour relier vos deux machines&nbsp;:</p>
+    <ol>
+      <li>Choisissez le rôle de cette machine. La <em>principale</em> est celle qui a le clavier et la souris.</li>
+      <li>Le secret doit être identique sur les deux machines&nbsp;: copiez celui-ci dans les réglages de l'autre machine, ou collez ici le sien.</li>
+      <li>Sur la machine principale, indiquez l'adresse de l'autre dans «&nbsp;Se connecter à&nbsp;». L'autre machine laisse ce champ vide.</li>
+    </ol>
+    <p>Enregistrez&nbsp;: Bascule redémarre avec ces réglages.</p>
+  </div>
+  <div class="note error" id="load-error" hidden>
+    <p><strong>Le fichier de configuration ne peut pas être lu.</strong></p>
+    <p id="load-error-text"></p>
+    <button type="button" class="btn small" data-open-file>Ouvrir le fichier pour le corriger</button>
+  </div>
+
+  <section class="card done" id="done" hidden>
+    <div class="check" aria-hidden="true">✓</div>
+    <h2>Réglages enregistrés</h2>
+    <p class="help">Bascule redémarre avec la nouvelle configuration. Vous pouvez fermer cet onglet.</p>
+  </section>
+
+  <form id="form" hidden novalidate>
+    <section class="card">
+      <h2>Cette machine</h2>
+      <div class="roles" role="radiogroup" aria-label="Rôle de cette machine">
+        <label class="role-card">
+          <input type="radio" name="role" value="primary">
+          <span class="role-title">Principale</span>
+          <span class="role-desc">Le clavier et la souris sont branchés sur cette machine (en général le PC).</span>
+        </label>
+        <label class="role-card">
+          <input type="radio" name="role" value="secondary">
+          <span class="role-title">Pilotée</span>
+          <span class="role-desc">Cette machine est contrôlée depuis l'autre (en général le Mac).</span>
+        </label>
+      </div>
+      <div class="row">
+        <div>
+          <label class="label" for="f-name">Nom affiché</label>
+          <p class="help">Facultatif. Par défaut, le nom de la machine.</p>
+        </div>
+        <div class="ctl"><input id="f-name" name="name" type="text" autocomplete="off"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Connexion</h2>
+      <p class="intro">Une machine attend la connexion, l'autre s'y connecte. Conseillé&nbsp;: le Mac attend, le PC se connecte.</p>
+      <div class="row" id="address-row" hidden>
+        <div>
+          <span class="label">Adresse de cette machine</span>
+          <p class="help">À indiquer dans «&nbsp;Se connecter à&nbsp;» sur l'autre machine.</p>
+        </div>
+        <div class="ctl"><code class="addr mono" id="address"></code><button type="button" class="btn small" data-copy="#address">Copier</button></div>
+      </div>
+      <div class="row">
+        <div>
+          <label class="label" for="f-connect">Se connecter à</label>
+          <p class="help">Adresse IP (ou nom <span class="mono">.local</span>) de l'autre machine. Vide&nbsp;: cette machine attend la connexion.</p>
+        </div>
+        <div class="ctl"><input id="f-connect" name="network.connect" type="text" class="mono" placeholder="Vide : attendre la connexion" spellcheck="false" autocomplete="off"></div>
+      </div>
+      <div class="row">
+        <div>
+          <label class="label" for="f-secret">Secret partagé</label>
+          <p class="help">Identique sur les deux machines (12 caractères minimum).</p>
+        </div>
+        <div class="ctl">
+          <input id="f-secret" name="network.secret" type="text" class="mono grow" required minlength="12" spellcheck="false" autocomplete="off">
+          <span class="ctl">
+            <button type="button" class="btn small" data-copy="#f-secret">Copier</button>
+            <button type="button" class="btn small ghost" id="new-secret">Nouveau</button>
+          </span>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label class="label" for="f-listen">Adresse d'écoute</label>
+          <p class="help">Utilisée quand «&nbsp;Se connecter à&nbsp;» est vide. Rarement à changer.</p>
+        </div>
+        <div class="ctl"><input id="f-listen" name="network.listen" type="text" class="mono" spellcheck="false" autocomplete="off"></div>
+      </div>
+    </section>
+
+    <section class="card" data-for="primary">
+      <h2>Passer d'une machine à l'autre</h2>
+      <div class="row">
+        <div>
+          <span class="label">Aller sur la machine pilotée</span>
+          <p class="help">Le curseur y reprend là où il était.</p>
+        </div>
+        <div class="ctl"><div class="hotkey"><input type="hidden" name="hotkeys.switch_to_secondary"></div></div>
+      </div>
+      <div class="row">
+        <div>
+          <span class="label">Revenir sur cette machine</span>
+          <p class="help">Le même raccourci que ci-dessus permet d'aller et venir.</p>
+        </div>
+        <div class="ctl"><div class="hotkey"><input type="hidden" name="hotkeys.return_to_primary"></div></div>
+      </div>
+      <p class="inline-warn" id="hotkey-warn" hidden>Sans bascule par les bords, ces deux raccourcis sont indispensables.</p>
+      <div class="row">
+        <div>
+          <label class="label" for="f-edges">Bascule par les bords de l'écran</label>
+          <p class="help">Pousser la souris contre le bord fait passer sur l'autre machine.</p>
+        </div>
+        <div class="ctl"><label class="switch"><input id="f-edges" type="checkbox" name="screen.edge_switching"><span></span></label></div>
+      </div>
+      <div class="row" data-edges>
+        <div>
+          <span class="label">Position de l'autre écran</span>
+          <p class="help">Où se trouve l'écran de la machine pilotée par rapport à celui-ci.</p>
+        </div>
+        <div class="ctl">
+          <div class="pos" role="radiogroup" aria-label="Position de l'autre écran">
+            <label class="p-top"><input type="radio" name="screen.secondary_position" value="top"><span>En haut</span></label>
+            <label class="p-left"><input type="radio" name="screen.secondary_position" value="left"><span>À gauche</span></label>
+            <div class="me">Cet écran</div>
+            <label class="p-right"><input type="radio" name="screen.secondary_position" value="right"><span>À droite</span></label>
+            <label class="p-bottom"><input type="radio" name="screen.secondary_position" value="bottom"><span>En bas</span></label>
+          </div>
+        </div>
+      </div>
+      <div class="row" data-edges>
+        <div>
+          <label class="label" for="f-corner">Coins neutres</label>
+          <p class="help">Dans les coins, le bord ne fait pas changer de machine (bouton ✕ d'une fenêtre…). 0&nbsp;= aucun.</p>
+        </div>
+        <div class="ctl"><input id="f-corner" type="number" name="screen.corner_size" min="0" max="500" step="1" required><span class="unit">pixels</span></div>
+      </div>
+      <div class="row">
+        <div>
+          <span class="label">Verrouiller le curseur</span>
+          <p class="help">Bloque ou débloque le curseur sur l'écran où il se trouve.</p>
+        </div>
+        <div class="ctl"><div class="hotkey"><input type="hidden" name="hotkeys.toggle_lock"></div></div>
+      </div>
+    </section>
+
+    <section class="card" data-for="secondary">
+      <h2>Souris et molette</h2>
+      <div class="row">
+        <div>
+          <label class="label" for="f-speed">Vitesse de la souris</label>
+          <p class="help">Multiplie les déplacements reçus. 1&nbsp;= identique.</p>
+        </div>
+        <div class="ctl"><input id="f-speed" type="number" name="mouse.speed" min="0.05" max="20" step="0.05" required><span class="unit">×</span></div>
+      </div>
+      <div class="row">
+        <div>
+          <span class="label">Défilement</span>
+          <p class="help">Par lignes, comme une molette Windows, ou au pixel, plus fluide.</p>
+        </div>
+        <div class="ctl">
+          <div class="seg" role="radiogroup" aria-label="Défilement">
+            <label><input type="radio" name="scroll.mode" value="lines"><span>Par lignes</span></label>
+            <label><input type="radio" name="scroll.mode" value="pixels"><span>Au pixel</span></label>
+          </div>
+        </div>
+      </div>
+      <div class="row" data-scroll="lines">
+        <div><label class="label" for="f-lines">Lignes par cran</label></div>
+        <div class="ctl"><input id="f-lines" type="number" name="scroll.lines_per_notch" min="0.1" max="50" step="0.1" required></div>
+      </div>
+      <div class="row" data-scroll="pixels">
+        <div><label class="label" for="f-pixels">Pixels par cran</label></div>
+        <div class="ctl"><input id="f-pixels" type="number" name="scroll.pixels_per_notch" min="1" max="2000" step="1" required></div>
+      </div>
+      <div class="row">
+        <div><label class="label" for="f-inv-v">Inverser le défilement vertical</label></div>
+        <div class="ctl"><label class="switch"><input id="f-inv-v" type="checkbox" name="scroll.invert_vertical"><span></span></label></div>
+      </div>
+      <div class="row">
+        <div><label class="label" for="f-inv-h">Inverser le défilement horizontal</label></div>
+        <div class="ctl"><label class="switch"><input id="f-inv-h" type="checkbox" name="scroll.invert_horizontal"><span></span></label></div>
+      </div>
+      <div class="row">
+        <div>
+          <span class="label">Boutons latéraux (4 et 5)</span>
+          <p class="help">Boutons pour Chrome, Firefox, VS Code… Geste «&nbsp;balayage&nbsp;» pour Safari, le Finder, Xcode…</p>
+        </div>
+        <div class="ctl">
+          <div class="seg" role="radiogroup" aria-label="Boutons latéraux">
+            <label><input type="radio" name="buttons.side_buttons" value="buttons"><span>Boutons</span></label>
+            <label><input type="radio" name="buttons.side_buttons" value="swipe"><span>Geste balayage</span></label>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div><label class="label" for="f-swap">Inverser les boutons 4 et 5</label></div>
+        <div class="ctl"><label class="switch"><input id="f-swap" type="checkbox" name="buttons.swap_side_buttons"><span></span></label></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Clavier</h2>
+      <div class="row" data-for="primary">
+        <div>
+          <span class="label">Touches multimédia</span>
+          <p class="help">Volume, lecture… sur la machine du curseur, ou toujours sur la machine principale.</p>
+        </div>
+        <div class="ctl">
+          <div class="seg" role="radiogroup" aria-label="Touches multimédia">
+            <label><input type="radio" name="keyboard.media_keys" value="remote"><span>Machine du curseur</span></label>
+            <label><input type="radio" name="keyboard.media_keys" value="local"><span>Machine principale</span></label>
+          </div>
+        </div>
+      </div>
+      <div class="row" data-for="secondary">
+        <div>
+          <span class="label">Touches «&nbsp;²&nbsp;» et «&nbsp;&lt;&nbsp;&gt;&nbsp;» (Mac)</span>
+          <p class="help">Échange pour les claviers ISO (français). Si ces deux touches sont inversées, essayez «&nbsp;Oui&nbsp;» ou «&nbsp;Non&nbsp;».</p>
+        </div>
+        <div class="ctl">
+          <div class="seg" role="radiogroup" aria-label="Échange des touches ISO">
+            <label><input type="radio" name="keyboard.iso_swap" value="auto"><span>Auto</span></label>
+            <label><input type="radio" name="keyboard.iso_swap" value="on"><span>Oui</span></label>
+            <label><input type="radio" name="keyboard.iso_swap" value="off"><span>Non</span></label>
+          </div>
+        </div>
+      </div>
+      <div class="row" data-for="secondary">
+        <div>
+          <span class="label">Remappage de touches</span>
+          <p class="help">Section <span class="mono">[keyboard.remap]</span> du fichier de configuration.</p>
+        </div>
+        <div class="ctl"><span id="remap-count"></span><button type="button" class="btn small" data-open-file>Ouvrir le fichier</button></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Presse-papiers</h2>
+      <div class="row">
+        <div><label class="label" for="f-clip">Partager le presse-papiers</label></div>
+        <div class="ctl"><label class="switch"><input id="f-clip" type="checkbox" name="clipboard.enabled"><span></span></label></div>
+      </div>
+      <div class="row" data-clip>
+        <div><label class="label" for="f-img">Images</label></div>
+        <div class="ctl"><label class="switch"><input id="f-img" type="checkbox" name="clipboard.images"><span></span></label></div>
+      </div>
+      <div class="row" data-clip>
+        <div>
+          <label class="label" for="f-html">Texte mis en forme</label>
+          <p class="help">Conserve la mise en forme (HTML) quand elle est disponible.</p>
+        </div>
+        <div class="ctl"><label class="switch"><input id="f-html" type="checkbox" name="clipboard.html"><span></span></label></div>
+      </div>
+      <div class="row" data-clip>
+        <div>
+          <label class="label" for="f-sensitive">Ignorer les contenus sensibles</label>
+          <p class="help">Mots de passe copiés depuis un gestionnaire de mots de passe.</p>
+        </div>
+        <div class="ctl"><label class="switch"><input id="f-sensitive" type="checkbox" name="clipboard.skip_sensitive"><span></span></label></div>
+      </div>
+      <div class="row" data-clip>
+        <div><label class="label" for="f-max">Taille maximale</label></div>
+        <div class="ctl"><input id="f-max" type="number" name="clipboard.max_size_mb" min="1" max="1024" step="1" required><span class="unit">Mo</span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Avancé</h2>
+      <div class="row">
+        <div><label class="label" for="f-log">Niveau du journal</label></div>
+        <div class="ctl">
+          <select id="f-log" name="log.level">
+            <option value="error">Erreurs seulement</option>
+            <option value="warn">Avertissements</option>
+            <option value="info">Normal</option>
+            <option value="debug">Détaillé</option>
+            <option value="trace">Très détaillé</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <span class="label">Fichier de configuration</span>
+          <p class="help mono" id="path"></p>
+        </div>
+        <div class="ctl"><button type="button" class="btn small" data-open-file>Ouvrir le fichier</button></div>
+      </div>
+    </section>
+  </form>
+</main>
+
+<div class="actionbar" id="actionbar" hidden>
+  <div class="wrap">
+    <p id="msg" role="status" aria-live="polite"></p>
+    <button type="button" class="btn ghost" id="reset" disabled>Annuler</button>
+    <button type="submit" form="form" class="btn primary" id="save" disabled>Enregistrer</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+const token = new URLSearchParams(location.search).get("t") ?? "";
+const form = document.getElementById("form");
+const $ = (sel) => document.querySelector(sel);
+const NBSP = " ";
+let info = null;      // réponse de /api/config
+let original = "";    // configuration chargée (JSON)
+let saving = false;
+
+// --- Accès à l'API ------------------------------------------------------
+async function api(method, path, body) {
+  let r;
+  try {
+    r = await fetch(path, {
+      method,
+      headers: body ? { "X-Bascule-Token": token, "Content-Type": "application/json" } : { "X-Bascule-Token": token },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new Error("Bascule ne répond pas. Rouvrez les réglages depuis le menu de Bascule.");
+  }
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `Erreur ${r.status}`);
+  return data;
+}
+
+// --- Liaison formulaire <-> configuration -------------------------------
+const get = (obj, path) => path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), obj);
+function set(obj, path, value) {
+  const keys = path.split(".");
+  const last = keys.pop();
+  const target = keys.reduce((o, k) => (o[k] ??= {}), obj);
+  target[last] = value;
+}
+
+function fill(cfg) {
+  for (const el of form.elements) {
+    if (!el.name) continue;
+    const v = get(cfg, el.name);
+    if (el.type === "checkbox") el.checked = !!v;
+    else if (el.type === "radio") el.checked = el.value === String(v);
+    else el.value = v ?? "";
+  }
+  document.querySelectorAll(".hotkey").forEach((box) => renderHotkey(box));
+  sync();
+}
+
+function collect() {
+  const cfg = structuredClone(info.config);
+  for (const el of form.elements) {
+    if (!el.name) continue;
+    if (el.type === "radio") { if (el.checked) set(cfg, el.name, el.value); }
+    else if (el.type === "checkbox") set(cfg, el.name, el.checked);
+    else if (el.type === "number") set(cfg, el.name, el.value === "" ? null : Number(el.value));
+    else set(cfg, el.name, el.value.trim());
+  }
+  return cfg;
+}
+
+const dirty = () => info?.config && JSON.stringify(collect()) !== original;
+
+// Affichage selon le rôle et les options choisies.
+function sync() {
+  const role = form.elements.role.value;
+  document.querySelectorAll("[data-for]").forEach((el) => {
+    const other = el.dataset.for !== role;
+    const rows = el.classList.contains("row") ? [el] : el.querySelectorAll(".row");
+    rows.forEach((r) => r.classList.toggle("other", other));
+    const tag = el.querySelector(".tag");
+    if (tag) {
+      tag.classList.toggle("other", other);
+      tag.title = other ? "Ce réglage sert sur l'autre machine : il n'a pas d'effet ici." : "";
+    }
+  });
+  const edges = form.elements["screen.edge_switching"].checked;
+  enableRows("[data-edges]", edges);
+  const mode = form.elements["scroll.mode"].value;
+  document.querySelectorAll("[data-scroll]").forEach((r) => enableRow(r, r.dataset.scroll === mode));
+  enableRows("[data-clip]", form.elements["clipboard.enabled"].checked);
+  const missing = !form.elements["hotkeys.switch_to_secondary"].value || !form.elements["hotkeys.return_to_primary"].value;
+  $("#hotkey-warn").hidden = edges || !missing || role !== "primary";
+  updateBar();
+}
+function enableRows(sel, on) { document.querySelectorAll(sel).forEach((r) => enableRow(r, on)); }
+function enableRow(row, on) {
+  row.classList.toggle("off", !on);
+  row.querySelectorAll("input, select, button").forEach((i) => (i.disabled = !on));
+}
+
+function addRoleTags() {
+  document.querySelectorAll("[data-for]").forEach((el) => {
+    const where = el.classList.contains("row") ? el.querySelector(".label") : el.querySelector("h2");
+    const tag = document.createElement("span");
+    tag.className = "tag";
+    tag.textContent = el.dataset.for === "primary" ? "Machine principale" : "Machine pilotée";
+    where.append(tag);
+  });
+}
+
+// --- Raccourcis clavier -------------------------------------------------
+const MODIFIERS = new Set(["ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight", "AltLeft", "AltRight",
+  "MetaLeft", "MetaRight", "OSLeft", "OSRight"]);
+let recording = null;
+
+const metaName = () => (info?.os === "macos" ? "Cmd" : "Win");
+function modifiers(e) {
+  const m = [];
+  if (e.ctrlKey) m.push("Ctrl");
+  if (e.altKey) m.push("Alt");
+  if (e.shiftKey) m.push("Shift");
+  if (e.metaKey) m.push(metaName());
+  return m;
+}
+function keyName(code) {
+  let m = /^Key([A-Z])$/.exec(code);
+  if (m) return m[1];
+  m = /^Digit(\d)$/.exec(code);
+  if (m) return m[1];
+  return code || null;
+}
+
+function setupHotkey(box) {
+  const input = box.querySelector("input");
+  box.insertAdjacentHTML("beforeend",
+    '<span class="keys" aria-live="polite"></span>' +
+    '<button type="button" class="btn small" data-record>Modifier</button>' +
+    '<button type="button" class="btn small ghost" data-clear title="Désactiver ce raccourci" aria-label="Désactiver ce raccourci">✕</button>');
+  box.querySelector("[data-record]").addEventListener("click", () => (recording === box ? stopRecording() : startRecording(box)));
+  box.querySelector("[data-clear]").addEventListener("click", () => {
+    stopRecording();
+    input.value = "";
+    renderHotkey(box);
+    sync();
+  });
+}
+
+function renderHotkey(box, preview) {
+  const keys = box.querySelector(".keys");
+  const value = box.querySelector("input").value;
+  keys.replaceChildren();
+  const parts = preview ?? (value ? value.split("+") : []);
+  if (!parts.length) {
+    const s = document.createElement("span");
+    s.className = "none";
+    s.textContent = preview ? "Appuyez sur la combinaison…" : "Aucun";
+    keys.append(s);
+    return;
+  }
+  for (const p of parts) {
+    const k = document.createElement("kbd");
+    k.textContent = p;
+    keys.append(k);
+  }
+}
+
+function startRecording(box) {
+  stopRecording();
+  recording = box;
+  box.classList.add("recording");
+  box.querySelector("[data-record]").textContent = "Annuler";
+  renderHotkey(box, []);
+}
+function stopRecording() {
+  if (!recording) return;
+  const box = recording;
+  recording = null;
+  box.classList.remove("recording");
+  box.querySelector("[data-record]").textContent = "Modifier";
+  renderHotkey(box);
+}
+
+window.addEventListener("keydown", (e) => {
+  if (!recording) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const mods = modifiers(e);
+  if (e.code === "Escape" && !mods.length) return stopRecording();
+  if (MODIFIERS.has(e.code)) return renderHotkey(recording, mods);
+  const key = keyName(e.code);
+  if (!key) return;
+  const box = recording;
+  box.querySelector("input").value = [...mods, key].join("+");
+  stopRecording();
+  sync();
+}, true);
+window.addEventListener("keyup", (e) => {
+  if (recording && MODIFIERS.has(e.code)) renderHotkey(recording, modifiers(e));
+}, true);
+document.addEventListener("pointerdown", (e) => {
+  if (recording && !recording.contains(e.target)) stopRecording();
+});
+
+// --- Divers -------------------------------------------------------------
+function newSecret() {
+  const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  const s = Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
+  return s.match(/.{4}/g).join("-");
+}
+
+async function copy(text, button) {
+  try {
+    await navigator.clipboard.writeText(text);
+    const label = button.textContent;
+    button.textContent = "Copié ✓";
+    setTimeout(() => (button.textContent = label), 1500);
+  } catch {
+    setMessage("Copie impossible : sélectionnez le texte et copiez-le à la main.", "error");
+  }
+}
+
+function setMessage(text, kind = "") {
+  const msg = $("#msg");
+  msg.textContent = text;
+  msg.className = kind;
+}
+
+function updateBar() {
+  if (saving) return;
+  const d = dirty();
+  $("#save").disabled = !d;
+  $("#reset").disabled = !d;
+  setMessage(d ? "Modifications non enregistrées." : "");
+}
+
+async function save(e) {
+  e.preventDefault();
+  stopRecording();
+  if (!form.reportValidity()) return;
+  saving = true;
+  $("#save").disabled = true;
+  setMessage("Enregistrement…");
+  try {
+    const cfg = collect();
+    const r = await api("POST", "/api/config", cfg);
+    info.config = cfg;
+    original = JSON.stringify(cfg);
+    if (r.restart) {
+      form.hidden = true;
+      $("#welcome").hidden = true;
+      $("#actionbar").hidden = true;
+      $("#status").hidden = true;
+      $("#done").hidden = false;
+      window.scrollTo(0, 0);
+    } else {
+      setMessage("Enregistré. Redémarrez Bascule pour appliquer les changements.", "ok");
+    }
+  } catch (err) {
+    setMessage(err.message, "error");
+  } finally {
+    saving = false;
+    if (!form.hidden) $("#save").disabled = !dirty();
+  }
+}
+
+function showStatus() {
+  const pill = $("#status");
+  if (info.status) {
+    pill.textContent = info.status.text || "Démarrage…";
+    pill.className = "pill " + (info.status.connected ? "ok" : "wait");
+  } else {
+    pill.textContent = "Bascule n'est pas lancé";
+    pill.className = "pill";
+  }
+  pill.hidden = false;
+}
+
+async function load() {
+  if (new URLSearchParams(location.search).has("bienvenue")) $("#welcome").hidden = false;
+  try {
+    info = await api("GET", "/api/config");
+  } catch (err) {
+    $("#machine").textContent = "";
+    $("#load-error-text").textContent = err.message;
+    $("#load-error").hidden = false;
+    $("#load-error [data-open-file]").hidden = true;
+    return;
+  }
+  const os = { macos: "macOS", windows: "Windows", linux: "Linux" }[info.os] ?? info.os;
+  $("#machine").textContent = `${info.hostname} · ${os}`;
+  $("#path").textContent = info.path;
+  showStatus();
+  if (!info.config) {
+    $("#load-error-text").textContent = info.error;
+    $("#load-error").hidden = false;
+    return;
+  }
+  if (info.address) {
+    $("#address").textContent = info.address;
+    $("#address-row").hidden = false;
+  }
+  $("#f-name").placeholder = info.hostname;
+  const n = Object.keys(info.config.keyboard?.remap ?? {}).length;
+  $("#remap-count").textContent = n ? `${n}${NBSP}règle${n > 1 ? "s" : ""}` : "Aucune règle";
+  $("#save").textContent = info.running ? "Enregistrer et redémarrer" : "Enregistrer";
+  original = JSON.stringify(info.config);
+  fill(info.config);
+  form.hidden = false;
+  $("#actionbar").hidden = false;
+}
+
+// --- Événements ---------------------------------------------------------
+addRoleTags();
+document.querySelectorAll(".hotkey").forEach(setupHotkey);
+form.addEventListener("input", sync);
+form.addEventListener("change", sync);
+form.addEventListener("submit", save);
+$("#reset").addEventListener("click", () => {
+  stopRecording();
+  fill(JSON.parse(original));
+  setMessage("");
+});
+$("#new-secret").addEventListener("click", () => {
+  if (!confirm("Le nouveau secret devra aussi être recopié sur l'autre machine. Continuer ?")) return;
+  form.elements["network.secret"].value = newSecret();
+  sync();
+});
+document.querySelectorAll("[data-copy]").forEach((b) =>
+  b.addEventListener("click", () => {
+    const el = $(b.dataset.copy);
+    copy(el.value ?? el.textContent, b);
+  }));
+document.querySelectorAll("[data-open-file]").forEach((b) =>
+  b.addEventListener("click", () => api("POST", "/api/open-file").catch((err) => setMessage(err.message, "error"))));
+window.addEventListener("beforeunload", (e) => {
+  if (dirty()) e.preventDefault();
+});
+load();
+</script>
+</body>
+</html>

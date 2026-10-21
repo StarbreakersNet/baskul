@@ -276,17 +276,7 @@ pub struct Settings {
 
 impl Config {
     pub fn parse(text: &str) -> Result<Config, String> {
-        // TextEdit (macOS) remplace par défaut les guillemets droits par des
-        // guillemets typographiques : on les accepte.
-        let text: String = text
-            .chars()
-            .map(|c| match c {
-                '\u{201C}' | '\u{201D}' | '\u{201E}' | '\u{00AB}' | '\u{00BB}' => '"',
-                '\u{2018}' | '\u{2019}' => '\'',
-                c => c,
-            })
-            .collect();
-        toml::from_str(&text).map_err(|e| format!("configuration invalide : {e}"))
+        toml::from_str(&straight_quotes(text)).map_err(|e| format!("configuration invalide : {e}"))
     }
 
     pub fn validate(&self) -> Result<Settings, String> {
@@ -366,6 +356,81 @@ impl Config {
             log_level,
         })
     }
+}
+
+/// TextEdit (macOS) remplace par défaut les guillemets droits par des
+/// guillemets typographiques : on les accepte.
+fn straight_quotes(text: &str) -> String {
+    text.chars()
+        .map(|c| match c {
+            '\u{201C}' | '\u{201D}' | '\u{201E}' | '\u{00AB}' | '\u{00BB}' => '"',
+            '\u{2018}' | '\u{2019}' => '\'',
+            c => c,
+        })
+        .collect()
+}
+
+/// Écrit les valeurs de `cfg` dans le texte TOML `old` en conservant ses
+/// commentaires et sa mise en forme. Les clés absentes de `old` sont
+/// ajoutées avec le commentaire du modèle.
+pub fn update_text(old: &str, cfg: &Config) -> Result<String, String> {
+    let old = old.trim_start_matches('\u{feff}');
+    let template = default_config_text(default_role(), "");
+    let old = if old.trim().is_empty() { template.as_str() } else { old };
+    // Les guillemets typographiques ne sont remplacés que s'il le faut : les
+    // « » des commentaires restent intacts.
+    let mut doc: toml_edit::DocumentMut =
+        old.parse().or_else(|_| straight_quotes(old).parse()).map_err(|e| format!("configuration invalide : {e}"))?;
+    let new_text = toml::to_string(cfg).map_err(|e| format!("conversion de la configuration : {e}"))?;
+    let new: toml_edit::DocumentMut = new_text.parse().map_err(|e| format!("conversion de la configuration : {e}"))?;
+    let template: toml_edit::DocumentMut = template.parse().map_err(|e| format!("modèle invalide : {e}"))?;
+    merge_table(doc.as_table_mut(), new.as_table(), Some(template.as_table()));
+    Ok(doc.to_string())
+}
+
+fn merge_table(old: &mut toml_edit::Table, new: &toml_edit::Table, template: Option<&toml_edit::Table>) {
+    use toml_edit::Item;
+    for (key, new_item) in new.iter() {
+        let tmpl = template.and_then(|t| t.get(key));
+        match (old.get_mut(key), new_item) {
+            (Some(Item::Table(o)), Item::Table(n)) => merge_table(o, n, tmpl.and_then(Item::as_table)),
+            (Some(Item::Value(o)), Item::Value(n)) => {
+                // Valeur inchangée : on garde son écriture d'origine.
+                if bare(o) != bare(n) {
+                    let decor = o.decor().clone();
+                    *o = n.clone();
+                    *o.decor_mut() = decor;
+                }
+            }
+            (Some(slot), _) => *slot = new_item.clone(),
+            (None, _) => {
+                let mut item = new_item.clone();
+                match (&mut item, tmpl) {
+                    (Item::Value(v), Some(Item::Value(t))) => *v.decor_mut() = t.decor().clone(),
+                    (Item::Table(v), Some(Item::Table(t))) => *v.decor_mut() = t.decor().clone(),
+                    _ => {}
+                }
+                match template.and_then(|t| t.key(key)) {
+                    Some(k) => old.insert_formatted(k, item),
+                    None => old.insert(key, item),
+                };
+            }
+        }
+    }
+    // Valeurs supprimées (règles de [keyboard.remap]…). Les tables restent,
+    // avec leurs commentaires.
+    let stale: Vec<String> =
+        old.iter().filter(|(k, v)| v.is_value() && !new.contains_key(k)).map(|(k, _)| k.to_string()).collect();
+    for k in stale {
+        old.remove(&k);
+    }
+}
+
+/// Écriture d'une valeur, sans espaces ni commentaire autour.
+fn bare(v: &toml_edit::Value) -> String {
+    let mut v = v.clone();
+    v.decor_mut().clear();
+    v.to_string()
 }
 
 /// Ajoute le port par défaut à une adresse qui n'en a pas.
@@ -657,6 +722,65 @@ mod tests {
             .replace("connect = \"\"", "connect = \u{201C}192.168.1.30\u{201D}");
         let s = Config::parse(&text).unwrap().validate().unwrap();
         assert_eq!(s.endpoint, Endpoint::Connect(format!("192.168.1.30:{DEFAULT_PORT}")));
+    }
+
+    fn edited(text: &str, f: impl FnOnce(&mut Config)) -> String {
+        let mut cfg = Config::parse(text).unwrap();
+        f(&mut cfg);
+        let out = update_text(text, &cfg).unwrap();
+        let back = Config::parse(&out).unwrap();
+        assert_eq!(toml::to_string(&back).unwrap(), toml::to_string(&cfg).unwrap(), "relecture différente");
+        out
+    }
+
+    #[test]
+    fn update_keeps_comments_and_layout() {
+        let text = default_config_text("primary", "abcd-efgh-jkmn-pqrs");
+        // Aucune modification : le fichier ne change pas du tout.
+        assert_eq!(edited(&text, |_| {}), text);
+
+        let out = edited(&text, |c| {
+            c.network.connect = "192.168.1.30".into();
+            c.screen.edge_switching = false;
+            c.mouse.speed = 1.5;
+        });
+        assert!(out.contains("connect = \"192.168.1.30\"\n"));
+        assert!(out.contains("edge_switching = false\n"));
+        assert!(out.contains("speed = 1.5\n"));
+        assert!(out.contains("# Secret partagé : DOIT être identique sur les deux machines."));
+        assert_eq!(out.lines().count(), text.lines().count());
+    }
+
+    #[test]
+    fn update_adds_missing_keys_with_template_comments() {
+        // Fichier d'une version précédente, sans les nouvelles options.
+        let old = default_config_text("secondary", "abcd-efgh-jkmn-pqrs")
+            .replace("edge_switching = true\n", "")
+            .replace("switch_to_secondary = \"Shift+F12\"\n", "")
+            .replace("[mouse]\n", "[mouse]\n# Ma note\n");
+        let out = edited(&old, |c| c.screen.edge_switching = false);
+        assert!(out.contains("# Ma note\n"));
+        assert!(out.contains("# contre le bord de l'écran. false = uniquement avec les raccourcis\n"));
+        assert!(out.contains("edge_switching = false\n"));
+        assert!(out.contains("switch_to_secondary = \"Shift+F12\"\n"));
+    }
+
+    #[test]
+    fn update_minimal_file_and_remap() {
+        let old = "role = \u{201C}secondary\u{201D}\n[network]\nsecret = \"abcd-efgh-jkmn-pqrs\"\n\
+                   [keyboard.remap]\nCapsLock = \"ControlLeft\"\nF1 = \"F2\"\n";
+        let out = edited(old, |c| {
+            c.keyboard.remap.remove("F1");
+            c.name = "Mac".into();
+        });
+        assert!(out.contains("CapsLock = \"ControlLeft\""));
+        assert!(!out.contains("F1 = "));
+        assert!(out.contains("name = \"Mac\""));
+        // Fichier vide : on repart du modèle commenté.
+        let cfg = Config::parse(&default_config_text("primary", "abcd-efgh-jkmn-pqrs")).unwrap();
+        let out = update_text("", &cfg).unwrap();
+        assert!(out.contains("role = \"primary\""));
+        assert!(out.contains("# Rôle de cette machine"));
     }
 
     #[test]

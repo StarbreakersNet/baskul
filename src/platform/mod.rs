@@ -7,13 +7,13 @@ pub mod windows;
 pub mod macos;
 
 #[cfg(windows)]
-pub use self::windows::{early_init, fatal, first_run, open_in_editor, run};
+pub use self::windows::{early_init, fatal, first_run, open_in_editor, open_url, run};
 
 #[cfg(target_os = "macos")]
-pub use self::macos::{early_init, fatal, first_run, open_in_editor, run};
+pub use self::macos::{early_init, fatal, first_run, open_in_editor, open_url, run};
 
 #[cfg(not(any(windows, target_os = "macos")))]
-pub use self::unsupported::{early_init, fatal, first_run, open_in_editor, run};
+pub use self::unsupported::{early_init, fatal, first_run, open_in_editor, open_url, run};
 
 #[cfg(not(any(windows, target_os = "macos")))]
 mod unsupported {
@@ -36,23 +36,23 @@ mod unsupported {
 
     pub fn open_in_editor(_path: &Path) {}
 
+    pub fn open_url(_url: &str) {}
+
     pub fn run(_settings: Settings, _path: PathBuf, _args: Args) -> ! {
         fatal("ce système n'est pas pris en charge (Windows et macOS uniquement)")
     }
 }
 
-/// Texte du message affiché au premier lancement.
-pub fn first_run_text(path: &std::path::Path) -> String {
-    format!(
-        "Bienvenue dans Bascule !\n\n\
-         Un fichier de configuration vient d'être créé :\n{}\n\n\
-         1. Copiez la ligne « secret = … » de cette machine dans la configuration de l'autre machine (le secret doit être identique).\n\
-         2. Sur UNE des deux machines, indiquez l'adresse de l'autre dans « connect ».\n\
-         3. Vérifiez « role » (primary = la machine qui a le clavier et la souris).\n\
-         4. Menu Bascule > Redémarrer.\n\n\
-         Le fichier va s'ouvrir dans l'éditeur de texte.",
-        path.display()
-    )
+/// Ouvre la page de réglages dans le navigateur ; à défaut, le fichier de
+/// configuration dans l'éditeur de texte. `welcome` : premier lancement.
+pub fn open_settings(path: &std::path::Path, welcome: bool) {
+    match crate::settings_ui::url(path, welcome) {
+        Ok(url) => open_url(&url),
+        Err(e) => {
+            log::error!("page de réglages indisponible : {e}");
+            open_in_editor(path);
+        }
+    }
 }
 
 /// Relance Bascule avec les mêmes arguments puis quitte ce processus.

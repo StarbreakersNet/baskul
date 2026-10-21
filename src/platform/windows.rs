@@ -75,6 +75,7 @@ const WM_APP_NET: u32 = WM_APP + 2;
 const WM_APP_STATUS: u32 = WM_APP + 3;
 const WM_APP_HIDE: u32 = WM_APP + 4;
 const WM_APP_SHOW: u32 = WM_APP + 5;
+const WM_APP_RESTART: u32 = WM_APP + 6;
 
 const TIMER_WATCHDOG: usize = 1;
 const TIMER_REHOOK: usize = 2;
@@ -82,7 +83,7 @@ const TIMER_TRAY: usize = 3;
 
 const ID_RETURN: usize = 10;
 const ID_LOCK: usize = 11;
-const ID_EDIT: usize = 12;
+const ID_SETTINGS: usize = 12;
 const ID_LOG: usize = 13;
 const ID_FOLDER: usize = 14;
 const ID_AUTOSTART: usize = 15;
@@ -197,12 +198,15 @@ pub fn fatal(msg: &str) -> ! {
 }
 
 pub fn first_run(path: &Path) {
-    message_box(&super::first_run_text(path), MB_OK | MB_ICONINFORMATION);
-    open_in_editor(path);
+    super::open_settings(path, true);
 }
 
 pub fn open_in_editor(path: &Path) {
     shell_open("notepad.exe", Some(&format!("\"{}\"", path.display())));
+}
+
+pub fn open_url(url: &str) {
+    shell_open(url, None);
 }
 
 fn clip_sequence() -> Option<u64> {
@@ -978,7 +982,7 @@ fn show_menu(hwnd: HWND) {
             append(menu, MF_STRING | if locked { MF_CHECKED } else { 0 }, ID_LOCK, "Verrouiller le curseur sur ce PC");
             append(menu, MF_SEPARATOR, 0, "");
         }
-        append(menu, MF_STRING, ID_EDIT, "Modifier la configuration…");
+        append(menu, MF_STRING, ID_SETTINGS, "Réglages…");
         append(menu, MF_STRING, ID_LOG, "Ouvrir le journal");
         append(menu, MF_STRING, ID_FOLDER, "Ouvrir le dossier de Bascule");
         append(menu, MF_SEPARATOR, 0, "");
@@ -1006,7 +1010,7 @@ fn handle_command(cmd: usize) {
         ID_LOCK => {
             with_primary(|s| s.core.toggle_lock());
         }
-        ID_EDIT => open_in_editor(&path),
+        ID_SETTINGS => super::open_settings(&path, false),
         ID_LOG => {
             if let Some(p) = crate::logging::log_path() {
                 crate::logging::flush();
@@ -1070,6 +1074,10 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) ->
         }
         WM_APP_SHOW => {
             do_show(Point::new(w as isize as i32, l as i32));
+            0
+        }
+        WM_APP_RESTART => {
+            handle_command(ID_RESTART);
             0
         }
         WM_APP_TRAY => {
@@ -1225,6 +1233,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
     MAIN_HWND.store(hwnd, Ordering::Release);
     CURSOR.with(|c| c.borrow_mut().hider = hider);
     status::on_change(|| post(WM_APP_STATUS, 0, 0));
+    crate::settings_ui::set_restart_handler(|| post(WM_APP_RESTART, 0, 0));
     UI.with(|u| {
         *u.borrow_mut() =
             Some(Ui { hwnd, tray_added: false, icons: HashMap::new(), config_path, args, role: settings.role })
