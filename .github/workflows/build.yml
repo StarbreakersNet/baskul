@@ -63,12 +63,15 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-      - run: >
-          gh release create "$GITHUB_REF_NAME"
-          artifacts/Bascule-Windows/bascule.exe
-          artifacts/Bascule-macOS/Bascule-macOS.zip
-          --repo "$GITHUB_REPOSITORY"
-          --title "Bascule $GITHUB_REF_NAME"
-          --generate-notes
+      # Si la Release a été créée depuis l'interface de GitHub (ce qui crée
+      # aussi le tag), on y ajoute seulement les fichiers.
+      - run: |
+          files=(artifacts/Bascule-Windows/bascule.exe artifacts/Bascule-macOS/Bascule-macOS.zip)
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" --repo "$GITHUB_REPOSITORY" \
+              --title "Bascule $GITHUB_REF_NAME" --generate-notes
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
