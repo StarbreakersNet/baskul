@@ -19,10 +19,18 @@ Bascule partage **le clavier, la souris et le presse-papiers** de votre PC Windo
 ### Option A : GitHub Actions (recommandé, rien à installer)
 
 1. Créez un dépôt **privé** sur GitHub et poussez-y ce dossier.
-2. L'onglet **Actions** lance automatiquement le workflow `build` (5 à 10 minutes).
-3. Ouvrez l'exécution terminée et téléchargez les deux *artifacts* :
-   - **Bascule-Windows** contient `bascule.exe`.
-   - **Bascule-macOS** contient `Bascule-macOS.zip`, une app universelle pour Apple Silicon et Intel.
+2. Enregistrez un Mac comme runner auto-hébergé (*Settings → Actions → Runners → New self-hosted runner*, dans le dépôt ou l'organisation). Il compile la version macOS. Il lui faut les outils Xcode en ligne de commande (`xcode-select --install`) ; Rust est installé automatiquement s'il manque.
+3. Mettez à jour `version` dans `Cargo.toml` (c'est la version affichée par l'app macOS), puis créez un tag et poussez-le :
+   ```bash
+   git tag v0.1.0
+   git push origin v0.1.0
+   ```
+   Le workflow `build` se lance dans l'onglet **Actions**.
+4. À la fin, une **Release** apparaît dans la page **Releases** du dépôt, avec :
+   - `bascule.exe` pour Windows ;
+   - `Bascule-macOS.zip`, une app universelle pour Apple Silicon et Intel.
+
+Pour compiler sans publier de Release, lancez le workflow à la main (onglet **Actions** → **build** → **Run workflow**). Les programmes sont alors dans les *artifacts*, en bas de la page de l'exécution.
 
 ### Option B : compiler soi-même
 

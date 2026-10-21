@@ -1,9 +1,14 @@
 name: build
 
+# Se lance uniquement quand un tag est poussé (par exemple `v0.2.0`), et publie
+# alors une Release. « Run workflow » (onglet Actions) compile sans publier.
 on:
   push:
-  pull_request:
+    tags: ["*"]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   tests:
@@ -34,7 +39,9 @@ jobs:
 
   macos:
     name: macOS (universel)
-    runs-on: macos-latest
+    # Runner auto-hébergé : un Mac avec les outils Xcode en ligne de commande.
+    # Rust y est installé par l'étape suivante s'il manque.
+    runs-on: [self-hosted, macOS]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -46,3 +53,24 @@ jobs:
         with:
           name: Bascule-macOS
           path: dist/Bascule-macOS.zip
+
+  release:
+    name: Release
+    if: github.ref_type == 'tag'
+    needs: [tests, windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - run: >
+          gh release create "$GITHUB_REF_NAME"
+          artifacts/Bascule-Windows/bascule.exe
+          artifacts/Bascule-macOS/Bascule-macOS.zip
+          --repo "$GITHUB_REPOSITORY"
+          --title "Bascule $GITHUB_REF_NAME"
+          --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
