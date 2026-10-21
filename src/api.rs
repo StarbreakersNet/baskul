@@ -1,21 +1,23 @@
-//! Page de réglages : un petit serveur HTTP local sert une page web
-//! (`settings.html`) et une API JSON qui lit et modifie le fichier de
-//! configuration.
+//! API locale du daemon, utilisée par l'app de réglages (`bascule-settings`,
+//! en Tauri + Vue, dans `app/`).
 //!
-//! Sécurité : le serveur n'écoute que sur 127.0.0.1, vérifie l'en-tête `Host`
-//! (contre le « DNS rebinding ») et exige un jeton aléatoire, passé dans un
-//! en-tête, pour chaque appel à l'API. Une page d'un autre site ne peut donc
-//! ni lire ni modifier la configuration.
+//! Un petit serveur HTTP écoute sur 127.0.0.1 (port aléatoire). Son port et un
+//! jeton aléatoire sont écrits dans `api.json`, à côté du fichier de
+//! configuration, lisible par l'utilisateur seulement. Chaque requête doit
+//! présenter ce jeton, et l'en-tête `Host` est vérifié (contre le « DNS
+//! rebinding ») : une page web ne peut ni lire ni modifier la configuration.
 
 use crate::config::{self, Config};
+use crate::status::{self, Conn};
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
+use std::process::{Child, Command};
 use std::sync::{Arc, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-const PAGE: &str = include_str!("settings.html");
+const API_FILE: &str = "api.json";
 const MAX_LINE: u64 = 8 * 1024;
 const MAX_HEADERS: usize = 64;
 const MAX_BODY: usize = 256 * 1024;
@@ -24,46 +26,90 @@ struct Server {
     path: PathBuf,
     port: u16,
     token: String,
+    /// Démarrage de ce processus (ms) : l'app de réglages voit ainsi qu'un
+    /// redémarrage a eu lieu.
+    started: u64,
 }
 
-static SERVER: OnceLock<Result<Arc<Server>, String>> = OnceLock::new();
 static RESTART: OnceLock<fn()> = OnceLock::new();
 
-/// Fonction appelée après un enregistrement pour redémarrer Bascule. Elle
-/// est appelée depuis le thread du serveur : elle doit seulement prévenir la
-/// boucle principale.
+/// Fonction appelée pour redémarrer Bascule (après un enregistrement…).
+/// Elle est appelée depuis un thread du serveur : elle doit seulement
+/// prévenir la boucle principale.
 pub fn set_restart_handler(f: fn()) {
     let _ = RESTART.set(f);
 }
 
-/// Adresse de la page de réglages ; le serveur démarre au premier appel.
-/// `welcome` : affiche l'aide du premier lancement.
-pub fn url(config_path: &Path, welcome: bool) -> Result<String, String> {
-    let server = SERVER.get_or_init(|| start(config_path.to_path_buf())).clone()?;
-    let welcome = if welcome { "&bienvenue" } else { "" };
-    Ok(format!("http://127.0.0.1:{}/?t={}{welcome}", server.port, server.token))
+/// Démarre l'API et écrit son fichier de découverte.
+pub fn start(config_path: &Path) -> Result<(), String> {
+    let server = spawn(config_path.to_path_buf())?;
+    let file = api_file(config_path);
+    write_api_file(&file, server.port, &server.token)?;
+    log::info!("API locale sur 127.0.0.1:{} ({})", server.port, file.display());
+    Ok(())
 }
 
-fn start(path: PathBuf) -> Result<Arc<Server>, String> {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|e| format!("serveur de réglages : {e}"))?;
-    let port = listener.local_addr().map_err(|e| format!("serveur de réglages : {e}"))?.port();
+/// Fichier de découverte de l'API, à côté du fichier de configuration.
+pub fn api_file(config_path: &Path) -> PathBuf {
+    config_path.parent().unwrap_or(Path::new(".")).join(API_FILE)
+}
+
+/// Lance l'app de réglages, installée à côté de Bascule.
+pub fn launch_settings_app(config_path: &Path, welcome: bool) -> Result<Child, String> {
+    let exe = settings_exe().ok_or("app de réglages introuvable")?;
+    let mut cmd = Command::new(&exe);
+    // Pour joindre l'API, et relancer Bascule avec la même configuration.
+    cmd.env("BASCULE_API_FILE", api_file(config_path)).env("BASCULE_CONFIG", config_path);
+    if welcome {
+        cmd.arg("--bienvenue");
+    }
+    cmd.spawn().map_err(|e| format!("lancement de {} impossible : {e}", exe.display()))
+}
+
+fn settings_exe() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?;
+    let name = if cfg!(windows) { "bascule-settings.exe" } else { "bascule-settings" };
+    // À côté de Bascule (Windows, Linux, développement) ; sur macOS, dans
+    // Bascule.app/Contents/Helpers.
+    [dir.join(name), dir.join("../Helpers/BasculeSettings.app/Contents/MacOS").join(name)]
+        .into_iter()
+        .find(|p| p.is_file())
+}
+
+fn spawn(path: PathBuf) -> Result<Arc<Server>, String> {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|e| format!("API locale : {e}"))?;
+    let port = listener.local_addr().map_err(|e| format!("API locale : {e}"))?.port();
     let mut bytes = [0u8; 16];
     getrandom::fill(&mut bytes).map_err(|e| format!("générateur aléatoire : {e}"))?;
     let token = bytes.iter().map(|b| format!("{b:02x}")).collect();
-    let server = Arc::new(Server { path, port, token });
+    let started = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
+    let server = Arc::new(Server { path, port, token, started });
     let s = server.clone();
     std::thread::Builder::new()
-        .name("bascule-settings".into())
+        .name("bascule-api".into())
         .spawn(move || {
             for stream in listener.incoming().flatten() {
                 let s = s.clone();
-                let _ =
-                    std::thread::Builder::new().name("bascule-settings-req".into()).spawn(move || serve(stream, &s));
+                let _ = std::thread::Builder::new().name("bascule-api-req".into()).spawn(move || serve(stream, &s));
             }
         })
-        .map_err(|e| format!("serveur de réglages : {e}"))?;
-    log::info!("page de réglages : http://127.0.0.1:{port}/");
+        .map_err(|e| format!("API locale : {e}"))?;
     Ok(server)
+}
+
+/// Écrit `api.json`, lisible par l'utilisateur seulement.
+fn write_api_file(path: &Path, port: u16, token: &str) -> Result<(), String> {
+    let text = json!({ "port": port, "token": token, "pid": std::process::id(), "version": crate::VERSION });
+    let tmp = path.with_extension("json.tmp");
+    let _ = std::fs::remove_file(&tmp);
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut opts, 0o600);
+    let err = |e: std::io::Error| format!("écriture de {} impossible : {e}", path.display());
+    opts.open(&tmp).and_then(|mut f| f.write_all(text.to_string().as_bytes())).map_err(err)?;
+    std::fs::rename(&tmp, path).map_err(err)
 }
 
 // ---------------------------------------------------------------------------
@@ -85,15 +131,14 @@ impl Request {
 
 struct Response {
     status: u16,
-    content_type: &'static str,
-    body: Vec<u8>,
+    body: Value,
     /// Redémarrer Bascule une fois la réponse envoyée.
     restart: bool,
 }
 
 impl Response {
-    fn json(status: u16, v: Value) -> Response {
-        Response { status, content_type: "application/json; charset=utf-8", body: v.to_string().into(), restart: false }
+    fn json(status: u16, body: Value) -> Response {
+        Response { status, body, restart: false }
     }
 
     fn error(status: u16, msg: &str) -> Response {
@@ -157,22 +202,19 @@ fn write_response(stream: &mut TcpStream, resp: &Response) -> std::io::Result<()
         422 => "Unprocessable Content",
         _ => "Internal Server Error",
     };
+    let body = resp.body.to_string();
     let head = format!(
         "HTTP/1.1 {} {reason}\r\n\
-         Content-Type: {}\r\n\
+         Content-Type: application/json; charset=utf-8\r\n\
          Content-Length: {}\r\n\
          Cache-Control: no-store\r\n\
          X-Content-Type-Options: nosniff\r\n\
-         Referrer-Policy: no-referrer\r\n\
-         Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; \
-         connect-src 'self'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'\r\n\
          Connection: close\r\n\r\n",
         resp.status,
-        resp.content_type,
-        resp.body.len()
+        body.len()
     );
     stream.write_all(head.as_bytes())?;
-    stream.write_all(&resp.body)?;
+    stream.write_all(body.as_bytes())?;
     stream.flush()
 }
 
@@ -187,7 +229,7 @@ fn serve(mut stream: TcpStream, server: &Server) {
     let _ = stream.shutdown(Shutdown::Write);
     if sent && resp.restart {
         if let Some(restart) = RESTART.get() {
-            log::info!("nouvelle configuration enregistrée : redémarrage");
+            log::info!("redémarrage demandé par l'app de réglages");
             restart();
         }
     }
@@ -202,54 +244,62 @@ fn route(req: &Request, server: &Server) -> Response {
     if !req.header("host").is_some_and(|h| local.iter().any(|l| l == h)) {
         return Response::error(403, "hôte non autorisé");
     }
-    let path = req.target.split(['?', '#']).next().unwrap_or_default();
-    if path == "/" {
-        if req.method != "GET" {
-            return Response::error(405, "méthode non autorisée");
-        }
-        return Response { status: 200, content_type: "text/html; charset=utf-8", body: PAGE.into(), restart: false };
-    }
-    if !path.starts_with("/api/") {
-        return Response::error(404, "page introuvable");
-    }
     if req.header("x-bascule-token") != Some(server.token.as_str()) {
-        return Response::error(403, "jeton invalide : rouvrez les réglages depuis le menu de Bascule");
+        return Response::error(403, "jeton invalide");
     }
     if let Some(origin) = req.header("origin") {
         if !local.iter().any(|l| origin == format!("http://{l}")) {
             return Response::error(403, "origine non autorisée");
         }
     }
+    let path = req.target.split('?').next().unwrap_or_default();
+    let can_restart = RESTART.get().is_some();
     match (req.method.as_str(), path) {
+        ("GET", "/api/status") => Response::json(200, status_info(server)),
         ("GET", "/api/config") => Response::json(200, config_info(&server.path)),
         ("POST", "/api/config") => match save(&server.path, &req.body) {
-            Ok(()) => {
-                let restart = RESTART.get().is_some();
-                Response { restart, ..Response::json(200, json!({ "ok": true, "restart": restart })) }
-            }
+            Ok(()) => Response { restart: can_restart, ..Response::json(200, json!({ "restart": can_restart })) },
             Err(e) => Response::error(422, &e),
         },
+        ("POST", "/api/restart") => {
+            Response { restart: can_restart, ..Response::json(200, json!({ "restart": can_restart })) }
+        }
         ("POST", "/api/open-file") => {
             crate::platform::open_in_editor(&server.path);
-            Response::json(200, json!({ "ok": true }))
+            Response::json(200, json!({}))
         }
-        (_, "/api/config" | "/api/open-file") => Response::error(405, "méthode non autorisée"),
+        (_, "/api/status" | "/api/config" | "/api/restart" | "/api/open-file") => {
+            Response::error(405, "méthode non autorisée")
+        }
         _ => Response::error(404, "introuvable"),
     }
 }
 
-/// Configuration actuelle et informations utiles à la page.
+/// État de la connexion, pour l'affichage en direct.
+fn status_info(server: &Server) -> Value {
+    let s = status::snapshot();
+    let (state, detail) = match &s.conn {
+        Conn::Waiting(d) => ("waiting", d),
+        Conn::Connected(d) => ("connected", d),
+        Conn::Error(d) => ("error", d),
+    };
+    json!({
+        "state": state,
+        "detail": detail,
+        "summary": s.summary(),
+        "remote_active": s.remote_active,
+        "locked": s.locked,
+        "warning": s.warning,
+        "version": crate::VERSION,
+        "started": server.started,
+    })
+}
+
+/// Configuration actuelle et informations utiles à l'app de réglages.
 fn config_info(path: &Path) -> Value {
     let (config, error) = match config::load_or_create(path) {
         Ok((cfg, _)) => (serde_json::to_value(&cfg).unwrap_or(Value::Null), Value::Null),
         Err(e) => (Value::Null, Value::String(e)),
-    };
-    let running = RESTART.get().is_some();
-    let status = if running {
-        let snap = crate::status::snapshot();
-        json!({ "text": snap.summary(), "connected": snap.is_connected() })
-    } else {
-        Value::Null
     };
     json!({
         "config": config,
@@ -258,8 +308,7 @@ fn config_info(path: &Path) -> Value {
         "os": std::env::consts::OS,
         "hostname": config::hostname(),
         "address": local_address(),
-        "running": running,
-        "status": status,
+        "version": crate::VERSION,
     })
 }
 
@@ -280,7 +329,7 @@ fn save(path: &Path, body: &[u8]) -> Result<(), String> {
     let tmp = path.with_extension("toml.tmp");
     std::fs::write(&tmp, text).map_err(|e| format!("impossible d'écrire {} : {e}", tmp.display()))?;
     std::fs::rename(&tmp, path).map_err(|e| format!("impossible d'écrire {} : {e}", path.display()))?;
-    log::info!("configuration modifiée depuis la page de réglages");
+    log::info!("configuration modifiée depuis l'app de réglages");
     Ok(())
 }
 
@@ -297,23 +346,21 @@ fn local_address() -> Option<String> {
 mod tests {
     use super::*;
 
-    struct TempConfig(PathBuf);
+    struct TempDir(PathBuf);
 
-    impl TempConfig {
-        fn new(text: &str) -> TempConfig {
+    impl TempDir {
+        fn new() -> TempDir {
             let mut b = [0u8; 8];
             getrandom::fill(&mut b).unwrap();
             let dir = std::env::temp_dir().join(format!("bascule-test-{}", u64::from_le_bytes(b)));
             std::fs::create_dir_all(&dir).unwrap();
-            let path = dir.join("config.toml");
-            std::fs::write(&path, text).unwrap();
-            TempConfig(path)
+            TempDir(dir)
         }
     }
 
-    impl Drop for TempConfig {
+    impl Drop for TempDir {
         fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(self.0.parent().unwrap());
+            let _ = std::fs::remove_dir_all(&self.0);
         }
     }
 
@@ -330,38 +377,60 @@ mod tests {
     }
 
     #[test]
-    fn page_and_api() {
-        let tmp = TempConfig::new(&config::default_config_text("primary", "abcd-efgh-jkmn-pqrs"));
-        let server = start(tmp.0.clone()).unwrap();
+    fn api_file_is_private() {
+        let tmp = TempDir::new();
+        let file = api_file(&tmp.0.join("config.toml"));
+        write_api_file(&file, 1234, "abcd").unwrap();
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+        assert_eq!((v["port"].as_u64(), v["token"].as_str()), (Some(1234), Some("abcd")));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(std::fs::metadata(&file).unwrap().permissions().mode() & 0o777, 0o600);
+        }
+        // Réécriture (redémarrage).
+        write_api_file(&file, 5678, "efgh").unwrap();
+        assert!(std::fs::read_to_string(&file).unwrap().contains("5678"));
+    }
+
+    #[test]
+    fn api_requests() {
+        let tmp = TempDir::new();
+        let path = tmp.0.join("config.toml");
+        std::fs::write(&path, config::default_config_text("primary", "abcd-efgh-jkmn-pqrs")).unwrap();
+        let server = spawn(path.clone()).unwrap();
         let (port, token) = (server.port, server.token.clone());
         let host = format!("Host: 127.0.0.1:{port}");
-
-        let (code, page) = request(port, &format!("GET /?bienvenue HTTP/1.1\r\n{host}"), "");
-        assert_eq!(code, 200);
-        assert!(page.contains("<html"));
-        // DNS rebinding : autre nom d'hôte refusé.
-        assert_eq!(request(port, "GET / HTTP/1.1\r\nHost: attaquant.example:80", "").0, 403);
-        // API sans jeton, ou depuis une autre origine : refusée.
-        assert_eq!(request(port, &format!("GET /api/config HTTP/1.1\r\n{host}"), "").0, 403);
         let auth = format!("{host}\r\nX-Bascule-Token: {token}");
+
+        // Sans jeton, depuis un autre nom d'hôte ou une autre origine : refusé.
+        assert_eq!(request(port, &format!("GET /api/config HTTP/1.1\r\n{host}"), "").0, 403);
+        let rebinding = format!("GET /api/config HTTP/1.1\r\nHost: attaquant.example\r\nX-Bascule-Token: {token}");
+        assert_eq!(request(port, &rebinding, "").0, 403);
         let evil = format!("POST /api/config HTTP/1.1\r\n{auth}\r\nOrigin: http://attaquant.example");
         assert_eq!(request(port, &evil, "{}").0, 403);
+        assert_eq!(request(port, &format!("GET / HTTP/1.1\r\n{auth}"), "").0, 404);
+
+        let (code, body) = request(port, &format!("GET /api/status HTTP/1.1\r\n{auth}"), "");
+        assert_eq!(code, 200);
+        let st: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(st["version"], crate::VERSION);
+        assert!(st["started"].as_u64().unwrap() > 0);
 
         let (code, body) = request(port, &format!("GET /api/config HTTP/1.1\r\n{auth}"), "");
         assert_eq!(code, 200);
         let info: Value = serde_json::from_str(&body).unwrap();
         assert_eq!(info["config"]["network"]["secret"], "abcd-efgh-jkmn-pqrs");
         assert_eq!(info["config"]["hotkeys"]["switch_to_secondary"], "Shift+F12");
-        assert_eq!(info["running"], false);
 
         // Enregistrement.
         let mut cfg = info["config"].clone();
         cfg["network"]["connect"] = json!("192.168.1.30");
         cfg["screen"]["edge_switching"] = json!(false);
-        let post = format!("POST /api/config HTTP/1.1\r\n{auth}\r\nOrigin: http://127.0.0.1:{port}");
+        let post = format!("POST /api/config HTTP/1.1\r\n{auth}");
         let (code, body) = request(port, &post, &cfg.to_string());
         assert_eq!(code, 200, "{body}");
-        let text = std::fs::read_to_string(&tmp.0).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
         assert!(text.contains("connect = \"192.168.1.30\"\n"));
         assert!(text.contains("edge_switching = false\n"));
         assert!(text.contains("# Secret partagé"));
@@ -371,7 +440,7 @@ mod tests {
         let (code, body) = request(port, &post, &cfg.to_string());
         assert_eq!(code, 422);
         assert!(body.contains("speed"), "{body}");
-        assert_eq!(std::fs::read_to_string(&tmp.0).unwrap(), text);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
         // Champ inconnu : refusé.
         cfg["mouse"]["speed"] = json!(1.0);
         cfg["mouse"]["vitesse"] = json!(2);

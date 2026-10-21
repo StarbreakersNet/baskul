@@ -205,10 +205,6 @@ pub fn open_in_editor(path: &Path) {
     shell_open("notepad.exe", Some(&format!("\"{}\"", path.display())));
 }
 
-pub fn open_url(url: &str) {
-    shell_open(url, None);
-}
-
 fn clip_sequence() -> Option<u64> {
     // SAFETY: appel sans précondition.
     Some(unsafe { GetClipboardSequenceNumber() } as u64)
@@ -1233,7 +1229,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
     MAIN_HWND.store(hwnd, Ordering::Release);
     CURSOR.with(|c| c.borrow_mut().hider = hider);
     status::on_change(|| post(WM_APP_STATUS, 0, 0));
-    crate::settings_ui::set_restart_handler(|| post(WM_APP_RESTART, 0, 0));
+    crate::api::set_restart_handler(|| post(WM_APP_RESTART, 0, 0));
     UI.with(|u| {
         *u.borrow_mut() =
             Some(Ui { hwnd, tray_added: false, icons: HashMap::new(), config_path, args, role: settings.role })

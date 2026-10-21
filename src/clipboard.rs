@@ -295,7 +295,14 @@ impl SystemBackend {
 
 impl Backend for SystemBackend {
     fn sequence(&mut self) -> Option<u64> {
-        (self.seq)()
+        (self.seq)().or_else(|| {
+            // Pas de compteur fourni par le système (Linux) : empreinte du texte.
+            use std::hash::{Hash, Hasher};
+            let text = self.cb.get_text().ok()?;
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            text.hash(&mut h);
+            Some(h.finish())
+        })
     }
 
     fn is_sensitive(&mut self) -> bool {

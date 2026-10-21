@@ -11,6 +11,7 @@
 #![cfg_attr(all(not(any(windows, target_os = "macos")), not(feature = "xcheck")), allow(dead_code))]
 #![allow(clippy::collapsible_if, clippy::too_many_arguments)]
 
+mod api;
 mod app;
 mod clipboard;
 mod config;
@@ -25,11 +26,10 @@ mod platform;
 mod primary;
 mod protocol;
 mod secondary;
-mod settings_ui;
 mod status;
 
 use std::fs::File;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -40,7 +40,7 @@ pub struct Args {
     pub config: Option<PathBuf>,
     /// Journaux aussi sur la sortie d'erreur (Windows : console attachée).
     pub console: bool,
-    /// Ouvre seulement la page de réglages, sans démarrer le partage.
+    /// Ouvre seulement l'app de réglages.
     pub settings: bool,
 }
 
@@ -68,7 +68,7 @@ impl Args {
                         "bascule {VERSION}\n\nUsage : bascule [--config FICHIER] [--console] [--settings]\n\n  \
                          --config FICHIER  fichier de configuration (défaut : {})\n  \
                          --console         affiche aussi le journal dans le terminal\n  \
-                         --settings        ouvre seulement la page de réglages (sans démarrer le partage)\n  \
+                         --settings        ouvre l'app de réglages\n  \
                          --print-config    affiche une configuration par défaut",
                         config::default_config_path().display()
                     );
@@ -96,9 +96,15 @@ impl Args {
     }
 }
 
-/// Empêche deux instances simultanées (un redémarrage attend que
-/// l'instance précédente se termine).
-fn acquire_instance_lock() -> Result<File, String> {
+enum LockError {
+    /// Bascule tourne déjà.
+    Running,
+    Other(String),
+}
+
+/// Empêche deux instances simultanées. Un redémarrage attend que l'instance
+/// précédente se termine ; un lancement par l'utilisateur s'arrête aussitôt.
+fn acquire_instance_lock() -> Result<File, LockError> {
     let dir = config::config_dir();
     let _ = std::fs::create_dir_all(&dir);
     let path = dir.join("bascule.lock");
@@ -107,14 +113,18 @@ fn acquire_instance_lock() -> Result<File, String> {
         .truncate(false)
         .write(true)
         .open(&path)
-        .map_err(|e| format!("impossible de créer {} : {e}", path.display()))?;
+        .map_err(|e| LockError::Other(format!("impossible de créer {} : {e}", path.display())))?;
+    let relaunched = std::env::var_os(platform::RELAUNCH_ENV).is_some();
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         match file.try_lock() {
             Ok(()) => return Ok(file),
             Err(std::fs::TryLockError::WouldBlock) => {
+                if !relaunched {
+                    return Err(LockError::Running);
+                }
                 if Instant::now() > deadline {
-                    return Err("Bascule est déjà en cours d'exécution sur cette machine.".into());
+                    return Err(LockError::Other("Bascule est déjà en cours d'exécution sur cette machine.".into()));
                 }
                 std::thread::sleep(Duration::from_millis(200));
             }
@@ -135,47 +145,39 @@ fn main() {
 
     let path = args.config.clone().unwrap_or_else(config::default_config_path);
     if args.settings {
-        // La page sert aussi à corriger un fichier invalide : pas de validation ici.
-        logging::init(config::log_dir().join("bascule.log"), log::LevelFilter::Info, args.console);
-        match settings_ui::url(&path, false) {
-            Ok(url) => {
-                println!("Réglages de Bascule : {url}");
-                platform::open_url(&url);
-            }
-            Err(e) => platform::fatal(&e),
-        }
-        loop {
-            std::thread::park();
-        }
+        platform::open_settings(&path, false);
+        std::process::exit(0);
     }
-    let (cfg, created) = match config::load_or_create(&path) {
-        Ok(x) => x,
-        Err(e) => platform::fatal(&format!("{e}\n\nFichier : {}", path.display())),
+    let _lock = match acquire_instance_lock() {
+        Ok(f) => f,
+        // Bascule tourne déjà : on ouvre ses réglages.
+        Err(LockError::Running) => {
+            platform::open_settings(&path, false);
+            std::process::exit(0);
+        }
+        Err(LockError::Other(e)) => platform::fatal(&e),
     };
-    let level = match cfg.validate() {
-        Ok(s) => s.log_level,
+
+    let loaded = config::load_or_create(&path);
+    let level = match &loaded {
+        Ok((cfg, _)) => cfg.validate().map_or(log::LevelFilter::Info, |s| s.log_level),
         Err(_) => log::LevelFilter::Info,
     };
     logging::init(config::log_dir().join("bascule.log"), level, args.console);
     log::info!("Bascule {VERSION} ({}) — configuration : {}", std::env::consts::OS, path.display());
+    if let Err(e) = api::start(&path) {
+        log::error!("{e}");
+    }
 
+    let (cfg, created) = match loaded {
+        Ok(x) => x,
+        Err(e) => config_error(&path, &args, &e),
+    };
     let settings = match cfg.validate() {
         Ok(s) => s,
-        Err(e) => {
-            log::error!("{e}");
-            platform::open_in_editor(&path);
-            platform::fatal(&format!(
-                "Erreur dans la configuration :\n{e}\n\nFichier : {}\n\nCorrigez-la puis relancez Bascule.",
-                path.display()
-            ));
-        }
+        Err(e) => config_error(&path, &args, &e),
     };
     log::info!("rôle : machine {} ; réseau : {:?} ; nom : {}", settings.role.label(), settings.endpoint, settings.name);
-
-    let _lock = match acquire_instance_lock() {
-        Ok(f) => f,
-        Err(e) => platform::fatal(&e),
-    };
 
     if created {
         log::info!("configuration créée : {}", path.display());
@@ -183,4 +185,39 @@ fn main() {
     }
 
     platform::run(settings, path, args);
+}
+
+/// Configuration illisible ou invalide : l'app de réglages s'ouvre pour la
+/// corriger, puis Bascule redémarre. Sans elle, le fichier s'ouvre dans
+/// l'éditeur de texte.
+fn config_error(path: &Path, args: &Args, e: &str) -> ! {
+    log::error!("{e}");
+    status::set_conn(status::Conn::Error(format!("configuration invalide : {e}")));
+    api::set_restart_handler(platform::request_restart);
+    match api::launch_settings_app(path, false) {
+        Ok(mut child) => {
+            let launched = Instant::now();
+            loop {
+                if platform::take_restart_request() {
+                    platform::relaunch(args);
+                }
+                // Réglages fermés sans correction. (Une sortie immédiate
+                // signifie qu'une fenêtre de réglages était déjà ouverte.)
+                if !matches!(child.try_wait(), Ok(None)) && launched.elapsed() > Duration::from_secs(3) {
+                    log::info!("configuration toujours invalide : arrêt");
+                    logging::flush();
+                    std::process::exit(1);
+                }
+                std::thread::sleep(Duration::from_millis(200));
+            }
+        }
+        Err(err) => {
+            log::warn!("{err}");
+            platform::open_in_editor(path);
+            platform::fatal(&format!(
+                "Erreur dans la configuration :\n{e}\n\nFichier : {}\n\nCorrigez-la puis relancez Bascule.",
+                path.display()
+            ));
+        }
+    }
 }
