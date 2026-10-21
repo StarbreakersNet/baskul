@@ -242,6 +242,10 @@ impl Host for WinHost {
         &self.layout
     }
 
+    fn cursor(&self) -> Point {
+        cursor_pos().unwrap_or_else(|| self.layout.bounds().center())
+    }
+
     fn hide_cursor(&mut self, _at: Point) {
         // Traité juste après le retour du hook (pas d'appel bloquant dans un hook).
         post(WM_APP_HIDE, 0, 0);
@@ -1233,8 +1237,10 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
             let layout = monitors();
             log::info!("écrans : {:?}", layout.displays);
             let opts = PrimaryOptions {
+                edge_switching: settings.edge_switching,
                 position: settings.secondary_position,
                 corner: settings.corner_size,
+                switch_hotkey: settings.switch_hotkey.clone(),
                 return_hotkey: settings.return_hotkey.clone(),
                 lock_hotkey: settings.lock_hotkey.clone(),
                 media_local: settings.media_keys == MediaKeys::Local,

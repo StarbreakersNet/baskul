@@ -38,7 +38,9 @@ const RESYNC_DELAY: Duration = Duration::from_millis(250);
 
 pub struct SecondaryCore {
     active: bool,
-    edge: Edge,
+    /// Bord par lequel le curseur repart (`None` : il ne repart que par
+    /// raccourci clavier).
+    exit: Option<Edge>,
     pos: Point,
     speed: f64,
     acc_x: f64,
@@ -54,7 +56,7 @@ impl SecondaryCore {
     pub fn new(speed: f64, remap: BTreeMap<u32, u32>) -> SecondaryCore {
         SecondaryCore {
             active: false,
-            edge: Edge::Left,
+            exit: None,
             pos: Point::default(),
             speed,
             acc_x: 0.0,
@@ -105,16 +107,17 @@ impl SecondaryCore {
             Message::Enter { edge, ratio } => {
                 self.refresh_layout(emu, true);
                 let p = self.layout.point_on_edge(edge, ratio, 0);
-                self.edge = edge;
-                self.pos = p;
-                self.acc_x = 0.0;
-                self.acc_y = 0.0;
-                self.active = true;
-                self.last_move = Some(Instant::now());
                 log::debug!("le curseur arrive par {edge:?} en {p:?}");
-                emu.entered();
-                emu.move_to(p, 0, 0);
-                status::set_remote_active(true);
+                self.activate(emu, p, Some(edge));
+                None
+            }
+            Message::Jump { exit } => {
+                self.refresh_layout(emu, true);
+                // Le curseur reprend sa position réelle (ou la dernière connue).
+                let p = emu.cursor().unwrap_or(self.pos);
+                let p = if self.layout.display_at(p).is_some() { p } else { self.layout.nearest_display(p).center() };
+                log::debug!("le curseur arrive par raccourci en {p:?}");
+                self.activate(emu, p, exit);
                 None
             }
             Message::Motion { dx, dy } => {
@@ -134,7 +137,7 @@ impl SecondaryCore {
                     return None;
                 }
                 // Pas de sortie pendant un glisser (bouton enfoncé).
-                let exit = if self.buttons.iter().any(|b| *b) { None } else { Some(self.edge) };
+                let exit = if self.buttons.iter().any(|b| *b) { None } else { self.exit };
                 match self.layout.step(self.pos, ix, iy, exit) {
                     Step::Move(p) => {
                         let (mdx, mdy) = (p.x - self.pos.x, p.y - self.pos.y);
@@ -176,6 +179,18 @@ impl SecondaryCore {
         }
     }
 
+    fn activate<E: Emulator>(&mut self, emu: &mut E, p: Point, exit: Option<Edge>) {
+        self.exit = exit;
+        self.pos = p;
+        self.acc_x = 0.0;
+        self.acc_y = 0.0;
+        self.active = true;
+        self.last_move = Some(Instant::now());
+        emu.entered();
+        emu.move_to(p, 0, 0);
+        status::set_remote_active(true);
+    }
+
     /// Connexion perdue : on relâche tout.
     pub fn disconnected<E: Emulator>(&mut self, emu: &mut E) {
         self.active = false;
@@ -192,6 +207,7 @@ mod tests {
 
     #[derive(Default)]
     struct FakeEmu {
+        cursor: Option<Point>,
         moves: Vec<(Point, i32, i32)>,
         keys: Vec<(u32, bool, bool)>,
         buttons: Vec<(MouseButton, bool)>,
@@ -215,6 +231,9 @@ mod tests {
         fn release_all(&mut self) {
             self.released += 1;
         }
+        fn cursor(&mut self) -> Option<Point> {
+            self.cursor
+        }
     }
 
     #[test]
@@ -233,6 +252,35 @@ mod tests {
         let n = emu.moves.len();
         core.handle(&mut emu, Message::Motion { dx: 5, dy: 5 });
         assert_eq!(emu.moves.len(), n);
+    }
+
+    #[test]
+    fn jump_resumes_at_cursor_position() {
+        let mut emu = FakeEmu { cursor: Some(Point::new(800, 200)), ..Default::default() };
+        let mut core = SecondaryCore::new(1.0, BTreeMap::new());
+        core.handle(&mut emu, Message::Jump { exit: Some(Edge::Left) });
+        assert!(core.is_active());
+        assert_eq!(emu.moves.last().unwrap().0, Point::new(800, 200));
+        core.handle(&mut emu, Message::Motion { dx: -10, dy: 5 });
+        assert_eq!(emu.moves.last().unwrap().0, Point::new(790, 205));
+        // Sortie par la gauche, comme après un passage par le bord.
+        assert!(matches!(core.handle(&mut emu, Message::Motion { dx: -900, dy: 0 }), Some(Message::Leave { .. })));
+    }
+
+    #[test]
+    fn jump_without_exit_never_leaves() {
+        let mut emu = FakeEmu::default();
+        let mut core = SecondaryCore::new(1.0, BTreeMap::new());
+        core.handle(&mut emu, Message::Enter { edge: Edge::Left, ratio: 0.5 });
+        core.handle(&mut emu, Message::Motion { dx: 100, dy: 0 });
+        // Position réelle inconnue : dernière position connue.
+        core.handle(&mut emu, Message::Jump { exit: None });
+        assert_eq!(emu.moves.last().unwrap().0, Point::new(100, 450));
+        for _ in 0..3 {
+            assert_eq!(core.handle(&mut emu, Message::Motion { dx: -1000, dy: 0 }), None);
+        }
+        assert!(core.is_active());
+        assert_eq!(emu.moves.last().unwrap().0, Point::new(0, 450));
     }
 
     #[test]

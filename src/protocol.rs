@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Incrémenté à chaque changement incompatible du protocole.
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// Port TCP par défaut.
 pub const DEFAULT_PORT: u16 = 24870;
@@ -101,6 +101,12 @@ pub enum Message {
         edge: Edge,
         ratio: f32,
     },
+    /// Bascule par raccourci clavier : le curseur de la machine secondaire
+    /// reprend là où il était. `exit` : bord par lequel il pourra ressortir
+    /// (`None` : bascule par les bords désactivée).
+    Jump {
+        exit: Option<Edge>,
+    },
     /// Déplacement relatif, en pixels de la machine principale (accélération
     /// du système principal déjà appliquée).
     Motion {
@@ -149,6 +155,7 @@ impl Message {
         matches!(
             self,
             Message::Enter { .. }
+                | Message::Jump { .. }
                 | Message::Motion { .. }
                 | Message::Button { .. }
                 | Message::Wheel { .. }
@@ -201,6 +208,8 @@ mod tests {
             Message::Hello { version: PROTOCOL_VERSION, role: Role::Primary, name: "PC".into(), os: "windows".into() },
             Message::Ping,
             Message::Enter { edge: Edge::Left, ratio: 0.25 },
+            Message::Jump { exit: Some(Edge::Right) },
+            Message::Jump { exit: None },
             Message::Motion { dx: -3, dy: 12 },
             Message::Button { button: MouseButton::Back, down: true },
             Message::Wheel { dx: 0, dy: -120 },

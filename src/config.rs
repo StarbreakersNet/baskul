@@ -6,11 +6,11 @@
 
 use crate::hotkey::Hotkey;
 use crate::protocol::{DEFAULT_PORT, Edge, Role};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RoleCfg {
     Primary,
@@ -26,7 +26,7 @@ impl From<RoleCfg> for Role {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum EdgeCfg {
     Left,
@@ -46,7 +46,7 @@ impl From<EdgeCfg> for Edge {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ScrollMode {
     /// Défilement par lignes (comme une molette classique sous Windows).
@@ -55,7 +55,7 @@ pub enum ScrollMode {
     Pixels,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SideButtonsMode {
     /// Boutons 4/5 transmis tels quels (Chrome, Firefox, VS Code…).
@@ -64,7 +64,7 @@ pub enum SideButtonsMode {
     Swipe,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum IsoSwap {
     Auto,
@@ -72,7 +72,7 @@ pub enum IsoSwap {
     Off,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MediaKeys {
     /// Les touches multimédia agissent sur la machine où se trouve le curseur.
@@ -81,7 +81,7 @@ pub enum MediaKeys {
     Local,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct NetworkCfg {
     pub listen: String,
@@ -95,20 +95,22 @@ impl Default for NetworkCfg {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ScreenCfg {
+    /// Bascule en poussant la souris contre le bord de l'écran.
+    pub edge_switching: bool,
     pub secondary_position: EdgeCfg,
     pub corner_size: i32,
 }
 
 impl Default for ScreenCfg {
     fn default() -> Self {
-        ScreenCfg { secondary_position: EdgeCfg::Right, corner_size: 10 }
+        ScreenCfg { edge_switching: true, secondary_position: EdgeCfg::Right, corner_size: 10 }
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct MouseCfg {
     pub speed: f64,
@@ -120,7 +122,7 @@ impl Default for MouseCfg {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ScrollCfg {
     pub mode: ScrollMode,
@@ -142,7 +144,7 @@ impl Default for ScrollCfg {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ButtonsCfg {
     pub side_buttons: SideButtonsMode,
@@ -155,7 +157,7 @@ impl Default for ButtonsCfg {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct KeyboardCfg {
     pub iso_swap: IsoSwap,
@@ -169,7 +171,7 @@ impl Default for KeyboardCfg {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ClipboardCfg {
     pub enabled: bool,
@@ -185,20 +187,25 @@ impl Default for ClipboardCfg {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct HotkeysCfg {
+    pub switch_to_secondary: String,
     pub return_to_primary: String,
     pub toggle_lock: String,
 }
 
 impl Default for HotkeysCfg {
     fn default() -> Self {
-        HotkeysCfg { return_to_primary: "Ctrl+Alt+Shift+B".into(), toggle_lock: String::new() }
+        HotkeysCfg {
+            switch_to_secondary: "Shift+F12".into(),
+            return_to_primary: "Shift+F11".into(),
+            toggle_lock: String::new(),
+        }
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct LogCfg {
     pub level: String,
@@ -210,7 +217,7 @@ impl Default for LogCfg {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     pub role: RoleCfg,
@@ -250,6 +257,7 @@ pub struct Settings {
     pub name: String,
     pub endpoint: Endpoint,
     pub secret: String,
+    pub edge_switching: bool,
     pub secondary_position: Edge,
     pub corner_size: i32,
     pub mouse_speed: f64,
@@ -260,6 +268,7 @@ pub struct Settings {
     /// Remappage HID → HID (côté machine pilotée).
     pub remap: BTreeMap<u32, u32>,
     pub clipboard: ClipboardCfg,
+    pub switch_hotkey: Option<Hotkey>,
     pub return_hotkey: Option<Hotkey>,
     pub lock_hotkey: Option<Hotkey>,
     pub log_level: log::LevelFilter,
@@ -312,10 +321,20 @@ impl Config {
                 crate::keymap::hid_from_name(to).ok_or_else(|| format!("[keyboard.remap] touche inconnue « {to} »"))?;
             remap.insert(f, t);
         }
+        let switch_hotkey = Hotkey::parse(&self.hotkeys.switch_to_secondary)
+            .map_err(|e| format!("[hotkeys] switch_to_secondary : {e}"))?;
         let return_hotkey =
             Hotkey::parse(&self.hotkeys.return_to_primary).map_err(|e| format!("[hotkeys] return_to_primary : {e}"))?;
         let lock_hotkey =
             Hotkey::parse(&self.hotkeys.toggle_lock).map_err(|e| format!("[hotkeys] toggle_lock : {e}"))?;
+        if self.role == RoleCfg::Primary
+            && !self.screen.edge_switching
+            && (switch_hotkey.is_none() || return_hotkey.is_none())
+        {
+            return Err("sans bascule par les bords ([screen] edge_switching = false), les raccourcis \
+                 [hotkeys] switch_to_secondary et return_to_primary sont obligatoires"
+                .into());
+        }
         let log_level = match self.log.level.trim().to_ascii_lowercase().as_str() {
             "off" => log::LevelFilter::Off,
             "error" => log::LevelFilter::Error,
@@ -331,6 +350,7 @@ impl Config {
             name,
             endpoint,
             secret,
+            edge_switching: self.screen.edge_switching,
             secondary_position: self.screen.secondary_position.into(),
             corner_size: self.screen.corner_size.max(0),
             mouse_speed: self.mouse.speed,
@@ -340,6 +360,7 @@ impl Config {
             media_keys: self.keyboard.media_keys,
             remap,
             clipboard: self.clipboard.clone(),
+            switch_hotkey,
             return_hotkey,
             lock_hotkey,
             log_level,
@@ -459,6 +480,10 @@ connect = ""
 secret = "@@SECRET@@"
 
 [screen]
+# (Machine principale) Passer sur l'autre machine en poussant la souris
+# contre le bord de l'écran. false = uniquement avec les raccourcis
+# clavier (section [hotkeys]).
+edge_switching = true
 # (Machine principale) Où se trouve l'écran de la machine secondaire,
 # par rapport à la machine principale : "right", "left", "top" ou "bottom".
 secondary_position = "right"
@@ -521,9 +546,15 @@ max_size_mb = 32
 skip_sensitive = true
 
 [hotkeys]
-# (Machine principale) Ramène immédiatement le curseur sur la machine
-# principale. Laisser vide pour désactiver.
-return_to_primary = "Ctrl+Alt+Shift+B"
+# Format : modificateurs (Ctrl, Shift, Alt, Win / Cmd) puis une touche,
+# séparés par « + ». Exemples : "Shift+F12", "Ctrl+Alt+B". Vide = désactivé.
+#
+# (Machine principale) Envoie le curseur sur la machine secondaire, là où
+# il était la dernière fois.
+switch_to_secondary = "Shift+F12"
+# (Machine principale) Ramène le curseur sur la machine principale.
+# Astuce : le même raccourci que ci-dessus permet d'aller et venir.
+return_to_primary = "Shift+F11"
 # (Machine principale) Verrouille / déverrouille le curseur sur l'écran courant.
 # Exemple : "ScrollLock". Vide = désactivé.
 toggle_lock = ""
@@ -563,10 +594,36 @@ mod tests {
             let s = cfg.validate().unwrap();
             assert_eq!(s.endpoint, Endpoint::Listen(format!("0.0.0.0:{DEFAULT_PORT}")));
             assert_eq!(s.secondary_position, Edge::Right);
-            assert!(s.return_hotkey.is_some());
+            assert!(s.edge_switching);
+            assert_eq!(s.switch_hotkey, Hotkey::parse("Shift+F12").unwrap());
+            assert_eq!(s.return_hotkey, Hotkey::parse("Shift+F11").unwrap());
             assert!(s.lock_hotkey.is_none());
             assert_eq!(s.scroll.mode, ScrollMode::Lines);
         }
+    }
+
+    #[test]
+    fn missing_sections_use_defaults() {
+        let s = Config::parse("role = \"primary\"\n[network]\nsecret = \"abcd-efgh-jkmn-pqrs\"\n")
+            .unwrap()
+            .validate()
+            .unwrap();
+        assert!(s.edge_switching);
+        assert!(s.switch_hotkey.is_some() && s.return_hotkey.is_some());
+    }
+
+    #[test]
+    fn hotkeys_required_without_edge_switching() {
+        let base = default_config_text("primary", "abcd-efgh-jkmn-pqrs")
+            .replace("edge_switching = true", "edge_switching = false");
+        assert!(!Config::parse(&base).unwrap().validate().unwrap().edge_switching);
+        let no_switch = base.replace("switch_to_secondary = \"Shift+F12\"", "switch_to_secondary = \"\"");
+        assert!(Config::parse(&no_switch).unwrap().validate().is_err());
+        let no_return = base.replace("return_to_primary = \"Shift+F11\"", "return_to_primary = \"\"");
+        assert!(Config::parse(&no_return).unwrap().validate().is_err());
+        // Sans importance sur la machine pilotée.
+        let secondary = no_switch.replace("role = \"primary\"", "role = \"secondary\"");
+        assert!(Config::parse(&secondary).unwrap().validate().is_ok());
     }
 
     #[test]

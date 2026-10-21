@@ -902,6 +902,10 @@ impl Host for MacHost {
         &self.layout
     }
 
+    fn cursor(&self) -> Point {
+        current_cursor().unwrap_or_else(|| self.layout.bounds().center())
+    }
+
     fn hide_cursor(&mut self, _at: Point) {
         // SAFETY: appels CoreGraphics depuis le thread principal.
         unsafe {
@@ -1651,8 +1655,10 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
                 IsoSwap::Auto => iso,
             };
             let opts = PrimaryOptions {
+                edge_switching: settings.edge_switching,
                 position: settings.secondary_position,
                 corner: settings.corner_size,
+                switch_hotkey: settings.switch_hotkey.clone(),
                 return_hotkey: settings.return_hotkey.clone(),
                 lock_hotkey: settings.lock_hotkey.clone(),
                 media_local: settings.media_keys == MediaKeys::Local,

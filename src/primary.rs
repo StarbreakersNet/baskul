@@ -47,9 +47,12 @@ pub enum PeerEvent {
 
 #[derive(Debug, Clone)]
 pub struct PrimaryOptions {
+    /// Bascule en poussant la souris contre le bord de l'écran.
+    pub edge_switching: bool,
     /// Position de la machine secondaire par rapport à la principale.
     pub position: Edge,
     pub corner: i32,
+    pub switch_hotkey: Option<Hotkey>,
     pub return_hotkey: Option<Hotkey>,
     pub lock_hotkey: Option<Hotkey>,
     pub media_local: bool,
@@ -59,6 +62,8 @@ pub struct PrimaryOptions {
 pub trait Host {
     /// Écrans locaux (mis en cache par la plateforme).
     fn layout(&self) -> &Layout;
+    /// Position actuelle du curseur.
+    fn cursor(&self) -> Point;
     /// Le curseur part sur l'autre machine. `at` : position actuelle du
     /// curseur. La plateforme cache le curseur et peut le recentrer, puis
     /// appeler `PrimaryCore::on_warped`.
@@ -125,7 +130,12 @@ impl PrimaryCore {
     /// Déplacement en mode local : `cur` = position réelle du curseur,
     /// `next` = position demandée (éventuellement hors écran).
     pub fn local_motion<H: Host>(&mut self, host: &mut H, cur: Point, next: Point) -> Decision {
-        if self.mode != Mode::Local || !self.connected || self.locked || self.local_buttons_down() {
+        if self.mode != Mode::Local
+            || !self.connected
+            || !self.opts.edge_switching
+            || self.locked
+            || self.local_buttons_down()
+        {
             return Decision::Pass;
         }
         let layout = host.layout();
@@ -133,15 +143,20 @@ impl PrimaryCore {
             return Decision::Pass;
         }
         let ratio = layout.ratio_on_edge(layout.clamp(next), self.opts.position);
+        log::debug!("bascule vers l'autre machine (ratio {ratio:.3})");
+        self.go_remote(host, cur, Message::Enter { edge: self.opts.position.opposite(), ratio });
+        Decision::Swallow
+    }
+
+    /// Le curseur part sur l'autre machine depuis `cur` ; `msg` l'y fait entrer.
+    fn go_remote<H: Host>(&mut self, host: &mut H, cur: Point, msg: Message) {
         self.mode = Mode::Remote;
         self.exit_point = cur;
         self.anchor = cur;
         self.warp_done = false;
-        log::debug!("bascule vers l'autre machine (ratio {ratio:.3})");
-        host.send(Message::Enter { edge: self.opts.position.opposite(), ratio });
+        host.send(msg);
         host.hide_cursor(cur);
         status::set_remote_active(true);
-        Decision::Swallow
     }
 
     /// La plateforme a recentré le curseur (mode distant).
@@ -251,6 +266,16 @@ impl PrimaryCore {
                     log::info!("raccourci : retour sur la machine principale");
                     let p = self.exit_point;
                     self.force_local(host, p);
+                    return Target::Consumed;
+                }
+            }
+        } else if self.connected {
+            if let Some(hk) = &self.opts.switch_hotkey {
+                if hk.matches(code, &self.pressed) {
+                    log::info!("raccourci : passage sur l'autre machine");
+                    let exit = self.opts.edge_switching.then(|| self.opts.position.opposite());
+                    let cur = host.cursor();
+                    self.go_remote(host, cur, Message::Jump { exit });
                     return Target::Consumed;
                 }
             }
@@ -373,6 +398,7 @@ mod tests {
 
     struct FakeHost {
         layout: Layout,
+        cursor: Point,
         sent: Vec<Message>,
         hidden_at: Option<Point>,
         shown_at: Option<Point>,
@@ -381,6 +407,9 @@ mod tests {
     impl Host for FakeHost {
         fn layout(&self) -> &Layout {
             &self.layout
+        }
+        fn cursor(&self) -> Point {
+            self.cursor
         }
         fn hide_cursor(&mut self, at: Point) {
             self.hidden_at = Some(at);
@@ -395,14 +424,17 @@ mod tests {
 
     fn setup() -> (PrimaryCore, FakeHost) {
         let mut core = PrimaryCore::new(PrimaryOptions {
+            edge_switching: true,
             position: Edge::Right,
             corner: 0,
+            switch_hotkey: Hotkey::parse("Shift+F12").unwrap(),
             return_hotkey: Hotkey::parse("Ctrl+Alt+Shift+B").unwrap(),
             lock_hotkey: Hotkey::parse("ScrollLock").unwrap(),
             media_local: false,
         });
         let mut host = FakeHost {
             layout: Layout::new(vec![Rect::new(0, 0, 1920, 1080)]),
+            cursor: Point::new(700, 300),
             sent: vec![],
             hidden_at: None,
             shown_at: None,
@@ -519,6 +551,68 @@ mod tests {
         core.peer_event(&mut host, PeerEvent::Leave { ratio: 0.3 });
         assert!(core.is_remote());
         assert_eq!(host.sent.last(), Some(&Message::Enter { edge: Edge::Left, ratio: 0.3 }));
+    }
+
+    fn press(core: &mut PrimaryCore, host: &mut FakeHost, keys: &[u32]) -> Vec<Decision> {
+        let mut d: Vec<Decision> = keys.iter().map(|k| core.key(host, *k, true)).collect();
+        d.extend(keys.iter().rev().map(|k| core.key(host, *k, false)));
+        d
+    }
+
+    #[test]
+    fn switch_hotkey_jumps_and_returns_in_place() {
+        let (mut core, mut host) = setup();
+        let f12 = hid_from_name("F12").unwrap();
+        let d = press(&mut core, &mut host, &[HID_SHIFT_LEFT, f12]);
+        // Maj reste locale (appui et relâchement), F12 est consommée.
+        assert_eq!(d, [Decision::Pass, Decision::Swallow, Decision::Swallow, Decision::Pass]);
+        assert!(core.is_remote());
+        assert_eq!(host.sent, [Message::Jump { exit: Some(Edge::Left) }]);
+        assert_eq!(host.hidden_at, Some(Point::new(700, 300)));
+        core.on_warped(Point::new(960, 540));
+
+        // Retour : le curseur réapparaît là où il était.
+        let b = hid_from_name("B").unwrap();
+        press(&mut core, &mut host, &[HID_CONTROL_LEFT, HID_ALT_LEFT, HID_SHIFT_LEFT, b]);
+        assert!(!core.is_remote());
+        assert_eq!(host.shown_at, Some(Point::new(700, 300)));
+    }
+
+    #[test]
+    fn same_hotkey_toggles() {
+        let (mut core, mut host) = setup();
+        core.opts.return_hotkey = core.opts.switch_hotkey.clone();
+        let f12 = hid_from_name("F12").unwrap();
+        press(&mut core, &mut host, &[HID_SHIFT_LEFT, f12]);
+        assert!(core.is_remote());
+        press(&mut core, &mut host, &[HID_SHIFT_LEFT, f12]);
+        assert!(!core.is_remote());
+        press(&mut core, &mut host, &[HID_SHIFT_LEFT, f12]);
+        assert!(core.is_remote());
+    }
+
+    #[test]
+    fn switch_hotkey_passes_through_when_disconnected() {
+        let (mut core, mut host) = setup();
+        core.peer_event(&mut host, PeerEvent::Disconnected);
+        let f12 = hid_from_name("F12").unwrap();
+        let d = press(&mut core, &mut host, &[HID_SHIFT_LEFT, f12]);
+        assert_eq!(d, [Decision::Pass; 4]);
+        assert!(!core.is_remote());
+        assert!(host.sent.is_empty());
+    }
+
+    #[test]
+    fn edge_switching_disabled() {
+        let (mut core, mut host) = setup();
+        core.opts.edge_switching = false;
+        assert_eq!(core.local_motion(&mut host, Point::new(1919, 540), Point::new(1925, 540)), Decision::Pass);
+        assert!(!core.is_remote());
+        // Le raccourci fonctionne, sans bord de sortie pour la machine secondaire.
+        let f12 = hid_from_name("F12").unwrap();
+        press(&mut core, &mut host, &[HID_SHIFT_LEFT, f12]);
+        assert!(core.is_remote());
+        assert_eq!(host.sent, [Message::Jump { exit: None }]);
     }
 
     #[test]
