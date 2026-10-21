@@ -367,8 +367,8 @@ pub fn decode_png(data: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
     let px = (w as usize) * (h as usize);
     let rgba = match info.color_type {
         png::ColorType::Rgba => buf,
-        png::ColorType::Rgb => buf.chunks_exact(3).flat_map(|c| [c[0], c[1], c[2], 255]).collect(),
-        png::ColorType::GrayscaleAlpha => buf.chunks_exact(2).flat_map(|c| [c[0], c[0], c[0], c[1]]).collect(),
+        png::ColorType::Rgb => buf.as_chunks::<3>().0.iter().flat_map(|&[r, g, b]| [r, g, b, 255]).collect(),
+        png::ColorType::GrayscaleAlpha => buf.as_chunks::<2>().0.iter().flat_map(|&[g, a]| [g, g, g, a]).collect(),
         png::ColorType::Grayscale => buf.iter().flat_map(|g| [*g, *g, *g, 255]).collect(),
         png::ColorType::Indexed => return None,
     };
@@ -500,5 +500,21 @@ mod tests {
         let rgba: Vec<u8> = (0..w * h * 4).map(|i| (i * 7) as u8).collect();
         let png = encode_png(w, h, &rgba).unwrap();
         assert_eq!(decode_png(&png).unwrap(), (w, h, rgba));
+    }
+
+    #[test]
+    fn png_rgb_and_gray_alpha_become_rgba() {
+        let encode = |color, data: &[u8]| {
+            let mut out = Vec::new();
+            let mut enc = png::Encoder::new(&mut out, 2, 1);
+            enc.set_color(color);
+            enc.set_depth(png::BitDepth::Eight);
+            enc.write_header().unwrap().write_image_data(data).unwrap();
+            out
+        };
+        let rgb = encode(png::ColorType::Rgb, &[1, 2, 3, 4, 5, 6]);
+        assert_eq!(decode_png(&rgb).unwrap(), (2, 1, vec![1, 2, 3, 255, 4, 5, 6, 255]));
+        let gray_alpha = encode(png::ColorType::GrayscaleAlpha, &[10, 20, 30, 40]);
+        assert_eq!(decode_png(&gray_alpha).unwrap(), (2, 1, vec![10, 10, 10, 20, 30, 30, 30, 40]));
     }
 }
