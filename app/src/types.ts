@@ -1,0 +1,51 @@
+// Types partagés avec le daemon (voir `src/config.rs` et `src/api.rs`).
+
+export type Role = "primary" | "secondary";
+export type Edge = "left" | "right" | "top" | "bottom";
+
+/** Contenu du fichier `config.toml`, tel que le daemon le renvoie. */
+export interface BasculeConfig {
+  role: Role;
+  name: string;
+  network: { listen: string; connect: string; secret: string };
+  screen: { edge_switching: boolean; secondary_position: Edge; corner_size: number };
+  mouse: { speed: number };
+  scroll: {
+    mode: "lines" | "pixels";
+    lines_per_notch: number;
+    pixels_per_notch: number;
+    invert_vertical: boolean;
+    invert_horizontal: boolean;
+  };
+  buttons: { side_buttons: "buttons" | "swipe"; swap_side_buttons: boolean };
+  keyboard: { iso_swap: "auto" | "on" | "off"; media_keys: "remote" | "local"; remap: Record<string, string> };
+  clipboard: { enabled: boolean; images: boolean; html: boolean; max_size_mb: number; skip_sensitive: boolean };
+  hotkeys: { switch_to_secondary: string; return_to_primary: string; toggle_lock: string };
+  log: { level: string };
+}
+
+/** Réponse de `load_settings`. */
+export interface DaemonInfo {
+  /** `null` si le fichier ne peut pas être lu (voir `error`). */
+  config: BasculeConfig | null;
+  error: string | null;
+  path: string;
+  os: string;
+  hostname: string;
+  /** Adresse IP de cette machine sur le réseau local. */
+  address: string | null;
+  version: string;
+}
+
+/** Réponse de `daemon_status`. */
+export interface DaemonStatus {
+  state: "waiting" | "connected" | "error";
+  detail: string;
+  summary: string;
+  remote_active: boolean;
+  locked: boolean;
+  warning: string | null;
+  version: string;
+  /** Démarrage du daemon (ms) : change à chaque redémarrage. */
+  started: number;
+}

@@ -2,3 +2,10 @@
 /dist
 
 .DS_Store
+
+# App de réglages (Tauri + Vue)
+/app/node_modules
+/app/dist
+/app/src-tauri/gen
+/app/.yarn/*
+!/app/.yarn/releases

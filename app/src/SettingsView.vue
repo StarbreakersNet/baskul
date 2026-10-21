@@ -1,0 +1,165 @@
+<script setup lang="ts">
+import { computed, onMounted, provide } from "vue";
+import { NAlert, NButton, NResult, NSpin, useDialog, useMessage, useThemeVars } from "naive-ui";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import StatusBadge from "./components/StatusBadge.vue";
+import { useSettings } from "./composables/useSettings";
+import { roleKey } from "./keys";
+import AdvancedSection from "./sections/AdvancedSection.vue";
+import ClipboardSection from "./sections/ClipboardSection.vue";
+import ConnectionSection from "./sections/ConnectionSection.vue";
+import KeyboardSection from "./sections/KeyboardSection.vue";
+import MachineSection from "./sections/MachineSection.vue";
+import MouseSection from "./sections/MouseSection.vue";
+import SwitchingSection from "./sections/SwitchingSection.vue";
+import { osLabel, withAlpha } from "./utils";
+
+const settings = useSettings();
+const { phase, info, config, status, dirty, saving, welcome } = settings;
+const message = useMessage();
+const dialog = useDialog();
+const vars = useThemeVars();
+
+provide(
+  roleKey,
+  computed(() => config.value?.role ?? "primary"),
+);
+
+// Couleurs du thème Naive UI, pour les styles maison (styles.css).
+const cssVars = computed(() => ({
+  "--muted": vars.value.textColor3,
+  "--border": vars.value.dividerColor,
+  "--accent": vars.value.primaryColor,
+  "--accent-soft": withAlpha(vars.value.primaryColor, 0.12),
+}));
+
+const restarting = computed(() => phase.value === "restarting");
+const busy = computed(() => saving.value || restarting.value);
+const subtitle = computed(() => (info.value ? `${info.value.hostname} · ${osLabel(info.value.os)}` : ""));
+const footerText = computed(() => {
+  if (restarting.value) return "Bascule redémarre avec les nouveaux réglages…";
+  return dirty.value ? "Modifications non enregistrées." : "";
+});
+
+/** Affiche l'erreur d'une action. */
+async function attempt(action: () => Promise<unknown>) {
+  try {
+    await action();
+  } catch (e) {
+    message.error(settings.errorMessage(e), { duration: 8000, closable: true });
+  }
+}
+
+const save = () =>
+  attempt(async () => {
+    if (await settings.save()) message.success("Réglages enregistrés et appliqués.");
+    else message.warning("Réglages enregistrés, mais Bascule n'a pas redémarré.");
+  });
+
+const restart = () =>
+  attempt(async () => {
+    if (await settings.restart()) message.success("Bascule a redémarré.");
+  });
+
+const openFile = () => attempt(settings.openConfigFile);
+const start = () => attempt(settings.start);
+
+onMounted(async () => {
+  await settings.init();
+  // Fermeture avec des modifications non enregistrées : confirmation.
+  const win = getCurrentWindow();
+  await win.onCloseRequested((event) => {
+    if (!dirty.value) return;
+    event.preventDefault();
+    dialog.warning({
+      title: "Modifications non enregistrées",
+      content: "Fermer sans enregistrer ?",
+      positiveText: "Fermer",
+      negativeText: "Annuler",
+      onPositiveClick: () => void win.destroy(),
+    });
+  });
+});
+</script>
+
+<template>
+  <div class="page" :style="cssVars">
+    <header class="top">
+      <div class="logo" aria-hidden="true">⇄</div>
+      <div class="brand">
+        <h1>Réglages de Bascule</h1>
+        <p class="sub">{{ subtitle }}</p>
+      </div>
+      <status-badge v-if="phase !== 'loading'" :status="status" :restarting="restarting" />
+    </header>
+
+    <main>
+      <div v-if="phase === 'loading'" class="center"><n-spin /></div>
+
+      <n-result
+        v-else-if="phase === 'offline' || phase === 'starting'"
+        status="info"
+        title="Bascule n'est pas lancé"
+        description="Les réglages s'affichent dès que Bascule fonctionne."
+        class="offline"
+      >
+        <template #footer>
+          <n-button type="primary" :loading="phase === 'starting'" @click="start">Démarrer Bascule</n-button>
+        </template>
+      </n-result>
+
+      <n-spin v-else-if="info" :show="restarting" description="Redémarrage de Bascule…">
+        <n-alert v-if="welcome" type="info" title="Bienvenue dans Bascule !" closable class="block">
+          Pour relier vos deux machines :
+          <ol>
+            <li>Choisissez le rôle de cette machine. La <em>principale</em> est celle qui a le clavier et la souris.</li>
+            <li>
+              Le secret doit être identique sur les deux machines : copiez celui-ci dans les réglages de l'autre
+              machine, ou collez ici le sien.
+            </li>
+            <li>
+              Sur la machine principale, indiquez l'adresse de l'autre dans « Se connecter à ». L'autre machine laisse ce
+              champ vide.
+            </li>
+          </ol>
+          Enregistrez : Bascule redémarre avec ces réglages.
+        </n-alert>
+
+        <n-alert v-if="!config" type="error" title="Le fichier de configuration ne peut pas être lu" class="block">
+          <p class="mono">{{ info.error }}</p>
+          <div class="actions">
+            <n-button size="small" @click="openFile">Ouvrir le fichier</n-button>
+            <n-button size="small" @click="restart">Redémarrer Bascule</n-button>
+          </div>
+        </n-alert>
+        <n-alert v-else-if="status?.state === 'error'" type="error" class="block">{{ status.detail }}</n-alert>
+
+        <template v-if="config">
+          <machine-section :config="config" :info="info" />
+          <connection-section :config="config" :info="info" />
+          <switching-section :config="config" :info="info" />
+          <mouse-section :config="config" />
+          <keyboard-section :config="config" @open-file="openFile" />
+          <clipboard-section :config="config" />
+          <advanced-section
+            :config="config"
+            :info="info"
+            :restarting="restarting"
+            @open-file="openFile"
+            @restart="restart"
+          />
+        </template>
+      </n-spin>
+    </main>
+
+    <footer v-if="config && (phase === 'ready' || restarting)" class="actionbar">
+      <div class="actionbar-inner">
+        <p class="msg">{{ footerText }}</p>
+        <n-button :disabled="!dirty || busy" @click="settings.reset()">Annuler</n-button>
+        <n-button type="primary" :disabled="!dirty || busy" :loading="busy" @click="save">
+          Enregistrer et redémarrer
+        </n-button>
+      </div>
+    </footer>
+  </div>
+</template>

@@ -8,9 +8,9 @@ Bascule partage **le clavier, la souris et le presse-papiers** de votre PC Windo
 - La **molette** est réglable : défilement par lignes ou au pixel, vitesse, inversion.
 - Le **presse-papiers** est partagé dans les deux sens : texte, texte mis en forme (HTML), images. Les mots de passe copiés depuis un gestionnaire de mots de passe sont ignorés.
 - La liaison est **chiffrée** (protocole Noise) et protégée par un secret partagé. Bascule se reconnecte automatiquement.
-- Tous les réglages se changent **sans recompiler**, dans une page de réglages qui s'ouvre dans le navigateur (ou directement dans le fichier texte).
+- Tous les réglages se changent **sans recompiler**, dans la fenêtre « Réglages de Bascule » (ou directement dans le fichier texte).
 
-> Le sens Mac → PC (le Mac pilote le PC) est aussi prévu, mais il est **expérimental** (voir [Sens inverse](#sens-inverse-mac--pc-expérimental)).
+> Le sens Mac → PC (le Mac pilote le PC) est aussi prévu, mais il est **expérimental** (voir [Sens inverse](#sens-inverse-mac--pc-expérimental)). Une [version Linux minimale](#linux-version-minimale) permet aussi de tester les réglages et la connexion.
 
 ---
 
@@ -19,19 +19,22 @@ Bascule partage **le clavier, la souris et le presse-papiers** de votre PC Windo
 ### Option A : GitHub Actions (recommandé, rien à installer)
 
 1. Créez un dépôt **privé** sur GitHub et poussez-y ce dossier.
-2. Mettez à jour `version` dans `Cargo.toml` (c'est la version affichée par l'app macOS), puis créez un tag et poussez-le :
+2. Mettez à jour `version` dans la section `[workspace.package]` de `Cargo.toml` (c'est la version affichée par les apps), puis créez un tag et poussez-le :
    ```bash
-   git tag v0.2.0
-   git push origin v0.2.0
+   git tag v0.3.0
+   git push origin v0.3.0
    ```
    Le workflow `build` se lance dans l'onglet **Actions**.
 3. À la fin, une **Release** apparaît dans la page **Releases** du dépôt, avec :
-   - `bascule.exe` pour Windows ;
-   - `Bascule-macOS.zip`, une app universelle pour Apple Silicon et Intel.
+   - `Bascule-Windows.zip` : `bascule.exe` et son app de réglages `bascule-settings.exe` ;
+   - `Bascule-macOS.zip` : `Bascule.app`, universelle (Apple Silicon et Intel), app de réglages incluse ;
+   - `Bascule-Linux.tar.gz` : la [version Linux minimale](#linux-version-minimale).
 
 Pour compiler sans publier de Release, lancez le workflow à la main (onglet **Actions** → **build** → **Run workflow**). Les programmes sont alors dans les *artifacts*, en bas de la page de l'exécution.
 
 ### Option B : compiler soi-même
+
+Il faut [Rust](https://rustup.rs) et [Node.js](https://nodejs.org) 22 (pour l'app de réglages). Yarn 4 est fourni par `corepack`, inclus dans Node.js.
 
 **Sur le Mac**
 
@@ -42,11 +45,13 @@ source ~/.cargo/env
 ./scripts/build-macos.sh      # produit dist/Bascule.app
 ```
 
-**Sur le PC**, installez Rust avec [rustup](https://rustup.rs). Il propose d'installer les *Visual Studio Build Tools* : acceptez. Ensuite :
+**Sur le PC**, rustup propose d'installer les *Visual Studio Build Tools* : acceptez. Ensuite :
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\build-windows.ps1   # produit dist\Bascule.exe
+powershell -ExecutionPolicy Bypass -File scripts\build-windows.ps1   # produit dist\Bascule\
 ```
+
+**Sous Linux**, voir [Linux](#linux-version-minimale).
 
 ---
 
@@ -63,16 +68,16 @@ Quittez CursorHop (ou tout autre logiciel de partage de souris) avant de lancer 
    - Faites un clic droit sur l'app, puis **Ouvrir**.
    - Sur macOS 15 et suivants, allez dans *Réglages Système → Confidentialité et sécurité*, puis cliquez sur **Ouvrir quand même** en bas de la page.
    - Autre solution, dans le Terminal : `xattr -dr com.apple.quarantine /Applications/Bascule.app`
-3. Bascule crée sa configuration et ouvre la **page de réglages** dans le navigateur. « Pilotée » est déjà sélectionné. **Copiez le secret partagé** (bouton « Copier »), vous en aurez besoin sur le PC. Notez aussi l'**adresse de cette machine** affichée par la page : c'est l'adresse IP du Mac. Ne touchez à rien d'autre.
+3. Bascule crée sa configuration et ouvre ses **réglages**. « Pilotée » est déjà sélectionné. **Copiez le secret partagé** (bouton « Copier »), vous en aurez besoin sur le PC. Notez aussi l'**adresse de cette machine** affichée dans les réglages : c'est l'adresse IP du Mac. Ne touchez à rien d'autre.
 4. macOS demande l'autorisation **Accessibilité**. Ouvrez *Réglages Système → Confidentialité et sécurité → Accessibilité* et activez **Bascule**. Si macOS demande aussi d'accepter les connexions entrantes ou l'accès au réseau local, cliquez sur **Autoriser**.
-5. Si la page n'affiche pas l'adresse IP du Mac, elle se trouve dans *Réglages Système → Wi-Fi (ou Réseau) → Détails*. Vous pouvez aussi taper `ipconfig getifaddr en0` dans le Terminal.
+5. Si les réglages n'affichent pas l'adresse IP du Mac, elle se trouve dans *Réglages Système → Wi-Fi (ou Réseau) → Détails*. Vous pouvez aussi taper `ipconfig getifaddr en0` dans le Terminal.
 
 L'icône ⌨︎ dans la barre des menus indique l'état. Son menu propose aussi « Autoriser Bascule (Accessibilité)… » si l'autorisation manque.
 
 ### Sur le PC
 
-1. Rangez `bascule.exe` dans un dossier définitif, par exemple `%LOCALAPPDATA%\Programs\Bascule\Bascule.exe`. Si SmartScreen s'affiche, cliquez sur **Informations complémentaires**, puis **Exécuter quand même**.
-2. Lancez-le. La page de réglages s'ouvre dans le navigateur, avec « Principale » sélectionné. Renseignez :
+1. Décompressez `Bascule-Windows.zip` dans un dossier définitif, par exemple `%LOCALAPPDATA%\Programs\Bascule`. Gardez `bascule.exe` et `bascule-settings.exe` ensemble. Si SmartScreen s'affiche, cliquez sur **Informations complémentaires**, puis **Exécuter quand même**.
+2. Lancez `bascule.exe`. Ses réglages s'ouvrent, avec « Principale » sélectionné. Renseignez :
    - **Se connecter à** : l'adresse IP du Mac (par exemple `192.168.1.30`) ;
    - **Secret partagé** : collez EXACTEMENT le secret du Mac.
 
@@ -121,13 +126,14 @@ MetaLeft = "AltLeft"     # Windows du PC → ⌥
 
 ## 4. Réglages (sans recompiler)
 
-Dans le menu de Bascule, choisissez **Réglages…** : une page s'ouvre dans le navigateur. Modifiez, puis cliquez sur **Enregistrer et redémarrer**.
+Dans le menu de Bascule, choisissez **Réglages…** : la fenêtre « Réglages de Bascule » s'ouvre. Relancer Bascule alors qu'il tourne déjà (double-clic sur l'app) l'ouvre aussi. Modifiez, puis cliquez sur **Enregistrer et redémarrer** : Bascule redémarre et la fenêtre affiche aussitôt le nouvel état de la connexion.
 
-- La page n'est accessible que depuis cette machine (adresse `127.0.0.1`, protégée par un jeton aléatoire).
+- L'état de la connexion s'affiche en direct, en haut de la fenêtre.
 - Les réglages qui ne servent que sur l'autre machine sont grisés.
 - Pour un raccourci, cliquez sur « Modifier » puis tapez la combinaison.
-- Le bouton « Ouvrir le fichier » donne accès au fichier texte, par exemple pour le remappage de touches. Quand la page enregistre, les commentaires du fichier sont conservés.
-- `bascule --settings` ouvre seulement la page, sans démarrer le partage.
+- Le bouton « Ouvrir le fichier » donne accès au fichier texte, par exemple pour le remappage de touches. Quand les réglages sont enregistrés, les commentaires du fichier sont conservés.
+- Si le fichier de configuration contient une erreur, Bascule ouvre ses réglages pour la corriger.
+- `bascule --settings` ouvre les réglages.
 
 Le fichier complet et commenté est dans [`docs/config.exemple.toml`](docs/config.exemple.toml). Après une modification à la main, faites **Redémarrer Bascule** dans le menu.
 
@@ -181,21 +187,69 @@ Pour éviter cette manipulation, signez vos compilations locales avec un certifi
 
 **Une fenêtre lancée en administrateur sur le PC (Gestionnaire des tâches…).** Windows interdit à un programme normal d'intercepter le clavier quand une telle fenêtre est active. Bascule reprend le premier plan quand vous passez sur le Mac. Pour couvrir aussi ce cas, lancez Bascule en administrateur.
 
+**Les réglages ne s'ouvrent pas sous Windows.** L'app de réglages utilise WebView2, inclus dans Windows 11 et installé par les mises à jour de Windows 10. Sinon, installez le *WebView2 Runtime* de Microsoft. En attendant, le menu « Ouvrir le dossier de Bascule » donne accès au fichier `config.toml`.
+
 **Journaux**
 - PC : `%APPDATA%\Bascule\bascule.log`
 - Mac : `~/Library/Logs/Bascule/bascule.log`
+- Linux : `~/.config/Bascule/bascule.log`
 
 Le menu propose aussi **Ouvrir le journal**. Avec `[log] level = "debug"`, chaque touche ignorée et chaque changement d'écran sont détaillés.
 
 **Configuration**
 - PC : `%APPDATA%\Bascule\config.toml`
 - Mac : `~/Library/Application Support/Bascule/config.toml`
+- Linux : `~/.config/Bascule/config.toml`
 
 ---
 
 ## Sens inverse (Mac → PC, expérimental)
 
 Inversez simplement les rôles : `role = "primary"` sur le Mac, `role = "secondary"` sur le PC. Sur le Mac, il faut alors les autorisations **Accessibilité** et **Surveillance de l'entrée**. Le code est complet, mais il a été moins éprouvé que le sens PC → Mac.
+
+---
+
+## Linux (version minimale)
+
+Sous Linux, Bascule se connecte à l'autre machine, partage le presse-papiers (texte surtout) et a les mêmes réglages. En revanche, il **ne partage ni le clavier ni la souris** : cette version sert à tester l'app de réglages et la connexion.
+
+```bash
+sudo apt install libwebkit2gtk-4.1-0     # pour l'app de réglages, s'il manque
+tar xzf Bascule-Linux.tar.gz
+./bascule/bascule
+```
+
+Au premier lancement, les réglages s'ouvrent. Il n'y a pas d'icône : pour les rouvrir, relancez `./bascule/bascule` (ou `./bascule/bascule --settings`). Pour tester la liaison avec le Mac, choisissez « Principale » sur Linux, puis indiquez l'adresse du Mac et son secret : les deux machines affichent « Connecté », et un texte copié d'un côté se colle de l'autre.
+
+Pour compiler (Debian, Ubuntu) :
+
+```bash
+sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libxdo-dev libssl-dev
+./scripts/build-linux.sh      # produit dist/bascule/ et dist/Bascule-Linux.tar.gz
+```
+
+---
+
+## Développer l'interface (Tauri + Vue 3)
+
+Les réglages sont une app [Tauri 2](https://tauri.app) à part, `bascule-settings`, dans `app/` : Vue 3, TypeScript, Vite, Yarn 4 et [Naive UI](https://www.naiveui.com). Bascule (le daemon) la lance et lui répond par une API locale :
+
+```
+Vue (app/src)  →  commandes Tauri (app/src-tauri)  →  API locale du daemon (src/api.rs)
+```
+
+Le daemon écrit le port et un jeton de son API dans `api.json`, à côté de `config.toml`, lisible par l'utilisateur seulement. L'app le relit à chaque appel, ce qui suit les redémarrages du daemon.
+
+```bash
+corepack enable          # une fois : active Yarn 4 (champ packageManager)
+cd app && yarn install
+cargo run                # à la racine : lance Bascule (le daemon)
+cd app && yarn tauri dev # fenêtre de réglages, avec rechargement à chaud
+```
+
+- `src/types.ts` reprend la configuration de `src/config.rs`. Pour un nouveau réglage : `config.rs` (structure, modèle commenté, validation), puis `types.ts` et la section concernée dans `src/sections/`.
+- `src/composables/useSettings.ts` gère l'état : chargement, état en direct, enregistrement, attente du redémarrage.
+- `yarn build` vérifie les types (`vue-tsc`) puis construit le front, qui est intégré à l'exécutable par `cargo build -p bascule-settings --features custom-protocol`.
 
 ---
 
@@ -226,11 +280,14 @@ src/
   secondary.rs     logique de la machine pilotée (position, sortie par le bord…)
   clipboard.rs     presse-papiers (texte, HTML, PNG), anti-écho
   hotkey.rs        raccourcis
-  settings_ui.rs   page de réglages : serveur HTTP local (127.0.0.1) et API JSON
-  settings.html    la page elle-même (HTML/CSS/JS, intégrée à l'exécutable)
+  api.rs           API locale (127.0.0.1 + jeton) pour l'app de réglages
   platform/
     windows.rs     hooks bas niveau, masquage du curseur, SendInput, icône
     macos.rs       CGEventPost, gestes, Verr. Maj (IOKit), CGEventTap, barre des menus
+    linux.rs       version minimale (connexion, presse-papiers, réglages)
+app/               app de réglages : Tauri 2 + Vue 3 + Naive UI
+  src/             front (sections, composants, état)
+  src-tauri/       commandes Tauri, client de l'API du daemon
 ```
 
 Tests : `cargo test` (67 tests, dont un test de bout en bout sur une vraie connexion TCP). Le code Windows et macOS se vérifie aussi depuis Linux avec `./scripts/xcheck.sh`.

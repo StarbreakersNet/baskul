@@ -10,6 +10,8 @@
 	<string>fr.bascule.app</string>
 	<key>CFBundleExecutable</key>
 	<string>bascule</string>
+	<key>CFBundleIconFile</key>
+	<string>Bascule</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleInfoDictionaryVersion</key>
