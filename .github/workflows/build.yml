@@ -15,6 +15,7 @@ env:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
 
 jobs:
+  # Les builds (longs, surtout sur macOS) ne démarrent que si les tests passent.
   tests:
     name: Tests (Linux) + vérification du code Windows/macOS
     runs-on: ubuntu-latest
@@ -30,6 +31,7 @@ jobs:
 
   linux:
     name: Linux
+    needs: tests
     # Ubuntu 22.04 : les binaires fonctionnent aussi sur les versions récentes.
     runs-on: ubuntu-22.04
     steps:
@@ -52,6 +54,7 @@ jobs:
 
   windows:
     name: Windows
+    needs: tests
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -68,6 +71,7 @@ jobs:
 
   macos:
     name: macOS (universel)
+    needs: tests
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
