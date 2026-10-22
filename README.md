@@ -139,9 +139,11 @@ Le fichier complet et commenté est dans [`docs/config.exemple.toml`](docs/confi
 
 | Section | Réglage | Effet |
 |---|---|---|
-| `[scroll]` (Mac) | `mode = "lines"` / `"pixels"` / `"smooth"` | Par lignes, comme une molette Windows ; au pixel (précis et identique dans toutes les apps) ; ou fluide, chaque cran étant animé (macOS) |
+| `[scroll]` (Mac) | `mode = "lines"` / `"pixels"` / `"smooth"` | Par lignes, comme une molette Windows ; au pixel (précis et identique dans toutes les apps) ; ou fluide, à la manière de Mac Mouse Fix (macOS) |
 | | `lines_per_notch = 3.0` | Vitesse en mode lignes (par cran de molette) |
-| | `pixels_per_notch = 60.0` | Vitesse en modes pixels et fluide |
+| | `pixels_per_notch = 60.0` | Vitesse en mode pixels |
+| | `smooth_speed = "medium"` | Mode fluide : vitesse `"low"`, `"medium"` ou `"high"`, comme le réglage « Vitesse » de Mac Mouse Fix |
+| | `smoothness = "regular"` | Mode fluide : `"regular"` (animation courte) ou `"high"` (élan plus long), comme le réglage « Douceur » de Mac Mouse Fix |
 | | `invert_vertical`, `invert_horizontal` | Inverser le sens |
 | `[buttons]` (Mac) | `side_buttons = "buttons"` / `"swipe"` | Boutons 4/5 bruts (Chrome, Firefox, VS Code…) ou geste précédent/suivant (Safari, Finder, Xcode…) |
 | `[mouse]` (Mac) | `speed = 1.0` | Vitesse du curseur sur le Mac |
@@ -155,9 +157,9 @@ Le fichier complet et commenté est dans [`docs/config.exemple.toml`](docs/confi
 | `[clipboard]` | `enabled`, `images`, `html`, `max_size_mb`, `skip_sensitive` | Presse-papiers partagé |
 | `[log]` | `level = "debug"` | Journal détaillé, utile pour un diagnostic |
 
-Pour le défilement, commencez par `mode = "lines"`. Si la vitesse varie trop d'une app à l'autre (Safari vs Chrome), essayez `mode = "pixels"` avec `pixels_per_notch` entre 60 et 120. Pour un défilement doux, comme avec Mac Mouse Fix, choisissez `mode = "smooth"`.
+Pour le défilement, commencez par `mode = "lines"`. Si la vitesse varie trop d'une app à l'autre (Safari vs Chrome), essayez `mode = "pixels"` avec `pixels_per_notch` entre 60 et 120. Pour retrouver le défilement de Mac Mouse Fix, choisissez `mode = "smooth"` avec la même vitesse et la même douceur que dans Mac Mouse Fix.
 
-> **Mac Mouse Fix** et les logiciels du même genre ne s'activent que si une souris est branchée sur le Mac : ils n'agissent donc pas sur la souris du PC. Le mode `"smooth"` de Bascule les remplace pour le défilement.
+> **Mac Mouse Fix** et les logiciels du même genre ne s'activent que si une souris est branchée sur le Mac : ils n'agissent donc pas sur la souris du PC. Le mode `"smooth"` de Bascule reprend leur algorithme : la vitesse de rotation de la molette est mesurée (les crans rapprochés vont plus loin), plusieurs gestes rapides enchaînés accélèrent encore, et chaque cran est animé à vitesse constante puis freiné jusqu'à l'arrêt ; un changement de sens arrête net le défilement.
 
 ---
 

@@ -3,7 +3,6 @@ import { computed, onMounted, provide, ref, watch } from "vue";
 import {
   NAlert,
   NButton,
-  NCard,
   NResult,
   NSpin,
   NTabPane,
@@ -157,34 +156,32 @@ onMounted(async () => {
 
         <template v-if="config">
           <machine-section :config="config" :info="info" />
-          <n-card class="section tabs-card">
-            <n-tabs v-model:value="tab" type="line" animated>
-              <n-tab-pane name="connexion" tab="Connexion">
-                <connection-section :config="config" :info="info" />
-              </n-tab-pane>
-              <n-tab-pane v-if="role === 'primary'" name="bascule" tab="Changer de machine">
-                <switching-section :config="config" :info="info" />
-              </n-tab-pane>
-              <n-tab-pane v-if="role === 'secondary'" name="souris" tab="Souris">
-                <mouse-section :config="config" />
-              </n-tab-pane>
-              <n-tab-pane name="clavier" tab="Clavier">
-                <keyboard-section :config="config" @open-file="openFile" />
-              </n-tab-pane>
-              <n-tab-pane name="presse-papiers" tab="Presse-papiers">
-                <clipboard-section :config="config" />
-              </n-tab-pane>
-              <n-tab-pane name="avance" tab="Avancé">
-                <advanced-section
-                  :config="config"
-                  :info="info"
-                  :restarting="restarting"
-                  @open-file="openFile"
-                  @restart="restart"
-                />
-              </n-tab-pane>
-            </n-tabs>
-          </n-card>
+          <n-tabs v-model:value="tab" type="line" size="large" animated class="section">
+            <n-tab-pane name="connexion" tab="Connexion">
+              <connection-section :config="config" :info="info" />
+            </n-tab-pane>
+            <n-tab-pane v-if="role === 'primary'" name="bascule" tab="Changer de machine">
+              <switching-section :config="config" :info="info" />
+            </n-tab-pane>
+            <n-tab-pane v-if="role === 'secondary'" name="souris" tab="Souris">
+              <mouse-section :config="config" />
+            </n-tab-pane>
+            <n-tab-pane name="clavier" tab="Clavier">
+              <keyboard-section :config="config" @open-file="openFile" />
+            </n-tab-pane>
+            <n-tab-pane name="presse-papiers" tab="Presse-papiers">
+              <clipboard-section :config="config" />
+            </n-tab-pane>
+            <n-tab-pane name="avance" tab="Avancé">
+              <advanced-section
+                :config="config"
+                :info="info"
+                :restarting="restarting"
+                @open-file="openFile"
+                @restart="restart"
+              />
+            </n-tab-pane>
+          </n-tabs>
         </template>
       </n-spin>
     </main>

@@ -44,13 +44,18 @@ speed = 1.0
 
 [scroll]
 # (Machine pilotée) "lines" = par lignes, comme une molette Windows ;
-# "pixels" = défilement précis au pixel ; "smooth" = défilement fluide,
-# chaque cran est animé (macOS).
+# "pixels" = défilement précis au pixel ; "smooth" = défilement fluide à la
+# manière de Mac Mouse Fix (macOS).
 mode = "lines"
 # Nombre de lignes par cran de molette (mode "lines").
 lines_per_notch = 3.0
-# Nombre de pixels par cran de molette (modes "pixels" et "smooth").
+# Nombre de pixels par cran de molette (mode "pixels").
 pixels_per_notch = 60.0
+# Mode "smooth" : mêmes réglages que Mac Mouse Fix.
+# Vitesse : "low", "medium" ou "high" (les crans rapides vont plus loin).
+smooth_speed = "medium"
+# Douceur : "regular" (animation courte) ou "high" (élan plus long).
+smoothness = "regular"
 # Inverser le sens de défilement.
 invert_vertical = false
 invert_horizontal = false

@@ -69,12 +69,9 @@ body {
   margin-top: 8px;
 }
 
-/* Cartes, onglets et lignes */
+/* Sections, onglets et lignes */
 .section {
   margin: 14px 0;
-}
-.tabs-card > .n-card__content {
-  padding-top: 6px;
 }
 .pane {
   padding-top: 4px;

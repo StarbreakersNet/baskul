@@ -21,7 +21,7 @@ const mode = computed(() => props.config.scroll.mode);
     </setting-row>
     <setting-row label="Défilement">
       <template #help>
-        Par lignes, comme une molette Windows ; au pixel, plus précis ; fluide, chaque cran est animé comme avec Mac
+        Par lignes, comme une molette Windows ; au pixel, plus précis ; fluide, animé et accéléré comme avec Mac
         Mouse Fix (macOS).
       </template>
       <choice-group
@@ -33,23 +33,32 @@ const mode = computed(() => props.config.scroll.mode);
         ]"
       />
     </setting-row>
-    <setting-row label="Lignes par cran" :disabled="mode !== 'lines'">
-      <number-input
-        v-model="config.scroll.lines_per_notch"
-        :min="0.1"
-        :max="50"
-        :step="0.5"
-        :disabled="mode !== 'lines'"
-      />
+    <template v-if="mode === 'smooth'">
+      <setting-row label="Vitesse" help="Distance d'un cran ; les crans rapprochés vont plus loin.">
+        <choice-group
+          v-model="config.scroll.smooth_speed"
+          :options="[
+            { value: 'low', label: 'Lente' },
+            { value: 'medium', label: 'Moyenne' },
+            { value: 'high', label: 'Rapide' },
+          ]"
+        />
+      </setting-row>
+      <setting-row label="Douceur" help="Durée de l'élan après chaque cran. Mêmes réglages que dans Mac Mouse Fix.">
+        <choice-group
+          v-model="config.scroll.smoothness"
+          :options="[
+            { value: 'regular', label: 'Normale' },
+            { value: 'high', label: 'Élevée' },
+          ]"
+        />
+      </setting-row>
+    </template>
+    <setting-row v-else-if="mode === 'lines'" label="Lignes par cran">
+      <number-input v-model="config.scroll.lines_per_notch" :min="0.1" :max="50" :step="0.5" />
     </setting-row>
-    <setting-row label="Pixels par cran" :disabled="mode === 'lines'">
-      <number-input
-        v-model="config.scroll.pixels_per_notch"
-        :min="1"
-        :max="2000"
-        :step="10"
-        :disabled="mode === 'lines'"
-      />
+    <setting-row v-else label="Pixels par cran">
+      <number-input v-model="config.scroll.pixels_per_notch" :min="1" :max="2000" :step="10" />
     </setting-row>
     <setting-row label="Inverser le défilement vertical">
       <n-switch v-model:value="config.scroll.invert_vertical" />

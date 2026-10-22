@@ -14,6 +14,8 @@ export interface BasculeConfig {
     mode: "lines" | "pixels" | "smooth";
     lines_per_notch: number;
     pixels_per_notch: number;
+    smooth_speed: "low" | "medium" | "high";
+    smoothness: "regular" | "high";
     invert_vertical: boolean;
     invert_horizontal: boolean;
   };

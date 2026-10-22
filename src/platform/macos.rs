@@ -512,38 +512,38 @@ struct MacEmulator {
 unsafe impl Send for MacEmulator {}
 
 /// Défilement fluide : un thread anime les crans reçus (voir `smooth.rs`) et
-/// envoie des événements de défilement au pixel.
+/// envoie des défilements continus au pixel, comme Mac Mouse Fix.
 struct SmoothScroller {
-    /// (vertical, horizontal) en pixels, et modificateurs enfoncés.
-    tx: crossbeam_channel::Sender<(f64, f64, u64)>,
+    /// Cran : instant de réception, sens, fraction de cran, modificateurs.
+    tx: crossbeam_channel::Sender<(Instant, smooth::Dir, f64, u64)>,
 }
 
 impl SmoothScroller {
-    fn start() -> SmoothScroller {
-        let (tx, rx) = crossbeam_channel::unbounded::<(f64, f64, u64)>();
+    fn start(cfg: &ScrollCfg) -> SmoothScroller {
+        let (tx, rx) = crossbeam_channel::unbounded::<(Instant, smooth::Dir, f64, u64)>();
+        let mut scroller = smooth::Scroller::new(cfg.smooth_speed, cfg.smoothness);
         let spawned = std::thread::Builder::new().name("bascule-scroll".into()).spawn(move || {
             // SAFETY: source d'événements propre à ce thread.
             let source = unsafe { CGEventSourceCreate(SOURCE_HID_STATE) };
-            let (mut y, mut x) = (smooth::Axis::default(), smooth::Axis::default());
             let mut flags = 0u64;
             loop {
-                if y.is_idle() && x.is_idle() {
+                if scroller.is_idle() {
                     // Rien à animer : attente du prochain cran.
-                    let Ok((dy, dx, f)) = rx.recv() else { return };
-                    y.push(dy);
-                    x.push(dx);
+                    let Ok((at, dir, weight, f)) = rx.recv() else { return };
+                    scroller.tick(at, dir, weight);
                     flags = f;
                 }
-                while let Ok((dy, dx, f)) = rx.try_recv() {
-                    y.push(dy);
-                    x.push(dx);
+                while let Ok((at, dir, weight, f)) = rx.try_recv() {
+                    scroller.tick(at, dir, weight);
                     flags = f;
                 }
-                let (sy, sx) = (y.step(), x.step());
-                if sy != 0 || sx != 0 {
+                let (v, h) = scroller.frame(Instant::now());
+                if v != 0 || h != 0 {
+                    // macOS : valeur positive = vers le haut (axe 1) / vers la
+                    // gauche (axe 2).
                     // SAFETY: événement créé, envoyé puis libéré.
                     unsafe {
-                        let ev = CGEventCreateScrollWheelEvent2(source, SCROLL_UNIT_PIXEL, 2, sy, sx, 0);
+                        let ev = CGEventCreateScrollWheelEvent2(source, SCROLL_UNIT_PIXEL, 2, v, -h, 0);
                         if !ev.is_null() {
                             CGEventSetFlags(ev, flags);
                             CGEventPost(TAP_HID, ev);
@@ -558,6 +558,16 @@ impl SmoothScroller {
             log::error!("défilement fluide indisponible : {e}");
         }
         SmoothScroller { tx }
+    }
+
+    /// Transmet les crans reçus (positifs vers le haut et vers la droite).
+    fn wheel(&self, nx: f64, ny: f64, flags: u64) {
+        let now = Instant::now();
+        for (n, pos, neg) in [(ny, smooth::Dir::Up, smooth::Dir::Down), (nx, smooth::Dir::Right, smooth::Dir::Left)] {
+            if n != 0.0 {
+                let _ = self.tx.send((now, if n > 0.0 { pos } else { neg }, n.abs(), flags));
+            }
+        }
     }
 }
 
@@ -825,10 +835,9 @@ impl Emulator for MacEmulator {
             nx = -nx;
         }
         if self.scroll.mode == ScrollMode::Smooth {
-            let px = self.scroll.pixels_per_notch;
             let flags = self.flags();
-            // macOS : valeur positive = vers le haut (axe 1) / vers la gauche (axe 2).
-            let _ = self.smooth.get_or_insert_with(SmoothScroller::start).tx.send((ny * px, -nx * px, flags));
+            let scroll = &self.scroll;
+            self.smooth.get_or_insert_with(|| SmoothScroller::start(scroll)).wheel(nx, ny, flags);
             return;
         }
         let (unit, per_notch) = match self.scroll.mode {

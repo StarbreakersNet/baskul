@@ -57,6 +57,28 @@ pub enum ScrollMode {
     Smooth,
 }
 
+/// Défilement fluide : distance parcourue par cran (réglage « Vitesse » de
+/// Mac Mouse Fix).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SmoothSpeed {
+    Low,
+    #[default]
+    Medium,
+    High,
+}
+
+/// Défilement fluide : durée de l'élan (réglage « Douceur » de Mac Mouse Fix).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Smoothness {
+    /// Animation courte, freinage rapide (« Normale »).
+    #[default]
+    Regular,
+    /// Élan plus long, comme un trackpad (« Élevée »).
+    High,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SideButtonsMode {
@@ -134,6 +156,8 @@ pub struct ScrollCfg {
     pub mode: ScrollMode,
     pub lines_per_notch: f64,
     pub pixels_per_notch: f64,
+    pub smooth_speed: SmoothSpeed,
+    pub smoothness: Smoothness,
     pub invert_vertical: bool,
     pub invert_horizontal: bool,
 }
@@ -144,6 +168,8 @@ impl Default for ScrollCfg {
             mode: ScrollMode::Lines,
             lines_per_notch: 3.0,
             pixels_per_notch: 60.0,
+            smooth_speed: SmoothSpeed::Medium,
+            smoothness: Smoothness::Regular,
             invert_vertical: false,
             invert_horizontal: false,
         }
@@ -573,13 +599,18 @@ speed = 1.0
 
 [scroll]
 # (Machine pilotée) "lines" = par lignes, comme une molette Windows ;
-# "pixels" = défilement précis au pixel ; "smooth" = défilement fluide,
-# chaque cran est animé (macOS).
+# "pixels" = défilement précis au pixel ; "smooth" = défilement fluide à la
+# manière de Mac Mouse Fix (macOS).
 mode = "lines"
 # Nombre de lignes par cran de molette (mode "lines").
 lines_per_notch = 3.0
-# Nombre de pixels par cran de molette (modes "pixels" et "smooth").
+# Nombre de pixels par cran de molette (mode "pixels").
 pixels_per_notch = 60.0
+# Mode "smooth" : mêmes réglages que Mac Mouse Fix.
+# Vitesse : "low", "medium" ou "high" (les crans rapides vont plus loin).
+smooth_speed = "medium"
+# Douceur : "regular" (animation courte) ou "high" (élan plus long).
+smoothness = "regular"
 # Inverser le sens de défilement.
 invert_vertical = false
 invert_horizontal = false
