@@ -8,7 +8,7 @@ defineProps<{ config: BasculeConfig }>();
 </script>
 
 <template>
-  <div class="pane">
+  <div>
     <setting-row label="Partager le presse-papiers">
       <n-switch v-model:value="config.clipboard.enabled" />
     </setting-row>

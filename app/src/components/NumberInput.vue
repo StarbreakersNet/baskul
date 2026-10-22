@@ -14,7 +14,7 @@ defineProps<{ min?: number; max?: number; step?: number; precision?: number; dis
     :step="step"
     :precision="precision"
     :disabled="disabled"
-    class="number"
+    style="width: 150px"
     @update:value="(v) => v !== null && (model = v)"
   >
     <template v-if="suffix" #suffix>{{ suffix }}</template>

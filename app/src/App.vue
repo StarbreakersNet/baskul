@@ -11,7 +11,7 @@ import {
   useOsTheme,
   type GlobalThemeOverrides,
 } from "naive-ui";
-import SettingsView from "./SettingsView.vue";
+import AppLayout from "./layouts/AppLayout.vue";
 
 // Thème clair ou sombre selon le système.
 const osTheme = useOsTheme();
@@ -35,7 +35,7 @@ const overrides = computed<GlobalThemeOverrides>(() => ({
     <n-global-style />
     <n-message-provider placement="top">
       <n-dialog-provider>
-        <settings-view />
+        <app-layout />
       </n-dialog-provider>
     </n-message-provider>
   </n-config-provider>

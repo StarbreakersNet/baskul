@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { NButton, NInput, NPopconfirm, useMessage } from "naive-ui";
+import { NButton, NInput, NPopconfirm, NText, useMessage } from "naive-ui";
 import SettingRow from "../components/SettingRow.vue";
 import type { BasculeConfig, DaemonInfo } from "../types";
 import { copyText, newSecret } from "../utils";
@@ -20,12 +20,12 @@ async function copy(text: string) {
 </script>
 
 <template>
-  <div class="pane">
-    <p class="pane-intro">
+  <div>
+    <n-text depth="3" tag="p">
       Une machine attend la connexion, l'autre s'y connecte. Conseillé&nbsp;: le Mac attend, le PC se connecte.
-    </p>
+    </n-text>
     <setting-row v-if="info.address" label="Adresse de cette machine" help="À indiquer dans « Se connecter à » sur l'autre machine.">
-      <code class="address">{{ info.address }}</code>
+      <n-text code strong>{{ info.address }}</n-text>
       <n-button size="small" @click="copy(info.address!)">Copier</n-button>
     </setting-row>
     <setting-row label="Se connecter à">
@@ -42,7 +42,7 @@ async function copy(text: string) {
     <setting-row label="Secret partagé" help="Identique sur les deux machines (12 caractères minimum).">
       <n-input
         v-model:value="config.network.secret"
-        class="mono full"
+        class="mono"
         :status="secretTooShort ? 'error' : undefined"
         :input-props="{ spellcheck: false, autocomplete: 'off' }"
       />

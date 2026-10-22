@@ -4,7 +4,7 @@ resolver = "3"
 
 # Version commune au daemon et à l'app de réglages.
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 license = "MIT"
 

@@ -6,6 +6,7 @@
 //! passer au système local (`Pass`) ou supprimé (`Swallow`, quand il est
 //! envoyé à l'autre machine).
 
+use crate::capture;
 use crate::config::MediaKeys;
 use crate::geometry::{Layout, Point};
 use crate::hotkey::Hotkey;
@@ -241,7 +242,13 @@ impl PrimaryCore {
             let (target, repeat) = match self.key_targets.get(&code) {
                 Some(t) => (*t, true),
                 None => {
-                    let t = self.new_key_target(host, code);
+                    let t = if !keymap::is_modifier(code) && capture::is_waiting() {
+                        // Saisie d'un raccourci par l'app de réglages.
+                        capture::finish(Hotkey::from_pressed(code, &self.pressed).to_string());
+                        Target::Consumed
+                    } else {
+                        self.new_key_target(host, code)
+                    };
                     self.key_targets.insert(code, t);
                     (t, false)
                 }
@@ -585,6 +592,23 @@ mod tests {
         press(&mut core, &mut host, &[HID_CONTROL_LEFT, HID_ALT_LEFT, HID_SHIFT_LEFT, b]);
         assert!(!core.is_remote());
         assert_eq!(host.shown_at, Some(Point::new(700, 300)));
+    }
+
+    #[test]
+    fn hotkey_capture_for_settings() {
+        let (mut core, mut host) = setup();
+        capture::set_supported(true);
+        assert!(capture::start());
+        // Shift+F12 est relevée au lieu de faire basculer, et n'arrive pas
+        // aux applications.
+        let f12 = hid_from_name("F12").unwrap();
+        let d = press(&mut core, &mut host, &[HID_SHIFT_RIGHT, f12]);
+        assert_eq!(d, [Decision::Pass, Decision::Swallow, Decision::Swallow, Decision::Pass]);
+        assert!(!core.is_remote());
+        assert_eq!(capture::poll(), capture::State::Done("Shift+F12".into()));
+        // Ensuite, le raccourci fonctionne de nouveau.
+        press(&mut core, &mut host, &[HID_SHIFT_LEFT, f12]);
+        assert!(core.is_remote());
     }
 
     #[test]

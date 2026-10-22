@@ -8,7 +8,7 @@ const os = inject(osKey);
 </script>
 
 <template>
-  <n-alert v-if="os === 'linux'" type="info" :bordered="false" class="pane-alert">
+  <n-alert v-if="os === 'linux'" type="info" :bordered="false" style="margin: 8px 0 4px">
     Sous Linux, Bascule ne partage pas encore le clavier et la souris : ces réglages n'ont pas d'effet ici.
   </n-alert>
 </template>

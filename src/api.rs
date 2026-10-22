@@ -18,6 +18,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const API_FILE: &str = "api.json";
+const CAPTURE: &str = "/api/hotkey/capture";
 const MAX_LINE: u64 = 8 * 1024;
 const MAX_HEADERS: usize = 64;
 const MAX_BODY: usize = 256 * 1024;
@@ -268,9 +269,38 @@ fn route(req: &Request, server: &Server) -> Response {
             crate::platform::open_in_editor(&server.path);
             Response::json(200, json!({}))
         }
-        (_, "/api/status" | "/api/config" | "/api/restart" | "/api/open-file") => {
-            Response::error(405, "méthode non autorisée")
+        ("GET", "/api/log") => Response::json(200, log_tail()),
+        ("POST", "/api/open-log") => match crate::logging::log_path() {
+            Some(p) => {
+                crate::platform::open_in_editor(&p);
+                Response::json(200, json!({}))
+            }
+            None => Response::error(404, "pas de journal"),
+        },
+        // Saisie d'un raccourci par le crochet clavier (voir capture.rs).
+        ("POST", CAPTURE) => {
+            if crate::capture::start() {
+                Response::json(200, json!({}))
+            } else {
+                Response::error(501, "saisie des raccourcis indisponible sur cette machine")
+            }
         }
+        ("GET", CAPTURE) => Response::json(
+            200,
+            match crate::capture::poll() {
+                crate::capture::State::Idle => json!({ "state": "idle" }),
+                crate::capture::State::Waiting => json!({ "state": "waiting" }),
+                crate::capture::State::Done(hotkey) => json!({ "state": "done", "hotkey": hotkey }),
+            },
+        ),
+        ("DELETE", CAPTURE) => {
+            crate::capture::cancel();
+            Response::json(200, json!({}))
+        }
+        (
+            _,
+            "/api/status" | "/api/config" | "/api/restart" | "/api/open-file" | "/api/log" | "/api/open-log" | CAPTURE,
+        ) => Response::error(405, "méthode non autorisée"),
         _ => Response::error(404, "introuvable"),
     }
 }
@@ -290,8 +320,35 @@ fn status_info(server: &Server) -> Value {
         "remote_active": s.remote_active,
         "locked": s.locked,
         "warning": s.warning,
+        "peer": s.peer.map(|p| json!({ "os": p.os, "since": p.since })),
         "version": crate::VERSION,
         "started": server.started,
+    })
+}
+
+/// Fin du journal (environ 64 Kio), pour l'app de réglages.
+fn log_tail() -> Value {
+    let Some(path) = crate::logging::log_path() else {
+        return json!({ "path": null, "text": "" });
+    };
+    crate::logging::flush();
+    let text = read_tail(&path, 64 * 1024).unwrap_or_default();
+    json!({ "path": path.display().to_string(), "text": text })
+}
+
+/// Derniers octets d'un fichier, à partir d'un début de ligne.
+fn read_tail(path: &Path, max: u64) -> std::io::Result<String> {
+    use std::io::{Seek, SeekFrom};
+    let mut f = std::fs::File::open(path)?;
+    let len = f.metadata()?.len();
+    let start = len.saturating_sub(max);
+    f.seek(SeekFrom::Start(start))?;
+    let mut buf = Vec::new();
+    f.read_to_end(&mut buf)?;
+    let text = String::from_utf8_lossy(&buf);
+    Ok(match text.split_once('\n') {
+        Some((_, rest)) if start > 0 => rest.to_string(),
+        _ => text.into_owned(),
     })
 }
 
@@ -377,6 +434,15 @@ mod tests {
     }
 
     #[test]
+    fn log_tail_starts_on_a_line() {
+        let tmp = TempDir::new();
+        let path = tmp.0.join("bascule.log");
+        std::fs::write(&path, "première ligne\ndeuxième\ntroisième\n").unwrap();
+        assert_eq!(read_tail(&path, 1000).unwrap(), "première ligne\ndeuxième\ntroisième\n");
+        assert_eq!(read_tail(&path, 15).unwrap(), "troisième\n");
+    }
+
+    #[test]
     fn api_file_is_private() {
         let tmp = TempDir::new();
         let file = api_file(&tmp.0.join("config.toml"));
@@ -410,6 +476,13 @@ mod tests {
         let evil = format!("POST /api/config HTTP/1.1\r\n{auth}\r\nOrigin: http://attaquant.example");
         assert_eq!(request(port, &evil, "{}").0, 403);
         assert_eq!(request(port, &format!("GET / HTTP/1.1\r\n{auth}"), "").0, 404);
+
+        // Saisie d'un raccourci : impossible sans crochet clavier.
+        assert_eq!(request(port, &format!("POST {CAPTURE} HTTP/1.1\r\n{auth}"), "").0, 501);
+        let (code, body) = request(port, &format!("GET {CAPTURE} HTTP/1.1\r\n{auth}"), "");
+        assert_eq!((code, body.contains("idle")), (200, true));
+        assert_eq!(request(port, &format!("DELETE {CAPTURE} HTTP/1.1\r\n{auth}"), "").0, 200);
+        assert_eq!(request(port, &format!("GET /api/log HTTP/1.1\r\n{auth}"), "").0, 200);
 
         let (code, body) = request(port, &format!("GET /api/status HTTP/1.1\r\n{auth}"), "");
         assert_eq!(code, 200);

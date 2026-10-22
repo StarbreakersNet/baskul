@@ -1748,6 +1748,8 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
                 lock_hotkey: settings.lock_hotkey.clone(),
                 media_keys: settings.media_keys,
             };
+            // Le crochet clavier peut relever les raccourcis pour les réglages.
+            crate::capture::set_supported(true);
             MAC_PRIMARY.with(|p| {
                 *p.borrow_mut() = Some(MacPrimary {
                     core: PrimaryCore::new(opts),

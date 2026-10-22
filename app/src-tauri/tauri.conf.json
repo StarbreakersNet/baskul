@@ -12,10 +12,10 @@
     "windows": [
       {
         "label": "main",
-        "title": "Réglages de Bascule",
-        "width": 820,
-        "height": 880,
-        "minWidth": 440,
+        "title": "Bascule",
+        "width": 1040,
+        "height": 800,
+        "minWidth": 640,
         "minHeight": 520,
         "center": true
       }

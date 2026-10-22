@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { NButton } from "naive-ui";
+import { NButton, NText } from "naive-ui";
 import ChoiceGroup from "../components/ChoiceGroup.vue";
 import LinuxNotice from "../components/LinuxNotice.vue";
 import SettingRow from "../components/SettingRow.vue";
@@ -12,7 +12,7 @@ const rules = computed(() => Object.keys(props.config.keyboard.remap).length);
 </script>
 
 <template>
-  <div class="pane">
+  <div>
     <linux-notice />
     <setting-row
       label="Touches multimédia"
@@ -30,7 +30,7 @@ const rules = computed(() => Object.keys(props.config.keyboard.remap).length);
     </setting-row>
     <setting-row label="Remappage de touches" machine="secondary">
       <template #help>Section <code>[keyboard.remap]</code> du fichier de configuration.</template>
-      <span class="muted">{{ rules ? `${rules} règle${rules > 1 ? "s" : ""}` : "Aucune règle" }}</span>
+      <n-text depth="3">{{ rules ? `${rules} règle${rules > 1 ? "s" : ""}` : "Aucune règle" }}</n-text>
       <n-button size="small" @click="emit('openFile')">Ouvrir le fichier</n-button>
     </setting-row>
   </div>

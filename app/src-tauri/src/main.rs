@@ -45,6 +45,30 @@ async fn open_config_file() -> Result<Value, Error> {
     call("POST", "/api/open-file", None).await
 }
 
+/// Fin du journal de Bascule.
+#[tauri::command]
+async fn read_log() -> Result<Value, Error> {
+    call("GET", "/api/log", None).await
+}
+
+#[tauri::command]
+async fn open_log_file() -> Result<Value, Error> {
+    call("POST", "/api/open-log", None).await
+}
+
+/// Saisie d'un raccourci par le crochet clavier du daemon : `start`, `poll`
+/// ou `cancel`.
+#[tauri::command]
+async fn capture_hotkey(action: String) -> Result<Value, Error> {
+    let method = match action.as_str() {
+        "start" => "POST",
+        "poll" => "GET",
+        "cancel" => "DELETE",
+        _ => return Err(Error::Refused(format!("action inconnue : {action}"))),
+    };
+    call(method, "/api/hotkey/capture", None).await
+}
+
 #[tauri::command]
 fn start_daemon() -> Result<(), Error> {
     daemon::start().map_err(Error::Refused)
@@ -79,6 +103,9 @@ fn main() {
             save_settings,
             restart_daemon,
             open_config_file,
+            read_log,
+            open_log_file,
+            capture_hotkey,
             start_daemon,
             launch_options
         ])

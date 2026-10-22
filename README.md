@@ -8,7 +8,7 @@ Bascule partage **le clavier, la souris et le presse-papiers** de votre PC Windo
 - La **molette** est réglable : défilement par lignes ou au pixel, vitesse, inversion.
 - Le **presse-papiers** est partagé dans les deux sens : texte, texte mis en forme (HTML), images. Les mots de passe copiés depuis un gestionnaire de mots de passe sont ignorés.
 - La liaison est **chiffrée** (protocole Noise) et protégée par un secret partagé. Bascule se reconnecte automatiquement.
-- Tous les réglages se changent **sans recompiler**, dans la fenêtre « Réglages de Bascule » (ou directement dans le fichier texte).
+- Tous les réglages se changent **sans recompiler**, dans la fenêtre de Bascule (ou directement dans le fichier texte).
 
 > Le sens Mac → PC (le Mac pilote le PC) est aussi prévu, mais il est **expérimental** (voir [Sens inverse](#sens-inverse-mac--pc-expérimental)). Une [version Linux minimale](#linux-version-minimale) permet aussi de tester les réglages et la connexion.
 
@@ -19,18 +19,19 @@ Bascule partage **le clavier, la souris et le presse-papiers** de votre PC Windo
 ### Option A : GitHub Actions (recommandé, rien à installer)
 
 1. Créez un dépôt **privé** sur GitHub et poussez-y ce dossier.
-2. Mettez à jour `version` dans la section `[workspace.package]` de `Cargo.toml` (c'est la version affichée par les apps), puis créez un tag et poussez-le :
-   ```bash
-   git tag v0.3.0
-   git push origin v0.3.0
-   ```
-   Le workflow `build` se lance dans l'onglet **Actions**.
+2. Mettez à jour `version` dans la section `[workspace.package]` de `Cargo.toml` (c'est la version affichée par les apps), puis, au choix :
+   - onglet **Actions** → **build** → **Run workflow**, en cochant **Publier une Release** : le tag (la version de `Cargo.toml`, par exemple `0.4.0`) est créé avec la Release ;
+   - ou créez un tag et poussez-le :
+     ```bash
+     git tag 0.4.0
+     git push origin 0.4.0
+     ```
 3. À la fin, une **Release** apparaît dans la page **Releases** du dépôt, avec :
    - `Bascule-Windows.zip` : `bascule.exe` et son app de réglages `bascule-settings.exe` ;
    - `Bascule-macOS.zip` : `Bascule.app`, universelle (Apple Silicon et Intel), app de réglages incluse ;
    - `Bascule-Linux.tar.gz` : la [version Linux minimale](#linux-version-minimale).
 
-Pour compiler sans publier de Release, lancez le workflow à la main (onglet **Actions** → **build** → **Run workflow**). Les programmes sont alors dans les *artifacts*, en bas de la page de l'exécution.
+Pour compiler sans publier de Release, lancez le workflow à la main sans cocher **Publier une Release**. Les programmes sont alors dans les *artifacts*, en bas de la page de l'exécution.
 
 ### Option B : compiler soi-même
 
@@ -126,11 +127,17 @@ MetaLeft = "AltLeft"     # Windows du PC → ⌥
 
 ## 4. Réglages (sans recompiler)
 
-Dans le menu de Bascule, choisissez **Réglages…** : la fenêtre « Réglages de Bascule » s'ouvre. Relancer Bascule alors qu'il tourne déjà (double-clic sur l'app) l'ouvre aussi. Modifiez, puis cliquez sur **Enregistrer et redémarrer** : Bascule redémarre et la fenêtre affiche aussitôt le nouvel état de la connexion.
+Dans le menu de Bascule, choisissez **Réglages…** : la fenêtre de Bascule s'ouvre. Relancer Bascule alors qu'il tourne déjà (double-clic sur l'app) l'ouvre aussi. Le menu de gauche mène à :
 
-- L'état de la connexion s'affiche en direct, en haut de la fenêtre.
+- **Accueil** : l'état de Bascule en direct (connexion, machine que pilotent le clavier et la souris, raccourcis) ;
+- **Réglages** : modifiez, puis cliquez sur **Enregistrer et redémarrer** ; Bascule redémarre et la fenêtre affiche aussitôt le nouvel état de la connexion ;
+- **Journal** : les dernières lignes du journal de Bascule, en direct ;
+- **À propos** : versions, fichier de configuration, licence.
+
+Dans les réglages :
+
 - Les réglages sont rangés par onglets. Ceux qui ne concernent pas le rôle de cette machine sont masqués ; ceux qui ne servent que sur un système (par exemple « macOS uniquement ») sont grisés ailleurs.
-- Pour un raccourci, cliquez sur « Modifier » puis tapez la combinaison.
+- Pour un raccourci, cliquez sur « Modifier » puis tapez la combinaison. Sur la machine principale, c'est Bascule lui-même qui la relève : elle ne déclenche alors aucun raccourci, et toutes les touches fonctionnent (F11, F12…).
 - Le bouton « Ouvrir le fichier » donne accès au fichier texte, par exemple pour le remappage de touches. Quand les réglages sont enregistrés, les commentaires du fichier sont conservés.
 - Si le fichier de configuration contient une erreur, Bascule ouvre ses réglages pour la corriger.
 - `bascule --settings` ouvre les réglages.

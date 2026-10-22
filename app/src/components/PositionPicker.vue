@@ -1,9 +1,20 @@
 <script setup lang="ts">
 // Position de l'écran de l'autre machine autour de celui-ci.
+import { computed } from "vue";
+import { useThemeVars } from "naive-ui";
 import type { Edge } from "../types";
 
 const model = defineModel<Edge>({ required: true });
 defineProps<{ disabled?: boolean }>();
+
+const vars = useThemeVars();
+const colors = computed(() => ({
+  border: vars.value.borderColor,
+  muted: vars.value.textColor3,
+  accent: vars.value.primaryColor,
+  soft: `color-mix(in srgb, ${vars.value.primaryColor} 14%, transparent)`,
+  screen: vars.value.dividerColor,
+}));
 
 const spots: { edge: Edge; label: string }[] = [
   { edge: "top", label: "En haut" },
@@ -45,15 +56,15 @@ const spots: { edge: Edge; label: string }[] = [
   min-width: 76px;
   padding: 5px 8px;
   border-radius: 7px;
-  border: 1px dashed var(--border);
+  border: 1px dashed v-bind("colors.border");
   background: transparent;
-  color: var(--muted);
+  color: v-bind("colors.muted");
   cursor: pointer;
 }
 .spot.on {
-  border: 1px solid var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
+  border: 1px solid v-bind("colors.accent");
+  background: v-bind("colors.soft");
+  color: v-bind("colors.accent");
   font-weight: 600;
 }
 .spot:disabled {
@@ -67,7 +78,7 @@ const spots: { edge: Edge; label: string }[] = [
   font-weight: 600;
   padding: 12px 8px;
   border-radius: 7px;
-  background: var(--border);
+  background: v-bind("colors.screen");
 }
 .p-top {
   grid-column: 2;

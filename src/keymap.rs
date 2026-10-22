@@ -274,6 +274,9 @@ pub fn hid_from_win(scancode: u16) -> Option<u32> {
         0x0054 => Some(HID_PRINT_SCREEN), // Alt+Impr.écran (SysRq)
         0xe046 => Some(HID_PAUSE),        // Ctrl+Pause (Break)
         0xe045 => Some(HID_NUM_LOCK),
+        // Le crochet clavier bas niveau de Windows marque le Maj droit comme
+        // touche étendue.
+        0xe036 => Some(HID_SHIFT_RIGHT),
         _ => None,
     }
 }
@@ -444,6 +447,9 @@ mod tests {
         assert_eq!(hid_from_win(0x0054), Some(HID_PRINT_SCREEN));
         assert_eq!(hid_from_win(0x0045), Some(HID_PAUSE));
         assert_eq!(hid_from_win(0xe045), Some(HID_NUM_LOCK));
+        // Maj droit, avec ou sans le drapeau « étendu ».
+        assert_eq!(hid_from_win(0x0036), Some(HID_SHIFT_RIGHT));
+        assert_eq!(mac_from_hid(hid_from_win(0xe036).unwrap()), Some(mac::RIGHT_SHIFT));
     }
 
     #[test]

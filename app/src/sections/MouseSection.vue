@@ -14,7 +14,7 @@ const mode = computed(() => props.config.scroll.mode);
 </script>
 
 <template>
-  <div class="pane">
+  <div>
     <linux-notice />
     <setting-row label="Vitesse de la souris" help="Multiplie les déplacements reçus. 1 = identique.">
       <number-input v-model="config.mouse.speed" :min="0.05" :max="20" :step="0.05" suffix="×" />

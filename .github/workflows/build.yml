@@ -1,11 +1,17 @@
 name: build
 
-# Se lance uniquement quand un tag est poussé (par exemple `v0.3.0`), et publie
-# alors une Release. « Run workflow » (onglet Actions) compile sans publier.
+# Se lance quand un tag est poussé (par exemple `0.4.0`), et publie alors une
+# Release. « Run workflow » (onglet Actions) compile ; avec « Publier une
+# Release » coché, il crée aussi le tag (version de Cargo.toml) et la Release.
 on:
   push:
     tags: ["*"]
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Publier une Release (tag = version de Cargo.toml)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -90,28 +96,37 @@ jobs:
 
   release:
     name: Release
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' || inputs.release
     needs: [tests, linux, windows, macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
-      # Si la Release a été créée depuis l'interface de GitHub (ce qui crée
-      # aussi le tag), on y ajoute seulement les fichiers.
+      # Tag poussé : son nom. Lancement manuel : la version de Cargo.toml ; le
+      # tag est alors créé sur ce commit avec la Release.
+      # Si la Release existe déjà (créée depuis l'interface de GitHub, par
+      # exemple), on y ajoute seulement les fichiers.
       - run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            tag=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
+          fi
           files=(
             artifacts/Bascule-Windows/Bascule-Windows.zip
             artifacts/Bascule-macOS/Bascule-macOS.zip
             artifacts/Bascule-Linux/Bascule-Linux.tar.gz
           )
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+          if gh release view "$tag" > /dev/null 2>&1; then
+            gh release upload "$tag" "${files[@]}" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "${files[@]}" --repo "$GITHUB_REPOSITORY" \
-              --title "Bascule $GITHUB_REF_NAME" --generate-notes
+            gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" \
+              --title "Bascule $tag" --generate-notes
           fi
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}

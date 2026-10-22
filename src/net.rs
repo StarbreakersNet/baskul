@@ -308,7 +308,7 @@ fn session(
 
     log::info!("connecté à « {peer_name} » ({peer_os})");
     connected.store(true, Ordering::Release);
-    status::set_conn(Conn::Connected(peer_name.clone()));
+    status::set_connected(&peer_name, &peer_os);
     on_event(LinkEvent::Connected { name: peer_name, os: peer_os });
 
     // --- Échanges ---

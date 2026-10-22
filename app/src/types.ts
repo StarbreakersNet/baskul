@@ -47,7 +47,12 @@ export interface DaemonStatus {
   remote_active: boolean;
   locked: boolean;
   warning: string | null;
+  /** Autre machine, quand la connexion est établie. */
+  peer: { os: string; since: number } | null;
   version: string;
   /** Démarrage du daemon (ms) : change à chaque redémarrage. */
   started: number;
 }
+
+/** Saisie d'un raccourci par le daemon. */
+export type CaptureState = { state: "idle" | "waiting" } | { state: "done"; hotkey: string };

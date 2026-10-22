@@ -17,7 +17,7 @@ const levels = [
 </script>
 
 <template>
-  <div class="pane">
+  <div>
     <setting-row
       label="Touches « ² » et « < > »"
       help="Les claviers européens (ISO) du Mac inversent ces deux touches par rapport à un clavier de PC. « Auto » corrige selon le clavier du Mac : à changer seulement si elles restent inversées."
@@ -34,10 +34,10 @@ const levels = [
       />
     </setting-row>
     <setting-row label="Niveau du journal">
-      <n-select v-model:value="config.log.level" :options="levels" class="select" />
+      <n-select v-model:value="config.log.level" :options="levels" style="width: 220px" />
     </setting-row>
     <setting-row label="Fichier de configuration">
-      <template #help><span class="mono path">{{ info.path }}</span></template>
+      <template #help><span class="mono" style="word-break: break-all">{{ info.path }}</span></template>
       <n-button size="small" @click="emit('openFile')">Ouvrir le fichier</n-button>
     </setting-row>
     <setting-row label="Bascule" :help="`Version ${info.version}`">

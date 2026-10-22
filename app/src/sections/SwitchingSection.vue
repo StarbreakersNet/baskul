@@ -16,7 +16,7 @@ const missingHotkey = computed(
 </script>
 
 <template>
-  <div class="pane">
+  <div>
     <linux-notice />
     <setting-row label="Aller sur la machine pilotée" help="Le curseur y reprend là où il était.">
       <hotkey-input v-model="config.hotkeys.switch_to_secondary" :os="info.os" />
@@ -24,7 +24,7 @@ const missingHotkey = computed(
     <setting-row label="Revenir sur cette machine" help="Le même raccourci que ci-dessus permet d'aller et venir.">
       <hotkey-input v-model="config.hotkeys.return_to_primary" :os="info.os" />
     </setting-row>
-    <n-alert v-if="!edges && missingHotkey" type="warning" class="inline-alert">
+    <n-alert v-if="!edges && missingHotkey" type="warning" style="margin: 4px 0 8px">
       Sans bascule par les bords, ces deux raccourcis sont indispensables.
     </n-alert>
     <setting-row label="Bascule par les bords de l'écran" help="Pousser la souris contre le bord fait passer sur l'autre machine.">
