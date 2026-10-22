@@ -2,14 +2,13 @@
 import { NSwitch } from "naive-ui";
 import NumberInput from "../components/NumberInput.vue";
 import SettingRow from "../components/SettingRow.vue";
-import SettingsSection from "../components/SettingsSection.vue";
 import type { BasculeConfig } from "../types";
 
 defineProps<{ config: BasculeConfig }>();
 </script>
 
 <template>
-  <settings-section title="Presse-papiers">
+  <div class="pane">
     <setting-row label="Partager le presse-papiers">
       <n-switch v-model:value="config.clipboard.enabled" />
     </setting-row>
@@ -40,5 +39,5 @@ defineProps<{ config: BasculeConfig }>();
         suffix="Mo"
       />
     </setting-row>
-  </settings-section>
+  </div>
 </template>

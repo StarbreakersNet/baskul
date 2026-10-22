@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { NInput } from "naive-ui";
+import { NCard, NInput } from "naive-ui";
 import SettingRow from "../components/SettingRow.vue";
-import SettingsSection from "../components/SettingsSection.vue";
 import type { BasculeConfig, DaemonInfo, Role } from "../types";
 
 // Les sections modifient directement l'objet `config` partagé (formulaire).
@@ -14,7 +13,7 @@ const roles: { value: Role; title: string; desc: string }[] = [
 </script>
 
 <template>
-  <settings-section title="Cette machine">
+  <n-card title="Cette machine" class="section">
     <div class="roles" role="radiogroup" aria-label="Rôle de cette machine">
       <button
         v-for="r in roles"
@@ -32,5 +31,5 @@ const roles: { value: Role; title: string; desc: string }[] = [
     <setting-row label="Nom affiché" help="Facultatif. Par défaut, le nom de la machine.">
       <n-input v-model:value="config.name" :placeholder="info.hostname" />
     </setting-row>
-  </settings-section>
+  </n-card>
 </template>

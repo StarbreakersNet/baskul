@@ -2,7 +2,6 @@
 import { computed } from "vue";
 import { NButton, NInput, NPopconfirm, useMessage } from "naive-ui";
 import SettingRow from "../components/SettingRow.vue";
-import SettingsSection from "../components/SettingsSection.vue";
 import type { BasculeConfig, DaemonInfo } from "../types";
 import { copyText, newSecret } from "../utils";
 
@@ -21,10 +20,10 @@ async function copy(text: string) {
 </script>
 
 <template>
-  <settings-section title="Connexion">
-    <template #intro>
+  <div class="pane">
+    <p class="pane-intro">
       Une machine attend la connexion, l'autre s'y connecte. Conseillé&nbsp;: le Mac attend, le PC se connecte.
-    </template>
+    </p>
     <setting-row v-if="info.address" label="Adresse de cette machine" help="À indiquer dans « Se connecter à » sur l'autre machine.">
       <code class="address">{{ info.address }}</code>
       <n-button size="small" @click="copy(info.address!)">Copier</n-button>
@@ -58,5 +57,5 @@ async function copy(text: string) {
     <setting-row label="Adresse d'écoute" help="Utilisée quand « Se connecter à » est vide. Rarement à changer.">
       <n-input v-model:value="config.network.listen" class="mono" :input-props="{ spellcheck: false }" />
     </setting-row>
-  </settings-section>
+  </div>
 </template>

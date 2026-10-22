@@ -129,7 +129,7 @@ MetaLeft = "AltLeft"     # Windows du PC → ⌥
 Dans le menu de Bascule, choisissez **Réglages…** : la fenêtre « Réglages de Bascule » s'ouvre. Relancer Bascule alors qu'il tourne déjà (double-clic sur l'app) l'ouvre aussi. Modifiez, puis cliquez sur **Enregistrer et redémarrer** : Bascule redémarre et la fenêtre affiche aussitôt le nouvel état de la connexion.
 
 - L'état de la connexion s'affiche en direct, en haut de la fenêtre.
-- Les réglages qui ne servent que sur l'autre machine sont grisés.
+- Les réglages sont rangés par onglets. Ceux qui ne concernent pas le rôle de cette machine sont masqués ; ceux qui ne servent que sur un système (par exemple « macOS uniquement ») sont grisés ailleurs.
 - Pour un raccourci, cliquez sur « Modifier » puis tapez la combinaison.
 - Le bouton « Ouvrir le fichier » donne accès au fichier texte, par exemple pour le remappage de touches. Quand les réglages sont enregistrés, les commentaires du fichier sont conservés.
 - Si le fichier de configuration contient une erreur, Bascule ouvre ses réglages pour la corriger.
@@ -139,16 +139,15 @@ Le fichier complet et commenté est dans [`docs/config.exemple.toml`](docs/confi
 
 | Section | Réglage | Effet |
 |---|---|---|
-| `[scroll]` (Mac) | `mode = "lines"` / `"pixels"` | Par lignes, comme une molette Windows, ou au pixel (précis et identique dans toutes les apps) |
+| `[scroll]` (Mac) | `mode = "lines"` / `"pixels"` / `"smooth"` | Par lignes, comme une molette Windows ; au pixel (précis et identique dans toutes les apps) ; ou fluide, chaque cran étant animé (macOS) |
 | | `lines_per_notch = 3.0` | Vitesse en mode lignes (par cran de molette) |
-| | `pixels_per_notch = 60.0` | Vitesse en mode pixels |
+| | `pixels_per_notch = 60.0` | Vitesse en modes pixels et fluide |
 | | `invert_vertical`, `invert_horizontal` | Inverser le sens |
 | `[buttons]` (Mac) | `side_buttons = "buttons"` / `"swipe"` | Boutons 4/5 bruts (Chrome, Firefox, VS Code…) ou geste précédent/suivant (Safari, Finder, Xcode…) |
-| | `swap_side_buttons` | Inverser les boutons 4 et 5 |
 | `[mouse]` (Mac) | `speed = 1.0` | Vitesse du curseur sur le Mac |
-| `[keyboard]` (Mac) | `iso_swap = "auto"` / `"on"` / `"off"` | Touches `²` et `<` inversées ? Forcez `on` ou `off` |
+| `[keyboard]` (Mac) | `iso_swap = "auto"` / `"on"` / `"off"` | Correction des touches `²` et `<` des claviers européens (automatique) ; à forcer seulement si elles restent inversées |
 | | `[keyboard.remap]` | Remappage de touches physiques |
-| `[keyboard]` (PC) | `media_keys = "remote"` / `"local"` | Les touches volume et lecture agissent sur la machine où est le curseur, ou toujours sur le PC |
+| `[keyboard]` (PC) | `media_keys = "cursor"` / `"primary"` / `"secondary"` | Les touches volume et lecture agissent sur la machine où est le curseur, toujours sur le PC, ou toujours sur le Mac |
 | `[screen]` (PC) | `edge_switching` | Bascule par les bords de l'écran (`false` : seulement au clavier) |
 | | `secondary_position`, `corner_size` | Position du Mac, et coins neutres |
 | `[hotkeys]` (PC) | `switch_to_secondary`, `return_to_primary` | Raccourcis pour aller sur le Mac (`"Shift+F12"`) et revenir sur le PC (`"Shift+F11"`) |
@@ -156,7 +155,9 @@ Le fichier complet et commenté est dans [`docs/config.exemple.toml`](docs/confi
 | `[clipboard]` | `enabled`, `images`, `html`, `max_size_mb`, `skip_sensitive` | Presse-papiers partagé |
 | `[log]` | `level = "debug"` | Journal détaillé, utile pour un diagnostic |
 
-Pour le défilement, commencez par `mode = "lines"`. Si la vitesse varie trop d'une app à l'autre (Safari vs Chrome), essayez `mode = "pixels"` avec `pixels_per_notch` entre 60 et 120.
+Pour le défilement, commencez par `mode = "lines"`. Si la vitesse varie trop d'une app à l'autre (Safari vs Chrome), essayez `mode = "pixels"` avec `pixels_per_notch` entre 60 et 120. Pour un défilement doux, comme avec Mac Mouse Fix, choisissez `mode = "smooth"`.
+
+> **Mac Mouse Fix** et les logiciels du même genre ne s'activent que si une souris est branchée sur le Mac : ils n'agissent donc pas sur la souris du PC. Le mode `"smooth"` de Bascule les remplace pour le défilement.
 
 ---
 
@@ -290,4 +291,4 @@ app/               app de réglages : Tauri 2 + Vue 3 + Naive UI
   src-tauri/       commandes Tauri, client de l'API du daemon
 ```
 
-Tests : `cargo test` (67 tests, dont un test de bout en bout sur une vraie connexion TCP). Le code Windows et macOS se vérifie aussi depuis Linux avec `./scripts/xcheck.sh`.
+Tests : `cargo test` (72 tests, dont un test de bout en bout sur une vraie connexion TCP). Le code Windows et macOS se vérifie aussi depuis Linux avec `./scripts/xcheck.sh`.

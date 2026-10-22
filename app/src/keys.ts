@@ -1,9 +1,7 @@
 import type { InjectionKey, Ref } from "vue";
 import type { Role } from "./types";
 
-/** Rôle choisi pour cette machine (pour griser les réglages de l'autre). */
+/** Rôle choisi pour cette machine : les réglages de l'autre rôle sont masqués. */
 export const roleKey: InjectionKey<Readonly<Ref<Role>>> = Symbol("role");
-/** Machine concernée par la section englobante. */
-export const sectionMachineKey: InjectionKey<Role | undefined> = Symbol("sectionMachine");
-
-export const machineLabel = (r: Role) => (r === "primary" ? "Machine principale" : "Machine pilotée");
+/** Système de cette machine (`macos`, `windows`, `linux`). */
+export const osKey: InjectionKey<Readonly<Ref<string>>> = Symbol("os");

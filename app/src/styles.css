@@ -7,6 +7,7 @@ body {
 }
 
 .page {
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
   max-width: 800px;
   margin: 0 auto;
   padding: 0 16px 96px;
@@ -68,20 +69,23 @@ body {
   margin-top: 8px;
 }
 
-/* Sections et lignes */
+/* Cartes, onglets et lignes */
 .section {
   margin: 14px 0;
 }
-.section-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+.tabs-card > .n-card__content {
+  padding-top: 6px;
 }
-.section-intro {
-  margin: -6px 0 6px;
+.pane {
+  padding-top: 4px;
+}
+.pane-intro {
+  margin: 4px 0 6px;
   color: var(--muted);
   font-size: 13.5px;
+}
+.pane-alert {
+  margin: 8px 0 4px;
 }
 .row {
   display: grid;
@@ -116,9 +120,6 @@ body {
 }
 .row.off {
   opacity: 0.45;
-}
-.row.other .row-control {
-  opacity: 0.55;
 }
 .inline-alert {
   margin: 4px 0 10px;
@@ -197,7 +198,7 @@ code {
   border-top: 1px solid var(--border);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  background: color-mix(in srgb, Canvas 85%, transparent);
+  background: color-mix(in srgb, var(--card) 96%, transparent);
 }
 .actionbar-inner {
   max-width: 800px;

@@ -1,10 +1,21 @@
 <script setup lang="ts">
-import { computed, onMounted, provide } from "vue";
-import { NAlert, NButton, NResult, NSpin, useDialog, useMessage, useThemeVars } from "naive-ui";
+import { computed, onMounted, provide, ref, watch } from "vue";
+import {
+  NAlert,
+  NButton,
+  NCard,
+  NResult,
+  NSpin,
+  NTabPane,
+  NTabs,
+  useDialog,
+  useMessage,
+  useThemeVars,
+} from "naive-ui";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import StatusBadge from "./components/StatusBadge.vue";
 import { useSettings } from "./composables/useSettings";
-import { roleKey } from "./keys";
+import { osKey, roleKey } from "./keys";
 import AdvancedSection from "./sections/AdvancedSection.vue";
 import ClipboardSection from "./sections/ClipboardSection.vue";
 import ConnectionSection from "./sections/ConnectionSection.vue";
@@ -12,7 +23,7 @@ import KeyboardSection from "./sections/KeyboardSection.vue";
 import MachineSection from "./sections/MachineSection.vue";
 import MouseSection from "./sections/MouseSection.vue";
 import SwitchingSection from "./sections/SwitchingSection.vue";
-import { osLabel, withAlpha } from "./utils";
+import { osLabel } from "./utils";
 
 const settings = useSettings();
 const { phase, info, config, status, dirty, saving, welcome } = settings;
@@ -20,17 +31,27 @@ const message = useMessage();
 const dialog = useDialog();
 const vars = useThemeVars();
 
+const role = computed(() => config.value?.role ?? "primary");
+provide(roleKey, role);
 provide(
-  roleKey,
-  computed(() => config.value?.role ?? "primary"),
+  osKey,
+  computed(() => info.value?.os ?? ""),
 );
+
+// Onglet affiché ; ceux qui ne concernent pas le rôle choisi sont masqués.
+const tab = ref("connexion");
+watch(role, (r) => {
+  if ((r === "primary" && tab.value === "souris") || (r === "secondary" && tab.value === "bascule")) {
+    tab.value = "connexion";
+  }
+});
 
 // Couleurs du thème Naive UI, pour les styles maison (styles.css).
 const cssVars = computed(() => ({
   "--muted": vars.value.textColor3,
   "--border": vars.value.dividerColor,
   "--accent": vars.value.primaryColor,
-  "--accent-soft": withAlpha(vars.value.primaryColor, 0.12),
+  "--card": vars.value.cardColor,
 }));
 
 const restarting = computed(() => phase.value === "restarting");
@@ -136,18 +157,34 @@ onMounted(async () => {
 
         <template v-if="config">
           <machine-section :config="config" :info="info" />
-          <connection-section :config="config" :info="info" />
-          <switching-section :config="config" :info="info" />
-          <mouse-section :config="config" />
-          <keyboard-section :config="config" @open-file="openFile" />
-          <clipboard-section :config="config" />
-          <advanced-section
-            :config="config"
-            :info="info"
-            :restarting="restarting"
-            @open-file="openFile"
-            @restart="restart"
-          />
+          <n-card class="section tabs-card">
+            <n-tabs v-model:value="tab" type="line" animated>
+              <n-tab-pane name="connexion" tab="Connexion">
+                <connection-section :config="config" :info="info" />
+              </n-tab-pane>
+              <n-tab-pane v-if="role === 'primary'" name="bascule" tab="Changer de machine">
+                <switching-section :config="config" :info="info" />
+              </n-tab-pane>
+              <n-tab-pane v-if="role === 'secondary'" name="souris" tab="Souris">
+                <mouse-section :config="config" />
+              </n-tab-pane>
+              <n-tab-pane name="clavier" tab="Clavier">
+                <keyboard-section :config="config" @open-file="openFile" />
+              </n-tab-pane>
+              <n-tab-pane name="presse-papiers" tab="Presse-papiers">
+                <clipboard-section :config="config" />
+              </n-tab-pane>
+              <n-tab-pane name="avance" tab="Avancé">
+                <advanced-section
+                  :config="config"
+                  :info="info"
+                  :restarting="restarting"
+                  @open-file="openFile"
+                  @restart="restart"
+                />
+              </n-tab-pane>
+            </n-tabs>
+          </n-card>
         </template>
       </n-spin>
     </main>

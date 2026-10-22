@@ -24,11 +24,3 @@ export function newSecret(): string {
 }
 
 export const osLabel = (os: string) => ({ macos: "macOS", windows: "Windows", linux: "Linux" })[os] ?? os;
-
-/** Couleur `#rrggbb` avec une transparence. */
-export function withAlpha(hex: string, alpha: number): string {
-  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hex);
-  if (!m) return hex;
-  const [r, g, b] = m.slice(1).map((x) => parseInt(x, 16));
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}

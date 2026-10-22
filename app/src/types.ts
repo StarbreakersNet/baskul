@@ -11,14 +11,14 @@ export interface BasculeConfig {
   screen: { edge_switching: boolean; secondary_position: Edge; corner_size: number };
   mouse: { speed: number };
   scroll: {
-    mode: "lines" | "pixels";
+    mode: "lines" | "pixels" | "smooth";
     lines_per_notch: number;
     pixels_per_notch: number;
     invert_vertical: boolean;
     invert_horizontal: boolean;
   };
-  buttons: { side_buttons: "buttons" | "swipe"; swap_side_buttons: boolean };
-  keyboard: { iso_swap: "auto" | "on" | "off"; media_keys: "remote" | "local"; remap: Record<string, string> };
+  buttons: { side_buttons: "buttons" | "swipe" };
+  keyboard: { iso_swap: "auto" | "on" | "off"; media_keys: "cursor" | "primary" | "secondary"; remap: Record<string, string> };
   clipboard: { enabled: boolean; images: boolean; html: boolean; max_size_mb: number; skip_sensitive: boolean };
   hotkeys: { switch_to_secondary: string; return_to_primary: string; toggle_lock: string };
   log: { level: string };
