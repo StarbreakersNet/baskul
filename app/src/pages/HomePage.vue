@@ -19,13 +19,13 @@ import {
   useThemeVars,
 } from "naive-ui";
 import {
-  CheckmarkCircle,
-  CloseCircle,
-  DesktopOutline,
-  HourglassOutline,
-  LaptopOutline,
-  SwapHorizontal,
-} from "@vicons/ionicons5";
+  IconArrowsLeftRight,
+  IconCircleCheckFilled,
+  IconCircleXFilled,
+  IconDeviceDesktop,
+  IconDeviceLaptop,
+  IconHourglassHigh,
+} from "@tabler/icons-vue";
 import { useActions } from "../composables/useActions";
 import { useSettings } from "../composables/useSettings";
 import { osLabel } from "../utils";
@@ -48,15 +48,15 @@ const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 /** État de la connexion. */
 const conn = computed((): { icon: Component; color: string; title: string; help?: string } => {
   const s = status.value;
-  if (!s) return { icon: HourglassOutline, color: vars.value.textColor3, title: "Démarrage…" };
+  if (!s) return { icon: IconHourglassHigh, color: vars.value.textColor3, title: "Démarrage…" };
   if (s.state === "connected") {
-    return { icon: CheckmarkCircle, color: vars.value.successColor, title: `Connecté à « ${s.detail} »` };
+    return { icon: IconCircleCheckFilled, color: vars.value.successColor, title: `Connecté à « ${s.detail} »` };
   }
   if (s.state === "error") {
-    return { icon: CloseCircle, color: vars.value.errorColor, title: "Pas de connexion", help: capitalize(s.detail) };
+    return { icon: IconCircleXFilled, color: vars.value.errorColor, title: "Pas de connexion", help: capitalize(s.detail) };
   }
   return {
-    icon: HourglassOutline,
+    icon: IconHourglassHigh,
     color: vars.value.warningColor,
     title: capitalize(s.detail || "en attente de l'autre machine"),
     help: "Vérifiez que Bascule est lancé sur l'autre machine, avec le même secret.",
@@ -69,7 +69,7 @@ const here = computed(() => {
   return primary.value ? !remote : connected.value && remote;
 });
 
-const osIcon = (os?: string) => (os === "macos" ? LaptopOutline : DesktopOutline);
+const osIcon = (os?: string) => (os === "macos" ? IconDeviceLaptop : IconDeviceDesktop);
 
 const machines = computed(() => [
   {
@@ -142,7 +142,7 @@ const editSettings = (onglet?: string) => router.push({ name: "settings", query:
 
       <n-flex align="center" justify="center" :size="16" :wrap="false" style="margin-top: 20px">
         <template v-for="(m, i) in machines" :key="m.key">
-          <n-icon v-if="i > 0" :size="26" :depth="3"><swap-horizontal /></n-icon>
+          <n-icon v-if="i > 0" :size="26" :depth="3"><icon-arrows-left-right /></n-icon>
           <n-card size="small" embedded :bordered="false" style="flex: 1; max-width: 300px" :style="m.active ? activeStyle : {}">
             <n-flex vertical align="center" :size="4">
               <n-icon :size="36" :color="m.active ? vars.primaryColor : undefined" :depth="m.active ? undefined : 3">

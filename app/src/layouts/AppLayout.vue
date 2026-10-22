@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Cadre de l'application : menu latéral, en-tête, page courante (avec barre de
 // défilement Naive UI) et pied de page d'enregistrement des réglages.
-import { computed, h, onMounted, provide, ref, type Component } from "vue";
+import { computed, h, onMounted, provide, ref, watch, type Component } from "vue";
 import { RouterView, useRoute, useRouter } from "vue-router";
 import {
   NAvatar,
@@ -21,7 +21,7 @@ import {
   useDialog,
   type MenuOption,
 } from "naive-ui";
-import { DocumentTextOutline, HomeOutline, InformationCircleOutline, SettingsOutline } from "@vicons/ionicons5";
+import { IconFileText, IconHome, IconInfoCircle, IconSettings } from "@tabler/icons-vue";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import logo from "../assets/logo.svg";
 import StatusBadge from "../components/StatusBadge.vue";
@@ -50,18 +50,25 @@ provide(
 );
 
 const collapsed = ref(false);
+const content = ref<InstanceType<typeof NLayoutContent>>();
 
-const icon = (c: Component) => () => h(NIcon, null, { default: () => h(c) });
+// Nouvelle page : on repart du haut.
+watch(
+  () => route.name,
+  () => content.value?.scrollTo({ top: 0 }),
+);
+
+const icon = (c: Component) => () => h(NIcon, null, { default: () => h(c, { stroke: 1.75 }) });
 const menu = computed<MenuOption[]>(() => [
-  { key: "home", label: "Accueil", icon: icon(HomeOutline) },
+  { key: "home", label: "Accueil", icon: icon(IconHome) },
   {
     key: "settings",
     // Pastille : réglages modifiés, pas encore enregistrés.
     label: () => h(NBadge, { dot: true, show: dirty.value, offset: [8, 2] }, { default: () => "Réglages" }),
-    icon: icon(SettingsOutline),
+    icon: icon(IconSettings),
   },
-  { key: "log", label: "Journal", icon: icon(DocumentTextOutline) },
-  { key: "about", label: "À propos", icon: icon(InformationCircleOutline) },
+  { key: "log", label: "Journal", icon: icon(IconFileText) },
+  { key: "about", label: "À propos", icon: icon(IconInfoCircle) },
 ]);
 
 const restarting = computed(() => phase.value === "restarting");
@@ -136,6 +143,7 @@ onMounted(async () => {
       </n-layout-header>
 
       <n-layout-content
+        ref="content"
         position="absolute"
         :native-scrollbar="false"
         :style="{ top: `${HEADER}px`, bottom: footer ? `${FOOTER}px` : '0' }"
@@ -158,7 +166,13 @@ onMounted(async () => {
               </n-button>
             </template>
           </n-result>
-          <router-view v-else />
+          <!-- Transition à la manière d'iOS : la nouvelle page apparaît en
+               fondu avec un léger zoom, l'ancienne disparaît aussitôt. -->
+          <router-view v-else v-slot="{ Component }">
+            <transition name="page" mode="out-in">
+              <component :is="Component" :key="route.name" />
+            </transition>
+          </router-view>
         </div>
       </n-layout-content>
 
@@ -174,3 +188,21 @@ onMounted(async () => {
     </n-layout>
   </n-layout>
 </template>
+
+<style scoped>
+/* Entrée : fondu et léger zoom ; sortie immédiate (aucune transition). */
+.page-enter-active {
+  transition:
+    opacity 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.page-enter-from {
+  opacity: 0;
+  transform: scale(0.98);
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-enter-from {
+    transform: none;
+  }
+}
+</style>

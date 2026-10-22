@@ -279,6 +279,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@tabler/icons-vue@npm:^3.49.0":
+  version: 3.49.0
+  resolution: "@tabler/icons-vue@npm:3.49.0"
+  dependencies:
+    "@tabler/icons": "npm:3.49.0"
+  peerDependencies:
+    vue: ">=3.0.1"
+  checksum: 10c0/e674430ed9eee9ed62a315392c93767158269ea92a2246b9655233279d4fa232530553e6dc1eabccfbefe297e757a3e3877c3872293967711b26ea4e20dfd989
+  languageName: node
+  linkType: hard
+
+"@tabler/icons@npm:3.49.0":
+  version: 3.49.0
+  resolution: "@tabler/icons@npm:3.49.0"
+  checksum: 10c0/8540c7182c67efcd7209d0ab2de75dd413eff0f61c5906d0e1b20bc53ef4eaadcd13e301e2e5829dac47ee710bc0d8301d99c1dd0aada683a87addb32742d34a
+  languageName: node
+  linkType: hard
+
 "@tauri-apps/api@npm:^2.12.4":
   version: 2.12.4
   resolution: "@tauri-apps/api@npm:2.12.4"
@@ -427,13 +445,6 @@ __metadata:
   version: 4.17.26
   resolution: "@types/lodash@npm:4.17.26"
   checksum: 10c0/7f8a95db94698f009e59c612deaba1ee98ac738156926f4c1c062853b9e46fe5fb3a7a34a15ad2f2c846f7c24b0e61e0109dfac2d9e4fa8eaa71330fd0862ea3
-  languageName: node
-  linkType: hard
-
-"@vicons/ionicons5@npm:^0.13.0":
-  version: 0.13.0
-  resolution: "@vicons/ionicons5@npm:0.13.0"
-  checksum: 10c0/3be530caf976bce192f8565c714b19a53b739a46b9de845fba5fad792b083439aa3fd4206c876e5eb28fe9c163a59ec41c9d4e44cc63d65a282d1d4b001ed84a
   languageName: node
   linkType: hard
 
@@ -702,9 +713,9 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "bascule-settings@workspace:."
   dependencies:
+    "@tabler/icons-vue": "npm:^3.49.0"
     "@tauri-apps/api": "npm:^2.12.4"
     "@tauri-apps/cli": "npm:^2.12.3"
-    "@vicons/ionicons5": "npm:^0.13.0"
     "@vitejs/plugin-vue": "npm:^6.0.10"
     naive-ui: "npm:^2.45.3"
     typescript: "npm:~6.0.0"
