@@ -44,11 +44,12 @@ speed = 1.0
 
 [scroll]
 # (Machine pilotée) "lines" = par lignes, comme une molette Windows ;
-# "pixels" = défilement précis au pixel.
+# "pixels" = défilement précis au pixel ; "smooth" = défilement fluide,
+# chaque cran est animé (macOS).
 mode = "lines"
 # Nombre de lignes par cran de molette (mode "lines").
 lines_per_notch = 3.0
-# Nombre de pixels par cran de molette (mode "pixels").
+# Nombre de pixels par cran de molette (modes "pixels" et "smooth").
 pixels_per_notch = 60.0
 # Inverser le sens de défilement.
 invert_vertical = false
@@ -61,8 +62,6 @@ invert_horizontal = false
 #   "swipe"   = transformés en geste « balayage » précédent/suivant, compris
 #               par presque toutes les apps Mac (Safari, Finder, Xcode, Notes…)
 side_buttons = "buttons"
-# Inverser les boutons 4 et 5.
-swap_side_buttons = false
 
 [keyboard]
 # (Machine pilotée, macOS) Échange des touches « ² » / « < > » pour les Mac à
@@ -70,9 +69,10 @@ swap_side_buttons = false
 # Si ces deux touches sont inversées, essayez "on" ou "off".
 iso_swap = "auto"
 # (Machine principale) Touches multimédia (volume, lecture…) :
-#   "remote" = agissent sur la machine où se trouve le curseur
-#   "local"  = agissent toujours sur la machine principale
-media_keys = "remote"
+#   "cursor"    = agissent sur la machine où se trouve le curseur
+#   "primary"   = agissent toujours sur la machine principale
+#   "secondary" = agissent toujours sur la machine pilotée
+media_keys = "cursor"
 
 # (Machine pilotée) Remappage de touches physiques, par nom ou code HID.
 # Exemple : faire de Verr. Maj un Ctrl sur le Mac :

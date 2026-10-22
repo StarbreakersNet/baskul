@@ -1,4 +1,5 @@
-//! Dessin de l'icône de la barre des tâches (pixels RGBA), sans fichier image.
+//! Dessin de l'icône de la zone de notification (Windows) et de la barre des
+//! menus (macOS), en pixels RGBA, sans fichier image.
 //!
 //! Deux petits écrans côte à côte : celui de gauche représente la machine
 //! principale, celui de droite la machine secondaire. L'écran où se trouve le
@@ -12,6 +13,16 @@ pub enum Tone {
 }
 
 impl Tone {
+    /// Couleur correspondant à l'état de la connexion.
+    pub fn of(conn: &crate::status::Conn) -> Tone {
+        use crate::status::Conn;
+        match conn {
+            Conn::Connected(_) => Tone::Connected,
+            Conn::Error(_) => Tone::Error,
+            Conn::Waiting(_) => Tone::Waiting,
+        }
+    }
+
     fn rgb(self) -> [u8; 3] {
         match self {
             Tone::Waiting => [150, 150, 150],

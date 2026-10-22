@@ -14,7 +14,7 @@
 
 use crate::Args;
 use crate::app::{self, ClipboardHooks, Services};
-use crate::config::{MediaKeys, ScrollCfg, Settings};
+use crate::config::{ScrollCfg, Settings};
 use crate::geometry::{Layout, Point, Rect};
 use crate::icon::{self, Tone};
 use crate::keymap::{self, *};
@@ -642,7 +642,6 @@ struct WinEmulator {
     keys_down: HashSet<u32>,
     buttons: [bool; 5],
     scroll: ScrollCfg,
-    swap_side: bool,
 }
 
 // SAFETY: aucune donnée liée à un thread.
@@ -742,11 +741,6 @@ impl Emulator for WinEmulator {
     }
 
     fn button(&mut self, button: MouseButton, down: bool) {
-        let button = match (button, self.swap_side) {
-            (MouseButton::Back, true) => MouseButton::Forward,
-            (MouseButton::Forward, true) => MouseButton::Back,
-            (b, _) => b,
-        };
         self.raw_button(button, down);
     }
 
@@ -860,11 +854,7 @@ impl Ui {
 
     fn update_tray(&mut self) {
         let snap = status::snapshot();
-        let tone = match snap.conn {
-            Conn::Connected(_) => Tone::Connected,
-            Conn::Error(_) => Tone::Error,
-            Conn::Waiting(_) => Tone::Waiting,
-        };
+        let tone = Tone::of(&snap.conn);
         let hicon = self.icon(tone, snap.remote_active);
         // SAFETY: structure initialisable à zéro.
         let mut nid: NOTIFYICONDATAW = unsafe { zeroed() };
@@ -1248,7 +1238,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
                 switch_hotkey: settings.switch_hotkey.clone(),
                 return_hotkey: settings.return_hotkey.clone(),
                 lock_hotkey: settings.lock_hotkey.clone(),
-                media_local: settings.media_keys == MediaKeys::Local,
+                media_keys: settings.media_keys,
             };
             PRIMARY.with(|p| {
                 *p.borrow_mut() = Some(PrimaryState {
@@ -1270,12 +1260,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
         }
         Role::Secondary => {
             log::warn!("Windows en machine pilotée : fonctionnement expérimental");
-            let emu = WinEmulator {
-                keys_down: HashSet::new(),
-                buttons: [false; 5],
-                scroll: settings.scroll.clone(),
-                swap_side: settings.buttons.swap_side_buttons,
-            };
+            let emu = WinEmulator { keys_down: HashSet::new(), buttons: [false; 5], scroll: settings.scroll.clone() };
             app::start_secondary(&settings, hooks, emu)
         }
     };

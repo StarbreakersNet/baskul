@@ -9,23 +9,27 @@
 
 use crate::Args;
 use crate::app::{self, ClipboardHooks, Services};
-use crate::config::{IsoSwap, MediaKeys, ScrollCfg, ScrollMode, Settings, SideButtonsMode};
+use crate::config::{IsoSwap, ScrollCfg, ScrollMode, Settings, SideButtonsMode};
 use crate::geometry::{Layout, Point, Rect};
+use crate::icon::{self, Tone};
 use crate::keymap::{self, *};
 use crate::net::LinkHandle;
 use crate::primary::{Decision, Host, PeerEvent, PrimaryCore, PrimaryOptions};
 use crate::protocol::{Message, MouseButton, Role};
 use crate::secondary::Emulator;
+use crate::smooth;
 use crate::status::{self, Conn, Snapshot};
 use crossbeam_channel::Receiver;
 use objc2::rc::{Retained, autoreleasepool};
 use objc2::runtime::{AnyObject, NSObject, ProtocolObject};
-use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
+use objc2::{AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationPolicy, NSApplicationDelegate, NSControlStateValueOff, NSControlStateValueOn,
     NSEvent, NSEventModifierFlags, NSEventType, NSImage, NSMenu, NSMenuItem, NSPasteboard, NSStatusBar, NSStatusItem,
 };
-use objc2_foundation::{NSActivityOptions, NSObjectProtocol, NSPoint, NSProcessInfo, NSString, NSTimer};
+use objc2_foundation::{
+    NSActivityOptions, NSData, NSObjectProtocol, NSPoint, NSProcessInfo, NSSize, NSString, NSTimer,
+};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::ffi::{c_char, c_void};
@@ -495,7 +499,8 @@ struct MacEmulator {
     acc_x: f64,
     acc_y: f64,
     side: SideButtonsMode,
-    swap_side: bool,
+    /// Animation du défilement fluide, démarrée au premier cran.
+    smooth: Option<SmoothScroller>,
     iso: IsoSwap,
     iso_active: bool,
     hid_conn: u32,
@@ -505,6 +510,56 @@ struct MacEmulator {
 // SAFETY: les objets CoreGraphics utilisés sont utilisables depuis n'importe
 // quel thread ; l'émulateur n'est utilisé que par un thread à la fois (Mutex).
 unsafe impl Send for MacEmulator {}
+
+/// Défilement fluide : un thread anime les crans reçus (voir `smooth.rs`) et
+/// envoie des événements de défilement au pixel.
+struct SmoothScroller {
+    /// (vertical, horizontal) en pixels, et modificateurs enfoncés.
+    tx: crossbeam_channel::Sender<(f64, f64, u64)>,
+}
+
+impl SmoothScroller {
+    fn start() -> SmoothScroller {
+        let (tx, rx) = crossbeam_channel::unbounded::<(f64, f64, u64)>();
+        let spawned = std::thread::Builder::new().name("bascule-scroll".into()).spawn(move || {
+            // SAFETY: source d'événements propre à ce thread.
+            let source = unsafe { CGEventSourceCreate(SOURCE_HID_STATE) };
+            let (mut y, mut x) = (smooth::Axis::default(), smooth::Axis::default());
+            let mut flags = 0u64;
+            loop {
+                if y.is_idle() && x.is_idle() {
+                    // Rien à animer : attente du prochain cran.
+                    let Ok((dy, dx, f)) = rx.recv() else { return };
+                    y.push(dy);
+                    x.push(dx);
+                    flags = f;
+                }
+                while let Ok((dy, dx, f)) = rx.try_recv() {
+                    y.push(dy);
+                    x.push(dx);
+                    flags = f;
+                }
+                let (sy, sx) = (y.step(), x.step());
+                if sy != 0 || sx != 0 {
+                    // SAFETY: événement créé, envoyé puis libéré.
+                    unsafe {
+                        let ev = CGEventCreateScrollWheelEvent2(source, SCROLL_UNIT_PIXEL, 2, sy, sx, 0);
+                        if !ev.is_null() {
+                            CGEventSetFlags(ev, flags);
+                            CGEventPost(TAP_HID, ev);
+                            CFRelease(ev);
+                        }
+                    }
+                }
+                std::thread::sleep(smooth::FRAME);
+            }
+        });
+        if let Err(e) = spawned {
+            log::error!("défilement fluide indisponible : {e}");
+        }
+        SmoothScroller { tx }
+    }
+}
 
 fn open_hid_system() -> u32 {
     // SAFETY: appels IOKit ; le service est libéré, la connexion conservée.
@@ -557,7 +612,7 @@ impl MacEmulator {
             acc_x: 0.0,
             acc_y: 0.0,
             side: settings.buttons.side_buttons,
-            swap_side: settings.buttons.swap_side_buttons,
+            smooth: None,
             iso: settings.iso_swap,
             iso_active: false,
             hid_conn,
@@ -697,7 +752,7 @@ impl MacEmulator {
 }
 
 impl MacEmulator {
-    /// Bouton physique tel quel (l'échange 4/5 a déjà été appliqué).
+    /// Bouton physique tel quel.
     fn raw_button(&mut self, button: MouseButton, down: bool) {
         if down {
             let near = (self.pos.x - self.click_pos.x).abs() <= 4 && (self.pos.y - self.click_pos.y).abs() <= 4;
@@ -749,11 +804,6 @@ impl Emulator for MacEmulator {
 
     fn button(&mut self, button: MouseButton, down: bool) {
         self.activity();
-        let button = match (button, self.swap_side) {
-            (MouseButton::Back, true) => MouseButton::Forward,
-            (MouseButton::Forward, true) => MouseButton::Back,
-            (b, _) => b,
-        };
         if matches!(button, MouseButton::Back | MouseButton::Forward) && self.side == SideButtonsMode::Swipe {
             if down {
                 post_swipe(if button == MouseButton::Back { 4 } else { 8 });
@@ -774,9 +824,16 @@ impl Emulator for MacEmulator {
         if self.scroll.invert_horizontal {
             nx = -nx;
         }
+        if self.scroll.mode == ScrollMode::Smooth {
+            let px = self.scroll.pixels_per_notch;
+            let flags = self.flags();
+            // macOS : valeur positive = vers le haut (axe 1) / vers la gauche (axe 2).
+            let _ = self.smooth.get_or_insert_with(SmoothScroller::start).tx.send((ny * px, -nx * px, flags));
+            return;
+        }
         let (unit, per_notch) = match self.scroll.mode {
             ScrollMode::Lines => (SCROLL_UNIT_LINE, self.scroll.lines_per_notch),
-            ScrollMode::Pixels => (SCROLL_UNIT_PIXEL, self.scroll.pixels_per_notch),
+            ScrollMode::Pixels | ScrollMode::Smooth => (SCROLL_UNIT_PIXEL, self.scroll.pixels_per_notch),
         };
         // Accumulation des fractions (molettes haute résolution, réglages
         // non entiers).
@@ -1363,31 +1420,27 @@ fn menu_item(
     }
 }
 
-fn status_symbol(snap: &Snapshot) -> (&'static str, &'static str) {
-    match &snap.conn {
-        Conn::Connected(_) if snap.remote_active => ("cursorarrow.rays", "⌨︎●"),
-        Conn::Connected(_) => ("keyboard", "⌨︎"),
-        Conn::Waiting(_) => ("keyboard.badge.ellipsis", "⌨︎…"),
-        Conn::Error(_) => ("exclamationmark.triangle", "⌨︎!"),
-    }
+/// Image de la barre des menus : la même icône que sous Windows (voir
+/// `icon.rs`), dessinée en 36 pixels pour 18 points (écrans Retina).
+fn status_image(snap: &Snapshot) -> Option<Retained<NSImage>> {
+    const PX: u32 = 36;
+    let rgba = icon::render(PX, Tone::of(&snap.conn), snap.remote_active);
+    let png = crate::clipboard::encode_png(PX, PX, &rgba)?;
+    let img = NSImage::initWithData(NSImage::alloc(), &NSData::with_bytes(&png))?;
+    img.setSize(NSSize::new(18.0, 18.0));
+    Some(img)
 }
 
 fn update_status_item(ui: &MacUi, mtm: MainThreadMarker, snap: &Snapshot) {
-    let (symbol, fallback) = status_symbol(snap);
     if let Some(button) = ui.item.button(mtm) {
-        let img = NSImage::imageWithSystemSymbolName_accessibilityDescription(
-            &NSString::from_str(symbol),
-            Some(&NSString::from_str("Bascule")),
-        );
-        match img {
+        match status_image(snap) {
             Some(img) => {
-                img.setTemplate(true);
                 button.setImage(Some(&img));
                 button.setTitle(&NSString::from_str(""));
             }
             None => {
                 button.setImage(None);
-                button.setTitle(&NSString::from_str(fallback));
+                button.setTitle(&NSString::from_str("⌨︎"));
             }
         }
         button.setToolTip(Some(&NSString::from_str(&format!("Bascule — {}", snap.summary()))));
@@ -1452,6 +1505,10 @@ fn ui_tick(mtm: MainThreadMarker) {
         if ui.last.as_ref() != Some(&snap) {
             update_status_item(ui, mtm, &snap);
             ui.last = Some(snap);
+        }
+        if !ui.item.isVisible() {
+            log::warn!("icône de la barre des menus masquée : réaffichage");
+            ui.item.setVisible(true);
         }
         ui.access_item.setHidden(ui.permissions_ok);
         ui.login_item.setState(if login_item_enabled() { NSControlStateValueOn } else { NSControlStateValueOff });
@@ -1596,6 +1653,9 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
     let controller = Controller::new(mtm);
     app.setDelegate(Some(ProtocolObject::from_ref(&*controller)));
     let item = NSStatusBar::systemStatusBar().statusItemWithLength(-1.0);
+    // Nom de sauvegarde : macOS garde la place de l'icône (déplaçable avec
+    // ⌘ + glisser), y compris après un redémarrage de Bascule.
+    item.setAutosaveName(Some(&NSString::from_str("fr.bascule.status")));
     let menu = NSMenu::new(mtm);
     menu.setAutoenablesItems(false);
 
@@ -1677,7 +1737,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
                 switch_hotkey: settings.switch_hotkey.clone(),
                 return_hotkey: settings.return_hotkey.clone(),
                 lock_hotkey: settings.lock_hotkey.clone(),
-                media_local: settings.media_keys == MediaKeys::Local,
+                media_keys: settings.media_keys,
             };
             MAC_PRIMARY.with(|p| {
                 *p.borrow_mut() = Some(MacPrimary {

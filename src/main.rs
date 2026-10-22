@@ -26,6 +26,8 @@ mod platform;
 mod primary;
 mod protocol;
 mod secondary;
+#[cfg(any(target_os = "macos", test, feature = "xcheck"))]
+mod smooth;
 mod status;
 
 use std::fs::File;

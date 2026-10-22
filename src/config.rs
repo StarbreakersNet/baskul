@@ -53,6 +53,8 @@ pub enum ScrollMode {
     Lines,
     /// Défilement au pixel (précis, comme un trackpad).
     Pixels,
+    /// Défilement fluide : chaque cran est animé, au pixel (macOS).
+    Smooth,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -76,9 +78,13 @@ pub enum IsoSwap {
 #[serde(rename_all = "lowercase")]
 pub enum MediaKeys {
     /// Les touches multimédia agissent sur la machine où se trouve le curseur.
-    Remote,
-    /// Les touches multimédia agissent toujours sur la machine principale.
-    Local,
+    #[serde(alias = "remote")]
+    Cursor,
+    /// Elles agissent toujours sur la machine principale.
+    #[serde(alias = "local")]
+    Primary,
+    /// Elles agissent toujours sur la machine pilotée.
+    Secondary,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,12 +154,15 @@ impl Default for ScrollCfg {
 #[serde(default, deny_unknown_fields)]
 pub struct ButtonsCfg {
     pub side_buttons: SideButtonsMode,
-    pub swap_side_buttons: bool,
+    /// Ancien réglage (inversion des boutons 4 et 5), retiré : encore accepté
+    /// dans les fichiers existants, mais ignoré.
+    #[serde(default, rename = "swap_side_buttons", skip_serializing)]
+    _swap_side_buttons: serde::de::IgnoredAny,
 }
 
 impl Default for ButtonsCfg {
     fn default() -> Self {
-        ButtonsCfg { side_buttons: SideButtonsMode::Buttons, swap_side_buttons: false }
+        ButtonsCfg { side_buttons: SideButtonsMode::Buttons, _swap_side_buttons: serde::de::IgnoredAny }
     }
 }
 
@@ -167,7 +176,7 @@ pub struct KeyboardCfg {
 
 impl Default for KeyboardCfg {
     fn default() -> Self {
-        KeyboardCfg { iso_swap: IsoSwap::Auto, media_keys: MediaKeys::Remote, remap: BTreeMap::new() }
+        KeyboardCfg { iso_swap: IsoSwap::Auto, media_keys: MediaKeys::Cursor, remap: BTreeMap::new() }
     }
 }
 
@@ -564,11 +573,12 @@ speed = 1.0
 
 [scroll]
 # (Machine pilotée) "lines" = par lignes, comme une molette Windows ;
-# "pixels" = défilement précis au pixel.
+# "pixels" = défilement précis au pixel ; "smooth" = défilement fluide,
+# chaque cran est animé (macOS).
 mode = "lines"
 # Nombre de lignes par cran de molette (mode "lines").
 lines_per_notch = 3.0
-# Nombre de pixels par cran de molette (mode "pixels").
+# Nombre de pixels par cran de molette (modes "pixels" et "smooth").
 pixels_per_notch = 60.0
 # Inverser le sens de défilement.
 invert_vertical = false
@@ -581,8 +591,6 @@ invert_horizontal = false
 #   "swipe"   = transformés en geste « balayage » précédent/suivant, compris
 #               par presque toutes les apps Mac (Safari, Finder, Xcode, Notes…)
 side_buttons = "buttons"
-# Inverser les boutons 4 et 5.
-swap_side_buttons = false
 
 [keyboard]
 # (Machine pilotée, macOS) Échange des touches « ² » / « < > » pour les Mac à
@@ -590,9 +598,10 @@ swap_side_buttons = false
 # Si ces deux touches sont inversées, essayez "on" ou "off".
 iso_swap = "auto"
 # (Machine principale) Touches multimédia (volume, lecture…) :
-#   "remote" = agissent sur la machine où se trouve le curseur
-#   "local"  = agissent toujours sur la machine principale
-media_keys = "remote"
+#   "cursor"    = agissent sur la machine où se trouve le curseur
+#   "primary"   = agissent toujours sur la machine principale
+#   "secondary" = agissent toujours sur la machine pilotée
+media_keys = "cursor"
 
 # (Machine pilotée) Remappage de touches physiques, par nom ou code HID.
 # Exemple : faire de Verr. Maj un Ctrl sur le Mac :
@@ -781,6 +790,22 @@ mod tests {
         let out = update_text("", &cfg).unwrap();
         assert!(out.contains("role = \"primary\""));
         assert!(out.contains("# Rôle de cette machine"));
+    }
+
+    #[test]
+    fn old_settings_still_accepted() {
+        // Fichier d'une version précédente : ancienne clé et anciennes valeurs.
+        let text = default_config_text("primary", "abcd-efgh-jkmn-pqrs")
+            .replace("side_buttons = \"buttons\"\n", "side_buttons = \"buttons\"\nswap_side_buttons = true\n")
+            .replace("media_keys = \"cursor\"", "media_keys = \"local\"");
+        let cfg = Config::parse(&text).unwrap();
+        assert_eq!(cfg.validate().unwrap().media_keys, MediaKeys::Primary);
+        // À l'enregistrement, la clé retirée disparaît et la valeur est réécrite.
+        let out = update_text(&text, &cfg).unwrap();
+        assert!(!out.contains("swap_side_buttons"));
+        assert!(out.contains("media_keys = \"primary\""));
+        let remote = text.replace("media_keys = \"local\"", "media_keys = \"remote\"");
+        assert_eq!(Config::parse(&remote).unwrap().keyboard.media_keys, MediaKeys::Cursor);
     }
 
     #[test]

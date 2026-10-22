@@ -6,6 +6,7 @@
 //! passer au système local (`Pass`) ou supprimé (`Swallow`, quand il est
 //! envoyé à l'autre machine).
 
+use crate::config::MediaKeys;
 use crate::geometry::{Layout, Point};
 use crate::hotkey::Hotkey;
 use crate::keymap;
@@ -55,7 +56,8 @@ pub struct PrimaryOptions {
     pub switch_hotkey: Option<Hotkey>,
     pub return_hotkey: Option<Hotkey>,
     pub lock_hotkey: Option<Hotkey>,
-    pub media_local: bool,
+    /// Machine où agissent les touches multimédia.
+    pub media_keys: MediaKeys,
 }
 
 /// Services fournis par la plateforme.
@@ -256,7 +258,14 @@ impl PrimaryCore {
     }
 
     fn key_input_target(&self, code: u32) -> Target {
-        if self.opts.media_local && keymap::is_media(code) { Target::Local } else { self.input_target() }
+        if keymap::is_media(code) {
+            match self.opts.media_keys {
+                MediaKeys::Primary => return Target::Local,
+                MediaKeys::Secondary if self.connected => return Target::Remote,
+                _ => {}
+            }
+        }
+        self.input_target()
     }
 
     fn new_key_target<H: Host>(&mut self, host: &mut H, code: u32) -> Target {
@@ -430,7 +439,7 @@ mod tests {
             switch_hotkey: Hotkey::parse("Shift+F12").unwrap(),
             return_hotkey: Hotkey::parse("Ctrl+Alt+Shift+B").unwrap(),
             lock_hotkey: Hotkey::parse("ScrollLock").unwrap(),
-            media_local: false,
+            media_keys: MediaKeys::Cursor,
         });
         let mut host = FakeHost {
             layout: Layout::new(vec![Rect::new(0, 0, 1920, 1080)]),
@@ -616,9 +625,24 @@ mod tests {
     }
 
     #[test]
+    fn media_keys_on_secondary_even_when_local() {
+        let (mut core, mut host) = setup();
+        core.opts.media_keys = MediaKeys::Secondary;
+        assert!(!core.is_remote());
+        assert_eq!(core.key(&mut host, HID_VOLUME_UP, true), Decision::Swallow);
+        assert_eq!(host.sent.last(), Some(&Message::Key { code: HID_VOLUME_UP, down: true, repeat: false }));
+        assert_eq!(core.key(&mut host, HID_VOLUME_UP, false), Decision::Swallow);
+        // Les autres touches restent locales.
+        assert_eq!(core.key(&mut host, hid_from_name("A").unwrap(), true), Decision::Pass);
+        // Sans connexion, elles agissent ici.
+        core.peer_event(&mut host, PeerEvent::Disconnected);
+        assert_eq!(core.key(&mut host, HID_VOLUME_DOWN, true), Decision::Pass);
+    }
+
+    #[test]
     fn media_keys_local_option() {
         let (mut core, mut host) = setup();
-        core.opts.media_local = true;
+        core.opts.media_keys = MediaKeys::Primary;
         go_remote(&mut core, &mut host);
         assert_eq!(core.key(&mut host, HID_VOLUME_UP, true), Decision::Pass);
         assert_eq!(core.key(&mut host, HID_VOLUME_UP, false), Decision::Pass);
