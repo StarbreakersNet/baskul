@@ -1,6 +1,6 @@
 // Commandes Tauri (voir `src-tauri/src/main.rs`), relayées à l'API du daemon.
 import { invoke } from "@tauri-apps/api/core";
-import type { BaskulConfig, CaptureState, DaemonInfo, DaemonStatus } from "./types";
+import type { BaskulConfig, CaptureState, DaemonInfo, DaemonStatus, NetworkInfo, UpdateInfo } from "./types";
 
 /** Erreur renvoyée par les commandes. */
 export interface CommandError {
@@ -21,6 +21,14 @@ export const daemon = {
     start: () => invoke<object>("capture_hotkey", { action: "start" }),
     poll: () => invoke<CaptureState>("capture_hotkey", { action: "poll" }),
     cancel: () => invoke<object>("capture_hotkey", { action: "cancel" }),
+  },
+  /** Cartes réseau et machines principales trouvées sur le réseau. */
+  network: () => invoke<NetworkInfo>("network_info"),
+  /** Le clavier et la souris passent sur une machine (`primary` ou un nom). */
+  switchTo: (to: string) => invoke<object>("switch_to", { to }),
+  update: {
+    check: () => invoke<UpdateInfo>("update_action", { action: "check" }),
+    install: () => invoke<UpdateInfo>("update_action", { action: "install" }),
   },
   start: () => invoke<void>("start_daemon"),
   launchOptions: () => invoke<{ welcome: boolean }>("launch_options"),

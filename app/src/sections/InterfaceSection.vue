@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // Apparence et langue. Le thème et la langue s'appliquent aussitôt à cette
 // fenêtre ; les menus de Baskul suivent après l'enregistrement.
+import { NSwitch } from "naive-ui";
 import ChoiceGroup from "../components/ChoiceGroup.vue";
 import SettingRow from "../components/SettingRow.vue";
 import type { BaskulConfig } from "../types";
@@ -38,6 +39,9 @@ defineProps<{ config: BaskulConfig }>();
           { value: 'mono', label: $t('settings.interface.mono') },
         ]"
       />
+    </setting-row>
+    <setting-row :label="$t('settings.interface.bubble')" :help="$t('settings.interface.bubbleHelp')">
+      <n-switch v-model:value="config.ui.arrival_bubble" />
     </setting-row>
   </div>
 </template>

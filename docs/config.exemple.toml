@@ -5,38 +5,55 @@
 
 # Rôle de cette machine :
 #   "primary"   = la machine qui a le clavier et la souris physiques
-#   "secondary" = la machine pilotée à distance
+#   "secondary" = une machine pilotée à distance par la principale
 role = "primary"
 
 # Nom affiché (facultatif ; par défaut le nom de la machine).
 name = ""
 
 [network]
-# Une machine ÉCOUTE, l'autre SE CONNECTE.
-#  - Machine qui écoute : laisser `connect` vide.
-#  - Machine qui se connecte : mettre l'adresse IP (ou le nom .local) de l'autre.
-# Conseillé : le Mac écoute (connect vide) et le PC se connecte au Mac.
-# Exemple sur le PC :  connect = "192.168.1.30"   (adresse IP du Mac)
-listen = "0.0.0.0:24870"
+# La machine principale attend les connexions ; chaque machine pilotée se
+# connecte à elle.
+#
+# (Machine pilotée) Adresse de la machine principale : adresse IP ou nom
+# .local, port 24870 par défaut. Exemple : connect = "192.168.1.20".
+# Vide : la principale est trouvée automatiquement sur le réseau local.
 connect = ""
+# (Machine principale) Adresse et port d'écoute.
+listen = "0.0.0.0:24870"
+# Carte réseau à utiliser : nom donné par le système ("en0", "Ethernet",
+# "Wi-Fi"…). Vide : automatique.
+interface = ""
+# Découverte automatique (Bonjour) : la principale s'annonce sur le réseau
+# local, les pilotées la trouvent sans adresse à saisir.
+discovery = true
 
-# Secret partagé : DOIT être identique sur les deux machines.
-# Copiez cette valeur dans la configuration de l'autre machine.
-secret = "collez-ici-le-meme-secret-sur-les-deux-machines"
+# Secret partagé : DOIT être identique sur toutes les machines.
+# Copiez cette valeur dans la configuration des autres machines.
+secret = "collez-ici-le-meme-secret-sur-toutes-les-machines"
 
 [screen]
-# (Machine principale) Passer sur l'autre machine en poussant la souris
-# contre le bord de l'écran. false = uniquement avec les raccourcis
-# clavier (section [hotkeys]).
+# (Machine principale) Passer sur la machine voisine (grille [layout]) en
+# poussant la souris contre le bord de l'écran. false = uniquement avec les
+# raccourcis clavier (section [hotkeys]).
 edge_switching = true
-# (Machine principale) Où se trouve l'écran de la machine secondaire,
-# par rapport à la machine principale : "right", "left", "top" ou "bottom".
+# (Machine principale) Côté où se place une nouvelle pilotée sur la grille
+# (section [layout]) : "right", "left", "top" ou "bottom".
 secondary_position = "right"
 # Taille en pixels des coins où le passage d'un écran à l'autre est
 # désactivé : on peut ainsi « lancer » la souris dans un coin (bouton ✕
 # d'une fenêtre agrandie, « Afficher le bureau »…) sans changer d'écran.
 # 0 = aucun.
 corner_size = 10
+
+[layout]
+# (Machine principale) Grille des machines. La principale est en (0, 0) ;
+# x augmente vers la droite, y vers le bas. On passe d'une machine à sa
+# voisine par le bord commun de leurs écrans. Une pilotée qui se connecte
+# pour la première fois est placée d'elle-même à côté de la principale.
+# « hotkey » (facultatif) : raccourci pour aller directement sur elle.
+# Exemple : machines = [{ name = "Atelier", x = 1, y = 0, hotkey = "Ctrl+Alt+1" }]
+machines = []
 
 [mouse]
 # (Machine pilotée) Multiplicateur des déplacements reçus.
@@ -82,7 +99,7 @@ iso_swap = "auto"
 # (Machine principale) Touches multimédia (volume, lecture…) :
 #   "cursor"    = agissent sur la machine où se trouve le curseur
 #   "primary"   = agissent toujours sur la machine principale
-#   "secondary" = agissent toujours sur la machine pilotée
+#   "secondary" = agissent toujours sur la dernière pilotée utilisée
 media_keys = "cursor"
 
 # (Machine pilotée) Remappage de touches physiques, par nom ou code HID.
@@ -108,22 +125,25 @@ max_files_mb = 256
 skip_sensitive = true
 
 [activity]
-# Activité partagée : tant que vous êtes actif sur l'autre machine, celle-ci
+# Activité partagée : tant que vous êtes actif sur une autre machine, celle-ci
 # reste active elle aussi (pas de veille de l'écran ni d'économiseur, statut
-# « actif » dans Teams, Discord, Slack…). Quand vous vous absentez, les deux
-# machines le voient.
+# « actif » dans Teams, Discord, Slack…). Quand vous vous absentez, toutes
+# les machines le voient.
 mirror = true
 
 [hotkeys]
 # Format : modificateurs (Ctrl, Shift, Alt, Win / Cmd) puis une touche,
 # séparés par « + ». Exemples : "Shift+F12", "Ctrl+Alt+B". Vide = désactivé.
 #
-# (Machine principale) Envoie le curseur sur la machine secondaire, là où
-# il était la dernière fois.
+# (Machine principale) Envoie le curseur sur la dernière pilotée utilisée,
+# là où il était.
 switch_to_secondary = "Shift+F12"
 # (Machine principale) Ramène le curseur sur la machine principale.
 # Astuce : le même raccourci que ci-dessus permet d'aller et venir.
 return_to_primary = "Shift+F11"
+# (Machine principale) Passe à la machine suivante : la principale, puis les
+# pilotées connectées, dans l'ordre de la grille. Vide = désactivé.
+next_machine = ""
 # (Machine principale) Verrouille / déverrouille le curseur sur l'écran courant.
 # Exemple : "ScrollLock". Vide = désactivé.
 toggle_lock = ""
@@ -136,6 +156,15 @@ language = "system"
 # Icône de la barre des menus / de la zone de notification : "color" ou
 # "mono" (monochrome, assortie aux autres icônes du système).
 tray_icon = "color"
+# Bulle d'arrivée : le nom de la machine s'affiche un instant près du curseur
+# quand le clavier et la souris arrivent sur elle.
+arrival_bubble = true
+
+[updates]
+# Recherche les nouvelles versions de Baskul (au démarrage puis toutes les six
+# heures) et les télécharge en arrière-plan ; « Redémarrer pour mettre à
+# jour » (menu de l'icône ou app de réglages) les installe.
+check = true
 
 [log]
 # "error", "warn", "info", "debug" ou "trace".

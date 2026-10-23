@@ -4,7 +4,7 @@
 //!   Les touches sont envoyées par **keycode** (position physique) : c'est la
 //!   disposition clavier du Mac qui produit les caractères et compose les
 //!   touches mortes, exactement comme avec un clavier branché sur le Mac.
-//! - Machine principale (sens inverse, expérimental) : `CGEventTap`.
+//! - Machine principale : capture par `CGEventTap`.
 //! - Icône dans la barre des menus.
 
 use crate::Args;
@@ -1202,7 +1202,7 @@ fn clip_formats() -> Vec<String> {
 }
 
 // ---------------------------------------------------------------------------
-// Machine principale : capture (sens inverse, expérimental)
+// Machine principale : capture
 // ---------------------------------------------------------------------------
 
 struct MacHost {
@@ -1645,7 +1645,7 @@ define_class!(
 
         #[unsafe(method(installUpdate:))]
         fn install_update(&self, _sender: Option<&AnyObject>) {
-            if let Err(e) = crate::update::install() {
+            if let Err(e) = crate::update::install(None) {
                 log::warn!("{e}");
             }
         }
@@ -2284,7 +2284,6 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
             app::start_secondary(&settings, hooks, MacEmulator::new(&settings), idle_time)
         }
         Role::Primary => {
-            log::warn!("macOS en machine principale : fonctionnement expérimental");
             // Source de réveil de la boucle principale pour les événements réseau.
             // SAFETY: contexte copié par CFRunLoopSourceCreate ; source et boucle
             // conservées pour toute la durée du programme.

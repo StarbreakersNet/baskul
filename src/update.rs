@@ -380,7 +380,9 @@ fn now_ms() -> u64 {
 /// Installe la version téléchargée puis redémarre Baskul (menu de l'icône,
 /// app de réglages). Les fichiers sont remplacés depuis un thread ; la boucle
 /// principale redémarre ensuite comme après un changement de réglages.
-pub fn install() -> Result<(), String> {
+/// `settings` : demandé par l'app de réglages (fichier de configuration),
+/// qui se ferme pendant l'installation et que Baskul rouvre ensuite.
+pub fn install(settings: Option<PathBuf>) -> Result<(), String> {
     let (archive, version) = {
         let mut s = shared();
         let (Some(archive), State::Ready { version, .. }) = (s.archive.clone(), s.state.clone()) else {
@@ -391,18 +393,34 @@ pub fn install() -> Result<(), String> {
     };
     let _ = std::thread::Builder::new().name("baskul-update-install".into()).spawn(move || {
         log::info!("installation de la version {version}…");
+        // Chemin d'origine, relevé avant que l'installation ne déplace le
+        // programme en cours : c'est lui qu'il faudra relancer.
+        let exe = std::env::current_exe();
         let result = if cfg!(target_os = "macos") { install_macos(&archive) } else { install_files(&archive) };
         match result {
             Ok(()) => {
                 log::info!("version {version} installée : redémarrage");
+                if let Ok(exe) = exe {
+                    crate::platform::set_relaunch_exe(exe);
+                }
+                if settings.is_some() {
+                    let _ = std::fs::write(reopen_marker(), b"");
+                }
                 crate::api::request_restart();
             }
             Err(e) => {
                 log::error!("installation de la mise à jour impossible : {e}");
                 let url = format!("https://github.com/{REPO}/releases/tag/{version}");
-                let mut s = shared();
-                s.archive = None;
-                s.state = State::Error { message: format!("installation impossible : {e} — {url}") };
+                {
+                    let mut s = shared();
+                    s.archive = None;
+                    s.state = State::Error { message: format!("installation impossible : {e} — {url}") };
+                }
+                // L'app de réglages s'est fermée : elle revient avec l'erreur.
+                if let Some(path) = settings {
+                    std::thread::sleep(Duration::from_secs(1));
+                    crate::platform::open_settings(&path, false);
+                }
             }
         }
     });
@@ -517,6 +535,16 @@ fn old_path(target: &Path) -> PathBuf {
     let mut name = target.file_name().unwrap_or_default().to_os_string();
     name.push(".old");
     target.with_file_name(name)
+}
+
+/// Marque « rouvrir l'app de réglages après la mise à jour ».
+fn reopen_marker() -> PathBuf {
+    crate::config::config_dir().join(".reopen-settings")
+}
+
+/// Au démarrage : l'app de réglages a lancé la mise à jour ; elle se rouvre.
+pub fn take_reopen_settings() -> bool {
+    std::fs::remove_file(reopen_marker()).is_ok()
 }
 
 /// Au démarrage : restes d'une installation précédente.

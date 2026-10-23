@@ -1,6 +1,6 @@
 //! Configuration (fichier TOML commenté).
 //!
-//! Le même format sert sur les deux machines ; chaque machine ignore les
+//! Le même format sert sur toutes les machines ; chaque machine ignore les
 //! sections qui ne la concernent pas. Tous les réglages se changent sans
 //! recompiler : il suffit de redémarrer Baskul (menu « Redémarrer »).
 
@@ -178,8 +178,8 @@ impl Default for ScreenCfg {
 #[serde(default, deny_unknown_fields)]
 pub struct ActivityCfg {
     /// Activité partagée : cette machine reste active (écran allumé, statut
-    /// « actif » dans les messageries) tant que l'utilisateur l'est sur
-    /// l'autre.
+    /// « actif » dans les messageries) tant que l'utilisateur l'est sur une
+    /// autre.
     pub mirror: bool,
 }
 
@@ -460,7 +460,7 @@ pub struct Settings {
     /// Remappage HID → HID (côté machine pilotée).
     pub remap: BTreeMap<u32, u32>,
     pub clipboard: ClipboardCfg,
-    /// Cette machine reste active tant que l'utilisateur l'est sur l'autre.
+    /// Cette machine reste active tant que l'utilisateur l'est sur une autre.
     pub mirror_activity: bool,
     pub check_updates: bool,
     pub switch_hotkey: Option<Hotkey>,
@@ -480,7 +480,7 @@ impl Config {
         let secret = self.network.secret.trim().to_string();
         if secret.len() < 12 {
             return Err(
-                "le secret partagé ([network] secret) doit faire au moins 12 caractères et être identique sur les deux machines"
+                "le secret partagé ([network] secret) doit faire au moins 12 caractères et être identique sur toutes les machines"
                     .into(),
             );
         }
@@ -880,7 +880,7 @@ const TEMPLATE: &str = r##"# ===================================================
 
 # Rôle de cette machine :
 #   "primary"   = la machine qui a le clavier et la souris physiques
-#   "secondary" = la machine pilotée à distance
+#   "secondary" = une machine pilotée à distance par la principale
 role = "@@ROLE@@"
 
 # Nom affiché (facultatif ; par défaut le nom de la machine).
@@ -908,9 +908,9 @@ discovery = true
 secret = "@@SECRET@@"
 
 [screen]
-# (Machine principale) Passer sur l'autre machine en poussant la souris
-# contre le bord de l'écran. false = uniquement avec les raccourcis
-# clavier (section [hotkeys]).
+# (Machine principale) Passer sur la machine voisine (grille [layout]) en
+# poussant la souris contre le bord de l'écran. false = uniquement avec les
+# raccourcis clavier (section [hotkeys]).
 edge_switching = true
 # (Machine principale) Côté où se place une nouvelle pilotée sur la grille
 # (section [layout]) : "right", "left", "top" ou "bottom".
@@ -974,7 +974,7 @@ iso_swap = "auto"
 # (Machine principale) Touches multimédia (volume, lecture…) :
 #   "cursor"    = agissent sur la machine où se trouve le curseur
 #   "primary"   = agissent toujours sur la machine principale
-#   "secondary" = agissent toujours sur la machine pilotée
+#   "secondary" = agissent toujours sur la dernière pilotée utilisée
 media_keys = "cursor"
 
 # (Machine pilotée) Remappage de touches physiques, par nom ou code HID.
@@ -1000,10 +1000,10 @@ max_files_mb = 256
 skip_sensitive = true
 
 [activity]
-# Activité partagée : tant que vous êtes actif sur l'autre machine, celle-ci
+# Activité partagée : tant que vous êtes actif sur une autre machine, celle-ci
 # reste active elle aussi (pas de veille de l'écran ni d'économiseur, statut
-# « actif » dans Teams, Discord, Slack…). Quand vous vous absentez, les deux
-# machines le voient.
+# « actif » dans Teams, Discord, Slack…). Quand vous vous absentez, toutes
+# les machines le voient.
 mirror = true
 
 [hotkeys]
@@ -1178,7 +1178,7 @@ mod tests {
             .replace("[mouse]\n", "[mouse]\n# Ma note\n");
         let out = edited(&old, |c| c.screen.edge_switching = false);
         assert!(out.contains("# Ma note\n"));
-        assert!(out.contains("# contre le bord de l'écran. false = uniquement avec les raccourcis\n"));
+        assert!(out.contains("# poussant la souris contre le bord de l'écran. false = uniquement avec les\n"));
         assert!(out.contains("edge_switching = false\n"));
         assert!(out.contains("switch_to_secondary = \"Shift+F12\"\n"));
     }

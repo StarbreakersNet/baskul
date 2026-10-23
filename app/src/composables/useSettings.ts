@@ -25,6 +25,11 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 let restartFrom: number | undefined;
 let restartDeadline = 0;
 let onRestarted: ((ok: boolean) => void) | undefined;
+/** Pilotées connectées lors de la dernière vérification de la grille, et
+ * relectures restantes (l'enregistrement par Baskul peut avoir un temps de
+ * retard). */
+let peersSeen = "";
+let layoutRetries = 0;
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
 
@@ -50,6 +55,10 @@ async function poll() {
       }
     } else if (phase.value !== "ready") {
       await load();
+    } else if (newlyPlaced(s)) {
+      // Une pilotée vient d'être placée sur la grille par Baskul (première
+      // connexion) : on relit les réglages, sauf modifications en cours.
+      await load();
     }
   } catch (e) {
     if (!isOffline(e)) console.error(e);
@@ -61,6 +70,20 @@ async function poll() {
     onRestarted?.(false);
   }
   schedule();
+}
+
+/** Une pilotée connectée manque à la grille chargée (machine principale). */
+function newlyPlaced(s: DaemonStatus): boolean {
+  const names = s.peers.map((p) => p.name).join("\n");
+  if (names !== peersSeen) {
+    peersSeen = names;
+    layoutRetries = 3;
+  }
+  const c = config.value;
+  if (layoutRetries === 0 || !c || c.role !== "primary" || dirty.value) return false;
+  const missing = s.peers.some((p) => !c.layout.machines.some((m) => m.name === p.name));
+  layoutRetries = missing ? layoutRetries - 1 : 0;
+  return missing;
 }
 
 function schedule() {

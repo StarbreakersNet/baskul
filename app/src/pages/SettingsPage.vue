@@ -65,7 +65,7 @@ watch(role, (r) => {
               <connection-section :config="config" :info="info" />
             </n-tab-pane>
             <n-tab-pane v-if="role === 'primary'" name="baskul" :tab="$t('settings.tabs.switching')">
-              <switching-section :config="config" :info="info" />
+              <switching-section :config="config" :info="info" :peers="status?.peers ?? []" />
             </n-tab-pane>
             <n-tab-pane v-if="role === 'secondary'" name="souris" :tab="$t('settings.tabs.mouse')">
               <mouse-section :config="config" />

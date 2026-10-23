@@ -26,6 +26,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useI18n } from "vue-i18n";
 import logo from "../assets/logo.svg";
 import StatusBadge from "../components/StatusBadge.vue";
+import UpdateBanner from "../components/UpdateBanner.vue";
 import { useActions } from "../composables/useActions";
 import { useSettings } from "../composables/useSettings";
 import { osKey, roleKey } from "../keys";
@@ -152,6 +153,7 @@ onMounted(async () => {
         content-style="padding: 24px"
       >
         <div class="page-body">
+          <update-banner v-if="!gated" />
           <n-flex v-if="gated && phase === 'loading'" justify="center" style="padding: 80px 0">
             <n-spin />
           </n-flex>

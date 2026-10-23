@@ -1,5 +1,5 @@
-//! Géométrie des écrans : détection des bords, conversion des positions entre
-//! les deux machines.
+//! Géométrie des écrans : détection des bords, conversion des positions d'une
+//! machine à l'autre.
 //!
 //! Les coordonnées suivent la convention des deux systèmes : origine en haut à
 //! gauche de l'écran principal, y vers le bas. Windows travaille en pixels

@@ -1,6 +1,7 @@
 //! Code propre à chaque système.
 
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(any(windows, all(feature = "xcheck", target_os = "linux")))]
@@ -27,6 +28,15 @@ pub use self::linux::{early_init, fatal, first_run, open_in_editor, run};
 pub const RELAUNCH_ARG: &str = "--relaunched";
 
 static RESTART_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// Programme à relancer au redémarrage, quand ce n'est plus celui qui tourne :
+/// après une mise à jour, le programme en cours a été renommé ou déplacé, et
+/// son chemin d'origine désigne la nouvelle version.
+static RELAUNCH_EXE: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+pub fn set_relaunch_exe(exe: PathBuf) {
+    *RELAUNCH_EXE.lock().unwrap_or_else(|e| e.into_inner()) = Some(exe);
+}
 
 /// Demande de redémarrage, traitée par la boucle principale avec
 /// [`take_restart_request`] (macOS, Linux, configuration invalide).
@@ -66,7 +76,11 @@ pub fn relaunch(args: &crate::Args) -> ! {
 }
 
 fn launch_again(argv: &[String]) -> std::io::Result<()> {
-    let exe = std::env::current_exe()?;
+    let chosen = RELAUNCH_EXE.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let exe = match chosen {
+        Some(exe) => exe,
+        None => std::env::current_exe()?,
+    };
     // macOS, dans Baskul.app : relance par LaunchServices, comme depuis le
     // Finder. Un nouveau processus, et non le même relancé par `exec` : avec
     // `exec`, l'ancienne icône laissait un emplacement vide dans la barre des

@@ -421,7 +421,7 @@ fn session(
                 ))
             } else if role == s.role {
                 let role = i18n::t(if role == Role::Primary { "status.rolePrimary" } else { "status.roleSecondary" });
-                Err(i18n::tf("status.sameRole", &[("role", &role)]))
+                Err(i18n::tf("status.sameRole", &[("role", &role), ("name", &name)]))
             } else {
                 Ok((name, os, id))
             }

@@ -2,10 +2,10 @@
 //!
 //! - Machine principale : hooks bas niveau clavier/souris (`WH_KEYBOARD_LL`,
 //!   `WH_MOUSE_LL`) installés sur le thread de l'interface. Quand le curseur
-//!   part sur l'autre machine, il est recentré et caché derrière une petite
+//!   part sur une pilotée, il est recentré et caché derrière une petite
 //!   fenêtre transparente ; les événements sont alors supprimés localement et
-//!   envoyés au Mac.
-//! - Machine pilotée (sens inverse, expérimental) : injection par `SendInput`.
+//!   envoyés à la pilotée.
+//! - Machine pilotée : injection par `SendInput`.
 //! - Icône dans la zone de notification avec menu.
 //!
 //! Les touches sont capturées par **scancode** (position physique), jamais
@@ -930,7 +930,7 @@ fn reset_primary(reason: &str) {
 }
 
 // ---------------------------------------------------------------------------
-// Machine pilotée : émulation (sens inverse, expérimental)
+// Machine pilotée : émulation
 // ---------------------------------------------------------------------------
 
 struct WinEmulator {
@@ -1391,7 +1391,7 @@ fn handle_command(cmd: usize) {
         }
         ID_AUTOSTART => set_autostart(!autostart_enabled(), &args),
         ID_UPDATE => {
-            if let Err(e) = crate::update::install() {
+            if let Err(e) = crate::update::install(None) {
                 log::warn!("{e}");
             }
         }
@@ -1915,7 +1915,6 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
             services
         }
         Role::Secondary => {
-            log::warn!("Windows en machine pilotée : fonctionnement expérimental");
             let emu = WinEmulator { keys_down: HashSet::new(), buttons: [false; 5], scroll: settings.scroll.clone() };
             app::start_secondary(&settings, hooks, emu, idle_time)
         }

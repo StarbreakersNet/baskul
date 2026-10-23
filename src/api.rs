@@ -292,7 +292,7 @@ fn route(req: &Request, server: &Server) -> Response {
             crate::update::check_in_background();
             Response::json(200, crate::update::info())
         }
-        ("POST", "/api/update/install") => match crate::update::install() {
+        ("POST", "/api/update/install") => match crate::update::install(Some(server.path.clone())) {
             Ok(()) => Response::json(200, crate::update::info()),
             Err(e) => Response::error(409, &e),
         },
@@ -396,6 +396,8 @@ fn network_info() -> Value {
     json!({
         "interfaces": crate::iface::list(),
         "primaries": crate::discovery::primaries(),
+        "protocol": crate::protocol::PROTOCOL_VERSION,
+        "defaultPort": crate::protocol::DEFAULT_PORT,
     })
 }
 

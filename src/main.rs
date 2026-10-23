@@ -1,5 +1,5 @@
-//! Baskul — partage du clavier, de la souris et du presse-papiers entre un
-//! PC Windows et un Mac.
+//! Baskul — un clavier, une souris et un presse-papiers partagés entre
+//! plusieurs ordinateurs : une machine principale et des machines pilotées.
 
 // Pas de fenêtre console sous Windows (les journaux vont dans un fichier).
 #![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
@@ -234,6 +234,13 @@ fn main() {
     if created {
         log::info!("configuration créée : {}", path.display());
         platform::first_run(&path);
+    } else if update::take_reopen_settings() {
+        log::info!("mise à jour installée : réouverture de l'app de réglages");
+        let p = path.clone();
+        let _ = std::thread::Builder::new().name("baskul-reopen".into()).spawn(move || {
+            std::thread::sleep(Duration::from_millis(1500));
+            platform::open_settings(&p, false);
+        });
     }
 
     platform::run(settings, path, args);

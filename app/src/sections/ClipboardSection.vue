@@ -23,19 +23,40 @@ defineProps<{ config: BaskulConfig }>();
       <n-switch v-model:value="config.clipboard.html" :disabled="!config.clipboard.enabled" />
     </setting-row>
     <setting-row
+      :label="$t('settings.clipboard.files')"
+      :help="$t('settings.clipboard.filesHelp')"
+      :disabled="!config.clipboard.enabled"
+    >
+      <n-switch v-model:value="config.clipboard.files" :disabled="!config.clipboard.enabled" />
+    </setting-row>
+    <setting-row
       :label="$t('settings.clipboard.sensitive')"
       :help="$t('settings.clipboard.sensitiveHelp')"
       :disabled="!config.clipboard.enabled"
     >
       <n-switch v-model:value="config.clipboard.skip_sensitive" :disabled="!config.clipboard.enabled" />
     </setting-row>
-    <setting-row :label="$t('settings.clipboard.maxSize')" :disabled="!config.clipboard.enabled">
+    <setting-row
+      :label="$t('settings.clipboard.maxSize')"
+      :help="$t('settings.clipboard.maxSizeHelp')"
+      :disabled="!config.clipboard.enabled"
+    >
       <number-input
         v-model="config.clipboard.max_size_mb"
         :min="1"
         :max="1024"
         :precision="0"
         :disabled="!config.clipboard.enabled"
+        :suffix="$t('settings.clipboard.mb')"
+      />
+    </setting-row>
+    <setting-row :label="$t('settings.clipboard.maxFiles')" :disabled="!config.clipboard.enabled || !config.clipboard.files">
+      <number-input
+        v-model="config.clipboard.max_files_mb"
+        :min="1"
+        :max="65536"
+        :precision="0"
+        :disabled="!config.clipboard.enabled || !config.clipboard.files"
         :suffix="$t('settings.clipboard.mb')"
       />
     </setting-row>

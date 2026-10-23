@@ -4,7 +4,7 @@ resolver = "3"
 
 # Version commune au daemon et à l'app de réglages.
 [workspace.package]
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 license = "MIT"
 
@@ -12,7 +12,7 @@ license = "MIT"
 name = "baskul"
 version.workspace = true
 edition.workspace = true
-description = "Partage clavier, souris et presse-papiers entre Windows et macOS"
+description = "Un clavier, une souris et un presse-papiers partagés entre plusieurs ordinateurs"
 license.workspace = true
 publish = false
 

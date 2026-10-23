@@ -69,6 +69,29 @@ async fn capture_hotkey(action: String) -> Result<Value, Error> {
     call(method, "/api/hotkey/capture", None).await
 }
 
+/// Cartes réseau et machines principales trouvées sur le réseau local.
+#[tauri::command]
+async fn network_info() -> Result<Value, Error> {
+    call("GET", "/api/network", None).await
+}
+
+/// Le clavier et la souris passent sur une machine (`primary` ou un nom).
+#[tauri::command]
+async fn switch_to(to: String) -> Result<Value, Error> {
+    call("POST", "/api/switch", Some(json!({ "to": to }))).await
+}
+
+/// Mises à jour : `check` ou `install` (installation puis redémarrage).
+#[tauri::command]
+async fn update_action(action: String) -> Result<Value, Error> {
+    let path = match action.as_str() {
+        "check" => "/api/update/check",
+        "install" => "/api/update/install",
+        _ => return Err(Error::Refused(format!("action inconnue : {action}"))),
+    };
+    call("POST", path, None).await
+}
+
 #[tauri::command]
 fn start_daemon() -> Result<(), Error> {
     daemon::start().map_err(Error::Refused)
@@ -106,6 +129,9 @@ fn main() {
             read_log,
             open_log_file,
             capture_hotkey,
+            network_info,
+            switch_to,
+            update_action,
             start_daemon,
             launch_options
         ])

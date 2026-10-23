@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { NButton, NFlex, NSelect, NText, useMessage } from "naive-ui";
+import { NButton, NFlex, NSelect, NSwitch, NText, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import ChoiceGroup from "../components/ChoiceGroup.vue";
 import SettingRow from "../components/SettingRow.vue";
@@ -25,7 +25,7 @@ const commands = computed(() => {
     : props.info.os === "windows"
       ? `"${exe}"`
       : `'${exe.replace(/'/g, "'\\''")}'`;
-  return ["switch here", "switch other", "switch toggle", "status"].map((c) => ({
+  return ["switch here", "switch primary", "switch next", "switch toggle", "status"].map((c) => ({
     shown: `baskul ${c}`,
     full: `${quoted} ${c}`,
   }));
@@ -69,6 +69,9 @@ async function copy(text: string) {
           <n-button size="tiny" quaternary :title="c.full" @click="copy(c.full)">{{ $t("common.copy") }}</n-button>
         </n-flex>
       </n-flex>
+    </setting-row>
+    <setting-row :label="$t('settings.advanced.updates')" :help="$t('settings.advanced.updatesHelp')">
+      <n-switch v-model:value="config.updates.check" />
     </setting-row>
     <setting-row :label="$t('settings.advanced.logLevel')">
       <n-select v-model:value="config.log.level" :options="levels" style="width: 220px" />
