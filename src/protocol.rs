@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Incrémenté à chaque changement incompatible du protocole.
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
 
 /// Port TCP par défaut.
 pub const DEFAULT_PORT: u16 = 24870;
@@ -54,6 +54,13 @@ impl Edge {
     pub fn is_horizontal_axis(self) -> bool {
         matches!(self, Edge::Left | Edge::Right)
     }
+}
+
+/// Machine où le clavier et la souris doivent agir (commande `bascule switch`).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SwitchTo {
+    Primary,
+    Secondary,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -148,6 +155,19 @@ pub enum Message {
         id: u32,
         data: Vec<u8>,
     },
+
+    // --- Secondaire → principale ---
+    /// Commande `bascule switch` lancée sur la machine pilotée : c'est la
+    /// machine principale qui décide où agissent le clavier et la souris.
+    Switch {
+        to: SwitchTo,
+    },
+
+    // --- Dans les deux sens ---
+    /// L'utilisateur est actif sur la machine qui envoie ce message (au plus
+    /// un message toutes les quelques secondes) : celle qui le reçoit reste
+    /// active elle aussi (veille de l'écran, économiseur, statut « absent »).
+    UserActive,
 }
 
 impl Message {

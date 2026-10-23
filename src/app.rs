@@ -1,16 +1,18 @@
 //! Assemblage commun : réseau + presse-papiers + routage des messages.
 
+use crate::api;
 use crate::clipboard::{self, ClipEvent, ClipboardHandle, SystemBackend};
 use crate::config::Settings;
 use crate::crypto;
 use crate::net::{self, LinkEvent, LinkHandle, NetSettings};
-use crate::primary::{PeerEvent, RECONNECT_GRACE};
-use crate::protocol::Message;
-use crate::secondary::{Emulator, SecondaryCore};
+use crate::primary::{ACTIVITY_INTERVAL, PeerEvent, RECONNECT_GRACE};
+use crate::protocol::{Message, Role};
+use crate::secondary::{self, Emulator, SecondaryCore};
 use crossbeam_channel::{Receiver, unbounded};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 /// Fonctions du presse-papiers propres à la plateforme.
 #[derive(Clone, Copy)]
@@ -105,6 +107,13 @@ pub fn start_primary(
 ) -> (Services, Receiver<PeerEvent>) {
     let (tx, rx) = unbounded::<PeerEvent>();
     let wake = Arc::new(wake);
+    // Commande `bascule switch`, traitée comme un événement de l'autre machine.
+    let (switch_tx, switch_wake) = (tx.clone(), wake.clone());
+    api::set_switch_handler(Role::Primary, move |to| {
+        let _ = switch_tx.send(PeerEvent::Switch(to));
+        switch_wake();
+        Ok(())
+    });
     let disconnects = AtomicU64::new(0);
     let services = start_services(settings, hooks, move |ev| {
         let pe = match ev {
@@ -121,6 +130,8 @@ pub fn start_primary(
                 PeerEvent::Disconnected
             }
             LinkEvent::Message(Message::Leave { ratio }) => PeerEvent::Leave { ratio },
+            LinkEvent::Message(Message::Switch { to }) => PeerEvent::Switch(to),
+            LinkEvent::Message(Message::UserActive) => PeerEvent::UserActive,
             LinkEvent::Message(m) => {
                 log::debug!("message ignoré par la machine principale : {m:?}");
                 return;
@@ -133,22 +144,33 @@ pub fn start_primary(
 }
 
 /// Machine pilotée : les messages sont appliqués directement par
-/// l'émulateur, depuis le thread réseau.
+/// l'émulateur, depuis le thread réseau. `idle` : temps écoulé depuis la
+/// dernière entrée reçue par le système (activité partagée).
 pub fn start_secondary<E: Emulator + Send + 'static>(
     settings: &Settings,
     hooks: ClipboardHooks,
     emulator: E,
+    idle: fn() -> Option<Duration>,
 ) -> Services {
     let state = Arc::new(Mutex::new((SecondaryCore::new(settings.mouse_speed, settings.remap.clone()), emulator)));
     let link_cell: Arc<OnceLock<LinkHandle>> = Arc::new(OnceLock::new());
     let link_for_cb = link_cell.clone();
+    let mirror = settings.mirror_activity;
     let services = start_services(settings, hooks, move |ev| {
         let mut guard = state.lock().unwrap_or_else(|e| e.into_inner());
         let (core, emu) = &mut *guard;
         match ev {
             LinkEvent::Connected { .. } => {}
             LinkEvent::Disconnected => core.disconnected(emu),
+            // L'utilisateur est actif sur la machine principale.
+            LinkEvent::Message(Message::UserActive) => {
+                if mirror {
+                    secondary::note_injected();
+                    emu.keep_active();
+                }
+            }
             LinkEvent::Message(m) => {
+                secondary::note_injected();
                 if let Some(reply) = core.handle(emu, m) {
                     if let Some(link) = link_for_cb.get() {
                         link.send_input(reply);
@@ -158,7 +180,46 @@ pub fn start_secondary<E: Emulator + Send + 'static>(
         }
     });
     let _ = link_cell.set(services.link.clone());
+    // Commande `bascule switch` : transmise à la machine principale.
+    let link = services.link.clone();
+    api::set_switch_handler(Role::Secondary, move |to| {
+        if !link.is_connected() {
+            return Err("pas de connexion avec la machine principale".into());
+        }
+        link.send_input(Message::Switch { to });
+        Ok(())
+    });
+    watch_local_activity(services.link.clone(), idle);
     services
+}
+
+/// Machine pilotée : son propre clavier ou trackpad (et non les événements
+/// injectés par Bascule) compte aussi comme activité, signalée à la machine
+/// principale.
+fn watch_local_activity(link: LinkHandle, idle: fn() -> Option<Duration>) {
+    const POLL: Duration = Duration::from_secs(2);
+    let _ = std::thread::Builder::new().name("bascule-activity".into()).spawn(move || {
+        let mut sent: Option<Instant> = None;
+        loop {
+            std::thread::sleep(POLL);
+            let Some(idle) = idle() else { return };
+            if !link.is_connected() || idle >= POLL || sent.is_some_and(|t| t.elapsed() < ACTIVITY_INTERVAL) {
+                continue;
+            }
+            if is_local_input(Instant::now(), idle, secondary::injected_at()) {
+                sent = Some(Instant::now());
+                link.send_input(Message::UserActive);
+            }
+        }
+    });
+}
+
+/// La dernière entrée du système (il y a `idle`) n'est pas un événement
+/// injecté par Bascule (le dernier datant de `injected`).
+fn is_local_input(now: Instant, idle: Duration, injected: Option<Instant>) -> bool {
+    const MARGIN: Duration = Duration::from_millis(500);
+    let Some(input) = now.checked_sub(idle) else { return false };
+    injected.is_none_or(|t| input > t + MARGIN)
 }
 
 #[cfg(test)]
@@ -166,7 +227,7 @@ mod tests {
     use super::*;
     use crate::config::{Config, Endpoint, default_config_text};
     use crate::geometry::{Layout, Point, Rect};
-    use crate::protocol::{Edge, MouseButton, Role};
+    use crate::protocol::{Edge, MouseButton, Role, SwitchTo};
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
@@ -177,6 +238,7 @@ mod tests {
         Wheel(i32, i32),
         Key(u32, bool, bool),
         ReleaseAll,
+        KeepActive,
     }
 
     #[derive(Clone, Default)]
@@ -200,6 +262,9 @@ mod tests {
         }
         fn release_all(&mut self) {
             self.0.lock().unwrap().push(Ev::ReleaseAll);
+        }
+        fn keep_active(&mut self) {
+            self.0.lock().unwrap().push(Ev::KeepActive);
         }
     }
 
@@ -228,7 +293,7 @@ mod tests {
         let emu = RecEmu::default();
         let sec = settings("secondary", Endpoint::Listen(format!("127.0.0.1:{port}")));
         assert_eq!(sec.role, Role::Secondary);
-        let _secondary = start_secondary(&sec, hooks, emu.clone());
+        let secondary = start_secondary(&sec, hooks, emu.clone(), || None);
 
         let prim = settings("primary", Endpoint::Connect(format!("127.0.0.1:{port}")));
         let (primary, peer_rx) = start_primary(&prim, hooks, || {});
@@ -258,8 +323,31 @@ mod tests {
             e => panic!("{e:?}"),
         }
 
+        // Activité partagée : l'utilisateur est actif sur la machine principale.
+        link.send_input(Message::UserActive);
+        assert!(wait_for(|| emu.0.lock().unwrap().last() == Some(&Ev::KeepActive)));
+
+        // Dans l'autre sens : commande `bascule switch` lancée sur la machine
+        // pilotée, activité de son propre clavier.
+        secondary.link.send_input(Message::Switch { to: SwitchTo::Primary });
+        assert_eq!(peer_rx.recv_timeout(Duration::from_secs(5)).unwrap(), PeerEvent::Switch(SwitchTo::Primary));
+        secondary.link.send_input(Message::UserActive);
+        assert_eq!(peer_rx.recv_timeout(Duration::from_secs(5)).unwrap(), PeerEvent::UserActive);
+
         // Coupure : la machine pilotée relâche tout.
         drop(primary);
         drop(peer_rx);
+    }
+
+    #[test]
+    fn local_input_is_told_from_injected_events() {
+        let now = Instant::now();
+        let s = Duration::from_secs;
+        // Rien d'injecté : toute entrée vient de la machine elle-même.
+        assert!(is_local_input(now, s(1), None));
+        // Dernière entrée = dernier événement injecté par Bascule.
+        assert!(!is_local_input(now, s(1), Some(now - s(1))));
+        // Entrée 1 s après le dernier événement injecté : trackpad du Mac.
+        assert!(is_local_input(now, s(1), Some(now - s(2))));
     }
 }

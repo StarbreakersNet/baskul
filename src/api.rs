@@ -8,13 +8,14 @@
 //! rebinding ») : une page web ne peut ni lire ni modifier la configuration.
 
 use crate::config::{self, Config};
+use crate::protocol::{Role, SwitchTo};
 use crate::status::{self, Conn};
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const API_FILE: &str = "api.json";
@@ -33,6 +34,16 @@ struct Server {
 }
 
 static RESTART: OnceLock<fn()> = OnceLock::new();
+
+type SwitchFn = Box<dyn Fn(SwitchTo) -> Result<(), String> + Send + Sync>;
+/// Rôle de cette machine et fonction de la commande `bascule switch`.
+static SWITCH: Mutex<Option<(Role, SwitchFn)>> = Mutex::new(None);
+
+/// Fonction appelée par la commande `bascule switch` (depuis un thread du
+/// serveur), une fois la machine visée connue.
+pub fn set_switch_handler(role: Role, f: impl Fn(SwitchTo) -> Result<(), String> + Send + Sync + 'static) {
+    *SWITCH.lock().unwrap_or_else(|e| e.into_inner()) = Some((role, Box::new(f)));
+}
 
 /// Fonction appelée pour redémarrer Bascule (après un enregistrement…).
 /// Elle est appelée depuis un thread du serveur : elle doit seulement
@@ -200,7 +211,9 @@ fn write_response(stream: &mut TcpStream, resp: &Response) -> std::io::Result<()
         403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
+        409 => "Conflict",
         422 => "Unprocessable Content",
+        503 => "Service Unavailable",
         _ => "Internal Server Error",
     };
     let body = resp.body.to_string();
@@ -265,6 +278,7 @@ fn route(req: &Request, server: &Server) -> Response {
         ("POST", "/api/restart") => {
             Response { restart: can_restart, ..Response::json(200, json!({ "restart": can_restart })) }
         }
+        ("POST", "/api/switch") => switch(&req.body),
         ("POST", "/api/open-file") => {
             crate::platform::open_in_editor(&server.path);
             Response::json(200, json!({}))
@@ -299,9 +313,86 @@ fn route(req: &Request, server: &Server) -> Response {
         }
         (
             _,
-            "/api/status" | "/api/config" | "/api/restart" | "/api/open-file" | "/api/log" | "/api/open-log" | CAPTURE,
+            "/api/status" | "/api/config" | "/api/restart" | "/api/switch" | "/api/open-file" | "/api/log"
+            | "/api/open-log" | CAPTURE,
         ) => Response::error(405, "méthode non autorisée"),
         _ => Response::error(404, "introuvable"),
+    }
+}
+
+/// Commande `bascule switch` : `{"to": "primary" | "secondary" | "toggle" |
+/// "here" | "other"}`. Renvoie la machine où agissent désormais le clavier et
+/// la souris.
+fn switch(body: &[u8]) -> Response {
+    let guard = SWITCH.lock().unwrap_or_else(|e| e.into_inner());
+    let Some((role, handler)) = guard.as_ref() else {
+        return Response::error(503, "Bascule n'est pas encore prêt");
+    };
+    let to = serde_json::from_slice::<Value>(body).ok().and_then(|v| v["to"].as_str().map(str::to_owned));
+    let s = status::snapshot();
+    let Some(target) = switch_target(to.as_deref().unwrap_or_default(), *role, s.remote_active) else {
+        return Response::error(400, "cible inconnue (primary, secondary, toggle, here ou other)");
+    };
+    // La machine pilotée transmet la demande à la machine principale.
+    if !s.is_connected() && (target == SwitchTo::Secondary || *role == Role::Secondary) {
+        return Response::error(409, "pas de connexion avec l'autre machine");
+    }
+    match handler(target) {
+        Ok(()) => Response::json(200, json!({ "to": side_name(target) })),
+        Err(e) => Response::error(409, &e),
+    }
+}
+
+/// Machine visée par `bascule switch`, lancée sur une machine de rôle `role`.
+/// `remote_active` : le clavier et la souris agissent en ce moment sur la
+/// machine pilotée (même sens des deux côtés).
+fn switch_target(to: &str, role: Role, remote_active: bool) -> Option<SwitchTo> {
+    Some(match (to, role) {
+        ("primary", _) | ("here", Role::Primary) | ("other", Role::Secondary) => SwitchTo::Primary,
+        ("secondary", _) | ("here", Role::Secondary) | ("other", Role::Primary) => SwitchTo::Secondary,
+        ("toggle", _) if remote_active => SwitchTo::Primary,
+        ("toggle", _) => SwitchTo::Secondary,
+        _ => return None,
+    })
+}
+
+fn side_name(side: SwitchTo) -> &'static str {
+    match side {
+        SwitchTo::Primary => "primary",
+        SwitchTo::Secondary => "secondary",
+    }
+}
+
+/// Requête à l'API du Bascule en cours d'exécution (commandes `bascule …`).
+pub fn call(config_path: &Path, method: &str, path: &str, body: Option<&Value>) -> Result<Value, String> {
+    let not_running = || "Bascule n'est pas lancé".to_string();
+    let text = std::fs::read_to_string(api_file(config_path)).map_err(|_| not_running())?;
+    let api: Value = serde_json::from_str(&text).map_err(|_| not_running())?;
+    let (Some(port), Some(token)) = (api["port"].as_u64(), api["token"].as_str()) else {
+        return Err(not_running());
+    };
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port as u16));
+    let mut stream = TcpStream::connect_timeout(&addr, Duration::from_secs(2)).map_err(|_| not_running())?;
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
+    let body = body.map(Value::to_string).unwrap_or_default();
+    let head = format!(
+        "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nX-Bascule-Token: {token}\r\n\
+         Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    let mut resp = Vec::new();
+    stream
+        .write_all(head.as_bytes())
+        .and_then(|_| stream.write_all(body.as_bytes()))
+        .and_then(|_| stream.read_to_end(&mut resp))
+        .map_err(|e| format!("pas de réponse de Bascule : {e}"))?;
+    let resp = String::from_utf8_lossy(&resp);
+    let (head, body) = resp.split_once("\r\n\r\n").ok_or("réponse de Bascule illisible")?;
+    let status: u16 = head.get(9..12).and_then(|c| c.parse().ok()).ok_or("réponse de Bascule illisible")?;
+    let value: Value = serde_json::from_str(body).unwrap_or(Value::Null);
+    match status {
+        200 => Ok(value),
+        _ => Err(value["error"].as_str().unwrap_or("erreur inconnue").to_string()),
     }
 }
 
@@ -321,6 +412,10 @@ fn status_info(server: &Server) -> Value {
         "locked": s.locked,
         "warning": s.warning,
         "peer": s.peer.map(|p| json!({ "os": p.os, "since": p.since })),
+        "role": SWITCH.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|(r, _)| match r {
+            Role::Primary => "primary",
+            Role::Secondary => "secondary",
+        }),
         "version": crate::VERSION,
         "started": server.started,
     })
@@ -366,6 +461,8 @@ fn config_info(path: &Path) -> Value {
         "hostname": config::hostname(),
         "address": local_address(),
         "version": crate::VERSION,
+        // Pour les commandes `bascule switch …` affichées par l'app.
+        "exe": std::env::current_exe().ok().map(|p| p.display().to_string()),
     })
 }
 
@@ -518,5 +615,20 @@ mod tests {
         cfg["mouse"]["speed"] = json!(1.0);
         cfg["mouse"]["vitesse"] = json!(2);
         assert_eq!(request(port, &post, &cfg.to_string()).0, 422);
+    }
+
+    #[test]
+    fn switch_targets() {
+        use Role::{Primary as P, Secondary as S};
+        use SwitchTo::{Primary, Secondary};
+        assert_eq!(switch_target("secondary", P, false), Some(Secondary));
+        assert_eq!(switch_target("primary", S, true), Some(Primary));
+        assert_eq!(switch_target("here", S, false), Some(Secondary));
+        assert_eq!(switch_target("here", P, true), Some(Primary));
+        assert_eq!(switch_target("other", P, false), Some(Secondary));
+        assert_eq!(switch_target("other", S, true), Some(Primary));
+        assert_eq!(switch_target("toggle", P, false), Some(Secondary));
+        assert_eq!(switch_target("toggle", S, true), Some(Primary));
+        assert_eq!(switch_target("mac", P, false), None);
     }
 }

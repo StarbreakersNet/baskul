@@ -161,7 +161,9 @@
         "generate": "Generate",
         "newSecretWarning": "The new secret must also be copied to the other computer.",
         "listen": "Listening address",
-        "listenHelp": "Used when “Connect to” is empty. Rarely needs changing."
+        "listenHelp": "Used when “Connect to” is empty. Rarely needs changing.",
+        "activity": "Shared activity",
+        "activityHelp": "This computer stays active while you are active on the other one: no display sleep or screen saver, “active” status in Teams, Discord… When you step away, it notices too. Turn it on on both computers."
       },
       "switching": {
         "goToSecondary": "Go to the controlled computer",
@@ -268,7 +270,9 @@
           "debug": "Detailed",
           "trace": "Very detailed"
         },
-        "configFile": "Configuration file"
+        "configFile": "Configuration file",
+        "commands": "Commands",
+        "commandsHelp": "For other apps (Keyboard Maestro, Shortcuts, AutoHotkey…): the keyboard and mouse move to this computer (here), to the other one (other) or to the one they are not on (toggle). “status” shows Bascule's state. “Copy” gives the full command, with Bascule's path:"
       },
       "linuxNotice": "On Linux, Bascule does not share the keyboard and mouse yet: these settings have no effect here."
     },

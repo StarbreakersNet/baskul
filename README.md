@@ -103,6 +103,22 @@ Pour ne passer d'une machine à l'autre **qu'au clavier**, désactivez « Bascul
 
 Si la connexion tombe, le curseur revient tout seul sur le PC. Tout ce qui était enfoncé est relâché côté Mac.
 
+**Activité partagée.** Tant que vous êtes actif sur une machine, l'autre reste active elle aussi : pas de veille de l'écran ni d'économiseur, et le statut « actif » de Teams, Discord, Slack… est conservé. Quand vous vous absentez, les signaux cessent et chaque machine compte son inactivité comme d'habitude. Ce qui est pris en compte : ce que vous faites avec le clavier et la souris du PC (sur le PC ou sur le Mac), et le clavier ou le trackpad du Mac lui-même. Chaque machine décide pour elle-même (réglage « Activité partagée », onglet Connexion, activé par défaut).
+
+### Commandes pour d'autres applications
+
+D'autres applications (Keyboard Maestro, Raccourcis, AutoHotkey, scripts…) peuvent dire à Bascule où envoyer le clavier et la souris, depuis l'une ou l'autre machine :
+
+| Commande | Effet |
+|---|---|
+| `bascule switch primary` | Clavier et souris sur la machine principale (le PC) |
+| `bascule switch secondary` | … sur la machine pilotée (le Mac) |
+| `bascule switch here` / `other` | … sur la machine où la commande est lancée, ou sur l'autre |
+| `bascule switch toggle` | … sur celle où ils ne sont pas |
+| `bascule status` | État de Bascule, une information par ligne (`role`, `connected`, `peer`, `active`, `locked`) |
+
+Bascule doit être lancé sur la machine où la commande s'exécute ; lancée sur le Mac, la commande est transmise au PC. En cas d'erreur (Bascule pas lancé, machines pas connectées…), un message s'affiche sur la sortie d'erreur et le code de sortie vaut 1. Le chemin complet de la commande, prêt à copier, est dans les réglages (onglet Avancé). Sur le Mac : `/Applications/Bascule.app/Contents/MacOS/bascule switch here`, par exemple dans une action « Execute Shell Script » de Keyboard Maestro. Sous Windows, `bascule.exe` est une application sans console : dans un script, lancez-la avec `start /wait` pour attendre son code de sortie.
+
 ### Correspondance des touches (position physique)
 
 | Clavier du PC | Mac |
@@ -164,6 +180,7 @@ Le fichier complet et commenté est dans [`docs/config.exemple.toml`](docs/confi
 | `[hotkeys]` (PC) | `switch_to_secondary`, `return_to_primary` | Raccourcis pour aller sur le Mac (`"Shift+F12"`) et revenir sur le PC (`"Shift+F11"`) |
 | | `toggle_lock` | Raccourci de verrouillage du curseur (ex. `"ScrollLock"`) |
 | `[clipboard]` | `enabled`, `images`, `html`, `max_size_mb`, `skip_sensitive` | Presse-papiers partagé |
+| `[activity]` | `mirror = true` | Activité partagée : cette machine reste active tant que vous l'êtes sur l'autre |
 | `[ui]` | `theme = "system"` / `"light"` / `"dark"` | Thème de la fenêtre de Bascule |
 | | `language = "system"` / `"fr"` / `"en"` | Langue de Bascule (fenêtre et menus) |
 | | `tray_icon = "color"` / `"mono"` | Icône en couleurs, ou monochrome (assortie aux icônes du système) |
@@ -301,7 +318,8 @@ src/
   smooth.rs        défilement fluide (algorithme de Mac Mouse Fix, simulation du trackpad)
   icon.rs          icône (couleur ou monochrome)
   i18n.rs          traductions des menus et de l'état (locales/*.json)
-  api.rs           API locale (127.0.0.1 + jeton) pour l'app de réglages
+  api.rs           API locale (127.0.0.1 + jeton) pour l'app de réglages et les commandes
+  cli.rs           commandes `bascule switch …` et `bascule status`
   platform/
     windows.rs     hooks bas niveau, masquage du curseur, SendInput, icône
     macos.rs       CGEventPost, gestes, Verr. Maj (IOKit), CGEventTap, barre des menus
@@ -312,4 +330,4 @@ app/               app de Bascule : Tauri 2 + Vue 3 + Naive UI
   src-tauri/       commandes Tauri, client de l'API du daemon
 ```
 
-Tests : `cargo test` (99 tests, dont un test de bout en bout sur une vraie connexion TCP). Le code Windows et macOS se vérifie aussi depuis Linux avec `./scripts/xcheck.sh`.
+Tests : `cargo test` (106 tests, dont un test de bout en bout sur une vraie connexion TCP). Le code Windows et macOS se vérifie aussi depuis Linux avec `./scripts/xcheck.sh`.

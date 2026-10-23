@@ -14,6 +14,7 @@
 mod api;
 mod app;
 mod capture;
+mod cli;
 mod clipboard;
 mod config;
 mod crypto;
@@ -48,6 +49,8 @@ pub struct Args {
     pub settings: bool,
     /// Lancé par un redémarrage : attend la fin de l'instance précédente.
     pub relaunched: bool,
+    /// Commande pour Bascule en cours d'exécution (`switch`, `status`).
+    pub command: Option<cli::Command>,
 }
 
 impl Args {
@@ -61,6 +64,11 @@ impl Args {
                 }
                 "--console" => a.console = true,
                 "--settings" => a.settings = true,
+                "switch" => {
+                    let to = it.next().ok_or("switch attend une cible : primary, secondary, toggle, here ou other")?;
+                    a.command = Some(cli::Command::Switch(to));
+                }
+                "status" => a.command = Some(cli::Command::Status),
                 platform::RELAUNCH_ARG => a.relaunched = true,
                 "--print-config" => {
                     print!("{}", config::default_config_text(config::default_role(), &config::generate_secret()));
@@ -72,11 +80,17 @@ impl Args {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "bascule {VERSION}\n\nUsage : bascule [--config FICHIER] [--console] [--settings]\n\n  \
+                        "bascule {VERSION}\n\nUsage : bascule [--config FICHIER] [--console] [--settings]\n       \
+                         bascule [--config FICHIER] switch primary|secondary|toggle|here|other\n       \
+                         bascule [--config FICHIER] status\n\n  \
                          --config FICHIER  fichier de configuration (défaut : {})\n  \
                          --console         affiche aussi le journal dans le terminal\n  \
                          --settings        ouvre l'app de réglages\n  \
-                         --print-config    affiche une configuration par défaut",
+                         --print-config    affiche une configuration par défaut\n  \
+                         switch CIBLE      le clavier et la souris passent sur la machine principale\n                    \
+                         (primary), la machine pilotée (secondary), l'autre que maintenant\n                    \
+                         (toggle), celle-ci (here) ou l'autre (other)\n  \
+                         status            état de Bascule (rôle, connexion, machine active)",
                         config::default_config_path().display()
                     );
                     std::process::exit(0);
@@ -145,11 +159,17 @@ fn acquire_instance_lock(relaunched: bool) -> Result<File, LockError> {
 fn main() {
     let args = match Args::parse() {
         Ok(a) => a,
+        // Commande lancée par une autre application : erreur dans le
+        // terminal seulement.
+        Err(e) if cli::requested() => std::process::exit(cli::fail(&e)),
         Err(e) => platform::fatal(&e),
     };
     platform::early_init(&args);
 
     let path = args.config.clone().unwrap_or_else(config::default_config_path);
+    if let Some(cmd) = &args.command {
+        std::process::exit(cli::run(cmd, &path));
+    }
     if args.settings {
         platform::open_settings(&path, false);
         std::process::exit(0);

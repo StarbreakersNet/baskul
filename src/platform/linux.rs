@@ -50,7 +50,7 @@ pub fn run(settings: Settings, _config_path: PathBuf, args: Args) -> ! {
     let hooks = ClipboardHooks::NONE;
     let _services = match settings.role {
         Role::Primary => app::start_primary(&settings, hooks, || {}).0,
-        Role::Secondary => app::start_secondary(&settings, hooks, NullEmulator),
+        Role::Secondary => app::start_secondary(&settings, hooks, NullEmulator, || None),
     };
     loop {
         if super::take_restart_request() {

@@ -140,6 +140,21 @@ impl Default for ScreenCfg {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
+pub struct ActivityCfg {
+    /// Activité partagée : cette machine reste active (écran allumé, statut
+    /// « actif » dans les messageries) tant que l'utilisateur l'est sur
+    /// l'autre.
+    pub mirror: bool,
+}
+
+impl Default for ActivityCfg {
+    fn default() -> Self {
+        ActivityCfg { mirror: true }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
 pub struct MouseCfg {
     pub speed: f64,
 }
@@ -320,6 +335,8 @@ pub struct Config {
     #[serde(default)]
     pub clipboard: ClipboardCfg,
     #[serde(default)]
+    pub activity: ActivityCfg,
+    #[serde(default)]
     pub hotkeys: HotkeysCfg,
     #[serde(default)]
     pub ui: UiCfg,
@@ -352,6 +369,8 @@ pub struct Settings {
     /// Remappage HID → HID (côté machine pilotée).
     pub remap: BTreeMap<u32, u32>,
     pub clipboard: ClipboardCfg,
+    /// Cette machine reste active tant que l'utilisateur l'est sur l'autre.
+    pub mirror_activity: bool,
     pub switch_hotkey: Option<Hotkey>,
     pub return_hotkey: Option<Hotkey>,
     pub lock_hotkey: Option<Hotkey>,
@@ -435,6 +454,7 @@ impl Config {
             media_keys: self.keyboard.media_keys,
             remap,
             clipboard: self.clipboard.clone(),
+            mirror_activity: self.activity.mirror,
             switch_hotkey,
             return_hotkey,
             lock_hotkey,
@@ -706,6 +726,13 @@ max_size_mb = 32
 # Ne pas transférer les contenus marqués « sensibles » (gestionnaires de mots
 # de passe…).
 skip_sensitive = true
+
+[activity]
+# Activité partagée : tant que vous êtes actif sur l'autre machine, celle-ci
+# reste active elle aussi (pas de veille de l'écran ni d'économiseur, statut
+# « actif » dans Teams, Discord, Slack…). Quand vous vous absentez, les deux
+# machines le voient.
+mirror = true
 
 [hotkeys]
 # Format : modificateurs (Ctrl, Shift, Alt, Win / Cmd) puis une touche,

@@ -45,10 +45,12 @@ use windows_sys::Win32::System::DataExchange::{
     IsClipboardFormatAvailable, OpenClipboard, RegisterClipboardFormatW,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows_sys::Win32::System::Power::{ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED, SetThreadExecutionState};
 use windows_sys::Win32::System::Registry::{
     HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_DWORD, RRF_RT_REG_SZ, RegDeleteKeyValueW, RegGetValueW, RegSetKeyValueW,
 };
 use windows_sys::Win32::System::RemoteDesktop::{NOTIFY_FOR_THIS_SESSION, WTSRegisterSessionNotification};
+use windows_sys::Win32::System::SystemInformation::GetTickCount;
 use windows_sys::Win32::System::Threading::{
     ABOVE_NORMAL_PRIORITY_CLASS, AttachThreadInput, GetCurrentProcess, GetCurrentThread, GetCurrentThreadId,
     PROCESS_POWER_THROTTLING_CURRENT_VERSION, PROCESS_POWER_THROTTLING_EXECUTION_SPEED, PROCESS_POWER_THROTTLING_STATE,
@@ -56,12 +58,13 @@ use windows_sys::Win32::System::Threading::{
 };
 use windows_sys::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-    INPUT, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_SCANCODE,
-    MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MIDDLEDOWN,
-    MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_VIRTUALDESK,
-    MOUSEEVENTF_WHEEL, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, MOUSEINPUT, ReleaseCapture, SendInput, SetCapture,
-    VK_BROWSER_BACK, VK_BROWSER_FORWARD, VK_LCONTROL, VK_MEDIA_NEXT_TRACK, VK_MEDIA_PLAY_PAUSE, VK_MEDIA_PREV_TRACK,
-    VK_MEDIA_STOP, VK_NUMLOCK, VK_PAUSE, VK_VOLUME_DOWN, VK_VOLUME_MUTE, VK_VOLUME_UP,
+    GetLastInputInfo, INPUT, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP,
+    KEYEVENTF_SCANCODE, LASTINPUTINFO, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN,
+    MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN,
+    MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_VIRTUALDESK, MOUSEEVENTF_WHEEL, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, MOUSEINPUT,
+    ReleaseCapture, SendInput, SetCapture, VK_BROWSER_BACK, VK_BROWSER_FORWARD, VK_LCONTROL, VK_MEDIA_NEXT_TRACK,
+    VK_MEDIA_PLAY_PAUSE, VK_MEDIA_PREV_TRACK, VK_MEDIA_STOP, VK_NUMLOCK, VK_PAUSE, VK_VOLUME_DOWN, VK_VOLUME_MUTE,
+    VK_VOLUME_UP,
 };
 use windows_sys::Win32::UI::Shell::{
     NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY, NOTIFYICONDATAW, Shell_NotifyIconW, ShellExecuteW,
@@ -78,6 +81,11 @@ const WM_APP_STATUS: u32 = WM_APP + 3;
 const WM_APP_HIDE: u32 = WM_APP + 4;
 const WM_APP_SHOW: u32 = WM_APP + 5;
 const WM_APP_RESTART: u32 = WM_APP + 6;
+const WM_APP_ACTIVE: u32 = WM_APP + 7;
+
+/// Marque des entrées injectées par Bascule pour l'activité partagée : son
+/// propre crochet les laisse passer sans les traiter.
+const BASCULE_INPUT: usize = 0x4241_5343; // "BASC"
 
 const TIMER_WATCHDOG: usize = 1;
 const TIMER_REHOOK: usize = 2;
@@ -168,7 +176,8 @@ fn shell_open(file: &str, params: Option<&str>) {
 pub fn early_init(args: &Args) {
     // SAFETY: appels sans précondition.
     unsafe {
-        if args.console {
+        // Journal ou résultat d'une commande dans le terminal qui a lancé Bascule.
+        if args.console || args.command.is_some() {
             AttachConsole(ATTACH_PARENT_PROCESS);
         }
         // Coordonnées en pixels physiques sur tous les écrans, quel que soit
@@ -301,6 +310,11 @@ impl Host for WinHost {
 
     fn send(&mut self, msg: Message) {
         self.link.send_input(msg);
+    }
+
+    fn keep_active(&mut self) {
+        // Traité juste après le retour du hook (pas d'injection depuis un hook).
+        post(WM_APP_ACTIVE, 0, 0);
     }
 }
 
@@ -454,8 +468,9 @@ impl PrimaryState {
 }
 
 unsafe extern "system" fn mouse_proc(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
-    if code == HC_ACTION as i32 {
-        // SAFETY: pour WH_MOUSE_LL, lParam pointe vers un MSLLHOOKSTRUCT.
+    // SAFETY: pour WH_MOUSE_LL, lParam pointe vers un MSLLHOOKSTRUCT.
+    if code == HC_ACTION as i32 && unsafe { &*(l as *const MSLLHOOKSTRUCT) }.dwExtraInfo != BASCULE_INPUT {
+        // SAFETY: idem.
         let info = unsafe { &*(l as *const MSLLHOOKSTRUCT) };
         let d = PRIMARY.with(|p| match p.try_borrow_mut() {
             Ok(mut g) => match g.as_mut() {
@@ -697,11 +712,37 @@ fn send_input(input: INPUT) {
 }
 
 fn mouse_input(dx: i32, dy: i32, data: i32, flags: u32) {
+    mouse_input_tagged(dx, dy, data, flags, 0);
+}
+
+fn mouse_input_tagged(dx: i32, dy: i32, data: i32, flags: u32, extra: usize) {
     // SAFETY: INPUT est une structure C initialisable à zéro.
     let mut input: INPUT = unsafe { zeroed() };
     input.r#type = INPUT_MOUSE;
-    input.Anonymous.mi = MOUSEINPUT { dx, dy, mouseData: data as _, dwFlags: flags, time: 0, dwExtraInfo: 0 };
+    input.Anonymous.mi = MOUSEINPUT { dx, dy, mouseData: data as _, dwFlags: flags, time: 0, dwExtraInfo: extra };
     send_input(input);
+}
+
+/// L'utilisateur est actif sur l'autre machine : l'écran reste allumé et
+/// Windows ne compte pas d'inactivité (économiseur, verrouillage
+/// automatique, statut « absent » de Teams, Discord…).
+fn keep_active() {
+    // SAFETY: appel sans précondition.
+    unsafe { SetThreadExecutionState(ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED) };
+    // Déplacement nul : remet à zéro le délai d'inactivité de Windows.
+    mouse_input_tagged(0, 0, 0, MOUSEEVENTF_MOVE, BASCULE_INPUT);
+}
+
+/// Temps écoulé depuis la dernière entrée de Windows.
+fn idle_time() -> Option<Duration> {
+    let mut info = LASTINPUTINFO { cbSize: size_of::<LASTINPUTINFO>() as u32, dwTime: 0 };
+    // SAFETY: structure de la taille annoncée.
+    if unsafe { GetLastInputInfo(&mut info) } == 0 {
+        return None;
+    }
+    // SAFETY: appel sans précondition.
+    let now = unsafe { GetTickCount() };
+    Some(Duration::from_millis(u64::from(now.wrapping_sub(info.dwTime))))
 }
 
 fn key_input(code: u32, down: bool) {
@@ -821,6 +862,10 @@ impl Emulator for WinEmulator {
 
     fn cursor(&mut self) -> Option<Point> {
         cursor_pos()
+    }
+
+    fn keep_active(&mut self) {
+        keep_active();
     }
 }
 
@@ -1138,6 +1183,10 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) ->
             handle_command(ID_RESTART);
             0
         }
+        WM_APP_ACTIVE => {
+            keep_active();
+            0
+        }
         WM_APP_TRAY => {
             let ev = (l as u32) & 0xffff;
             if ev == WM_RBUTTONUP || ev == WM_LBUTTONUP || ev == WM_CONTEXTMENU {
@@ -1329,6 +1378,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
                 return_hotkey: settings.return_hotkey.clone(),
                 lock_hotkey: settings.lock_hotkey.clone(),
                 media_keys: settings.media_keys,
+                mirror_activity: settings.mirror_activity,
             };
             // Le crochet clavier peut relever les raccourcis pour les réglages.
             crate::capture::set_supported(true);
@@ -1353,7 +1403,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
         Role::Secondary => {
             log::warn!("Windows en machine pilotée : fonctionnement expérimental");
             let emu = WinEmulator { keys_down: HashSet::new(), buttons: [false; 5], scroll: settings.scroll.clone() };
-            app::start_secondary(&settings, hooks, emu)
+            app::start_secondary(&settings, hooks, emu, idle_time)
         }
     };
 

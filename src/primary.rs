@@ -11,9 +11,10 @@ use crate::config::MediaKeys;
 use crate::geometry::{Layout, Point};
 use crate::hotkey::Hotkey;
 use crate::keymap;
-use crate::protocol::{Edge, Message, MouseButton};
+use crate::protocol::{Edge, Message, MouseButton, SwitchTo};
 use crate::status;
 use std::collections::{HashMap, HashSet};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Decision {
@@ -50,7 +51,16 @@ pub enum PeerEvent {
     /// Fin du délai de grâce ouvert par la n-ième coupure (voir
     /// `RECONNECT_GRACE`).
     GraceOver(u64),
+    /// Commande `bascule switch`, lancée ici ou sur l'autre machine.
+    Switch(SwitchTo),
+    /// L'utilisateur est actif sur l'autre machine (son propre clavier ou
+    /// trackpad).
+    UserActive,
 }
+
+/// Intervalle minimal entre deux signaux d'activité (message à l'autre
+/// machine, ou maintien en activité de celle-ci).
+pub const ACTIVITY_INTERVAL: Duration = Duration::from_secs(10);
 
 /// Coupure pendant que l'on pilote l'autre machine : on attend ce délai
 /// avant de ramener le curseur ici. Une reconnexion entre-temps (redémarrage
@@ -70,6 +80,9 @@ pub struct PrimaryOptions {
     pub lock_hotkey: Option<Hotkey>,
     /// Machine où agissent les touches multimédia.
     pub media_keys: MediaKeys,
+    /// Activité partagée : cette machine reste active tant que l'utilisateur
+    /// l'est sur l'autre.
+    pub mirror_activity: bool,
 }
 
 /// Services fournis par la plateforme.
@@ -86,6 +99,10 @@ pub trait Host {
     fn show_cursor(&mut self, pos: Point);
     /// Envoie un message à la machine secondaire.
     fn send(&mut self, msg: Message);
+    /// L'utilisateur est actif sans que ce système le voie (clavier et souris
+    /// envoyés à l'autre machine, ou utilisés directement sur celle-ci) :
+    /// repousse la veille de l'écran, l'économiseur et le statut « absent ».
+    fn keep_active(&mut self) {}
 }
 
 pub struct PrimaryCore {
@@ -105,6 +122,10 @@ pub struct PrimaryCore {
     pressed: HashSet<u32>,
     /// Nombre de coupures (pour reconnaître le délai de grâce en cours).
     disconnects: u64,
+    /// Derniers signaux d'activité envoyés à l'autre machine, et donnés à
+    /// celle-ci.
+    peer_active_at: Option<Instant>,
+    local_active_at: Option<Instant>,
 }
 
 impl PrimaryCore {
@@ -121,6 +142,8 @@ impl PrimaryCore {
             button_targets: [None; 5],
             pressed: HashSet::new(),
             disconnects: 0,
+            peer_active_at: None,
+            local_active_at: None,
         }
     }
 
@@ -147,12 +170,42 @@ impl PrimaryCore {
     }
 
     // ------------------------------------------------------------------
+    // Activité partagée
+    // ------------------------------------------------------------------
+
+    /// Entrée réelle de l'utilisateur : la machine qui ne la reçoit pas est
+    /// tenue pour active, elle aussi. Quand l'utilisateur s'arrête, les
+    /// signaux cessent et chaque machine compte son inactivité normalement.
+    fn user_input<H: Host>(&mut self, host: &mut H) {
+        if self.mode == Mode::Remote {
+            // Clavier et souris agissent là-bas : ce système ne voit rien.
+            self.keep_active(host);
+        } else if self.connected && due(self.peer_active_at) {
+            // L'autre machine décide selon son propre réglage.
+            self.peer_active_at = Some(Instant::now());
+            host.send(Message::UserActive);
+        }
+    }
+
+    fn keep_active<H: Host>(&mut self, host: &mut H) {
+        if self.opts.mirror_activity && due(self.local_active_at) {
+            self.local_active_at = Some(Instant::now());
+            host.keep_active();
+        }
+    }
+
+    // ------------------------------------------------------------------
     // Souris
     // ------------------------------------------------------------------
 
     /// Déplacement en mode local : `cur` = position réelle du curseur,
     /// `next` = position demandée (éventuellement hors écran).
     pub fn local_motion<H: Host>(&mut self, host: &mut H, cur: Point, next: Point) -> Decision {
+        // Un déplacement nul n'est pas une activité (c'est celui de
+        // `Host::keep_active`).
+        if cur != next {
+            self.user_input(host);
+        }
         if self.mode != Mode::Local
             || !self.connected
             || !self.opts.edge_switching
@@ -208,6 +261,9 @@ impl PrimaryCore {
 
     /// Déplacement relatif en mode distant.
     pub fn remote_motion<H: Host>(&mut self, host: &mut H, dx: i32, dy: i32) {
+        if dx != 0 || dy != 0 {
+            self.user_input(host);
+        }
         if self.mode == Mode::Remote && self.connected && (dx != 0 || dy != 0) {
             host.send(Message::Motion { dx, dy });
         }
@@ -223,6 +279,7 @@ impl PrimaryCore {
     }
 
     pub fn button<H: Host>(&mut self, host: &mut H, button: MouseButton, down: bool) -> Decision {
+        self.user_input(host);
         let i = button.index();
         let target = if down {
             let t = self.button_targets[i].unwrap_or_else(|| self.input_target());
@@ -244,6 +301,7 @@ impl PrimaryCore {
     }
 
     pub fn wheel<H: Host>(&mut self, host: &mut H, dx: i32, dy: i32) -> Decision {
+        self.user_input(host);
         match self.input_target() {
             Target::Remote => {
                 host.send(Message::Wheel { dx, dy });
@@ -259,6 +317,7 @@ impl PrimaryCore {
     // ------------------------------------------------------------------
 
     pub fn key<H: Host>(&mut self, host: &mut H, code: u32, down: bool) -> Decision {
+        self.user_input(host);
         let decision = if down {
             self.pressed.insert(code);
             let (target, repeat) = match self.key_targets.get(&code) {
@@ -381,6 +440,8 @@ impl PrimaryCore {
                     self.force_local(host, p);
                 }
             }
+            PeerEvent::Switch(to) => self.switch_to(host, to),
+            PeerEvent::UserActive => self.keep_active(host),
             PeerEvent::Leave { ratio } => {
                 if self.mode != Mode::Remote {
                     return;
@@ -409,6 +470,27 @@ impl PrimaryCore {
         if self.mode == Mode::Remote {
             let p = self.exit_point;
             self.force_local(host, p);
+        }
+    }
+
+    /// Commande `bascule switch` : le clavier et la souris passent sur la
+    /// machine demandée, comme avec les raccourcis.
+    pub fn switch_to<H: Host>(&mut self, host: &mut H, to: SwitchTo) {
+        match (to, self.mode) {
+            (SwitchTo::Secondary, Mode::Local) => {
+                if !self.connected {
+                    log::warn!("commande : pas de connexion avec l'autre machine");
+                    return;
+                }
+                log::info!("commande : passage sur l'autre machine");
+                let cur = host.cursor();
+                self.go_remote(host, cur, Message::Jump { exit: self.remote_exit() });
+            }
+            (SwitchTo::Primary, Mode::Remote) => {
+                log::info!("commande : retour sur la machine principale");
+                self.come_back(host);
+            }
+            _ => {}
         }
     }
 
@@ -452,6 +534,11 @@ impl PrimaryCore {
     }
 }
 
+/// Le dernier signal d'activité date d'au moins `ACTIVITY_INTERVAL`.
+fn due(last: Option<Instant>) -> bool {
+    last.is_none_or(|t| t.elapsed() >= ACTIVITY_INTERVAL)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -464,6 +551,9 @@ mod tests {
         sent: Vec<Message>,
         hidden_at: Option<Point>,
         shown_at: Option<Point>,
+        /// Signaux d'activité envoyés à l'autre machine, et donnés à celle-ci.
+        user_active_sent: usize,
+        kept_active: usize,
     }
 
     impl Host for FakeHost {
@@ -480,7 +570,13 @@ mod tests {
             self.shown_at = Some(pos);
         }
         fn send(&mut self, msg: Message) {
-            self.sent.push(msg);
+            match msg {
+                Message::UserActive => self.user_active_sent += 1,
+                m => self.sent.push(m),
+            }
+        }
+        fn keep_active(&mut self) {
+            self.kept_active += 1;
         }
     }
 
@@ -493,6 +589,7 @@ mod tests {
             return_hotkey: Hotkey::parse("Ctrl+Alt+Shift+B").unwrap(),
             lock_hotkey: Hotkey::parse("ScrollLock").unwrap(),
             media_keys: MediaKeys::Cursor,
+            mirror_activity: true,
         });
         let mut host = FakeHost {
             layout: Layout::new(vec![Rect::new(0, 0, 1920, 1080)]),
@@ -500,6 +597,8 @@ mod tests {
             sent: vec![],
             hidden_at: None,
             shown_at: None,
+            user_active_sent: 0,
+            kept_active: 0,
         };
         core.peer_event(&mut host, PeerEvent::Connected);
         (core, host)
@@ -758,5 +857,74 @@ mod tests {
         assert_eq!(core.key(&mut host, HID_VOLUME_UP, false), Decision::Pass);
         assert_eq!(core.wheel(&mut host, 0, 120), Decision::Swallow);
         assert_eq!(host.sent.last(), Some(&Message::Wheel { dx: 0, dy: 120 }));
+    }
+
+    /// Touche A (code HID).
+    const KEY_A: u32 = 0x070004;
+
+    #[test]
+    fn switch_command_both_ways() {
+        let (mut core, mut host) = setup();
+        core.peer_event(&mut host, PeerEvent::Switch(SwitchTo::Secondary));
+        assert!(core.is_remote());
+        assert_eq!(host.sent, vec![Message::Jump { exit: Some(Edge::Left) }]);
+        assert_eq!(host.hidden_at, Some(Point::new(700, 300)));
+        // Déjà là-bas : rien de plus.
+        core.peer_event(&mut host, PeerEvent::Switch(SwitchTo::Secondary));
+        assert_eq!(host.sent.len(), 1);
+        // Retour : l'autre machine relâche tout, le curseur revient où il était.
+        core.peer_event(&mut host, PeerEvent::Switch(SwitchTo::Primary));
+        assert!(!core.is_remote());
+        assert_eq!(host.sent[1], Message::ReleaseAll);
+        assert_eq!(host.shown_at, Some(Point::new(700, 300)));
+    }
+
+    #[test]
+    fn switch_command_needs_the_other_machine() {
+        let (mut core, mut host) = setup();
+        core.peer_event(&mut host, PeerEvent::Disconnected);
+        core.peer_event(&mut host, PeerEvent::Switch(SwitchTo::Secondary));
+        assert!(!core.is_remote());
+        assert!(host.sent.is_empty());
+    }
+
+    #[test]
+    fn activity_is_mirrored_on_the_machine_without_input() {
+        let (mut core, mut host) = setup();
+        // Ici : l'autre machine est prévenue, une fois par intervalle.
+        core.key(&mut host, KEY_A, true);
+        core.key(&mut host, KEY_A, false);
+        core.local_motion(&mut host, Point::new(100, 100), Point::new(101, 100));
+        assert_eq!((host.user_active_sent, host.kept_active), (1, 0));
+        core.peer_active_at = Some(Instant::now() - ACTIVITY_INTERVAL);
+        core.wheel(&mut host, 0, 120);
+        assert_eq!(host.user_active_sent, 2);
+        // Là-bas : c'est cette machine qui ne voit plus rien passer.
+        go_remote(&mut core, &mut host);
+        core.remote_motion(&mut host, 3, 0);
+        core.button(&mut host, MouseButton::Left, true);
+        assert_eq!((host.user_active_sent, host.kept_active), (2, 1));
+        // Le déplacement nul de `keep_active` ne compte pas.
+        core.local_active_at = Some(Instant::now() - ACTIVITY_INTERVAL);
+        core.remote_motion(&mut host, 0, 0);
+        assert_eq!(host.kept_active, 1);
+        // Activité sur l'autre machine (son propre clavier) : idem.
+        core.local_active_at = Some(Instant::now() - ACTIVITY_INTERVAL);
+        core.peer_event(&mut host, PeerEvent::UserActive);
+        assert_eq!(host.kept_active, 2);
+    }
+
+    #[test]
+    fn activity_mirroring_can_be_turned_off() {
+        let (mut core, mut host) = setup();
+        core.opts.mirror_activity = false;
+        go_remote(&mut core, &mut host);
+        core.remote_motion(&mut host, 3, 0);
+        core.peer_event(&mut host, PeerEvent::UserActive);
+        assert_eq!(host.kept_active, 0);
+        // L'autre machine décide pour elle-même : elle est toujours prévenue.
+        core.peer_event(&mut host, PeerEvent::Switch(SwitchTo::Primary));
+        core.key(&mut host, KEY_A, true);
+        assert_eq!(host.user_active_sent, 1);
     }
 }

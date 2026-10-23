@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { NButton, NInput, NPopconfirm, NText, useMessage } from "naive-ui";
+import { NButton, NInput, NPopconfirm, NSwitch, NText, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import SettingRow from "../components/SettingRow.vue";
 import type { BasculeConfig, DaemonInfo } from "../types";
@@ -61,6 +61,9 @@ async function copy(text: string) {
     </setting-row>
     <setting-row :label="$t('settings.connection.listen')" :help="$t('settings.connection.listenHelp')">
       <n-input v-model:value="config.network.listen" class="mono" :input-props="{ spellcheck: false }" />
+    </setting-row>
+    <setting-row :label="$t('settings.connection.activity')" :help="$t('settings.connection.activityHelp')">
+      <n-switch v-model:value="config.activity.mirror" />
     </setting-row>
   </div>
 </template>

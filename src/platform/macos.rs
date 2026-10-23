@@ -82,6 +82,8 @@ unsafe extern "C" {
     fn CGEventSourceCreate(state: i32) -> CGEventSourceRef;
     fn CGEventSourceSetLocalEventsSuppressionInterval(source: CGEventSourceRef, seconds: f64);
     fn CGEventSourceFlagsState(state: i32) -> u64;
+    fn CGEventSourceButtonState(state: i32, button: u32) -> bool;
+    fn CGEventSourceSecondsSinceLastEventType(state: i32, ty: u32) -> f64;
     fn CGEventCreate(source: CGEventSourceRef) -> CGEventRef;
     fn CGEventCreateKeyboardEvent(source: CGEventSourceRef, keycode: u16, down: bool) -> CGEventRef;
     fn CGEventCreateMouseEvent(source: CGEventSourceRef, ty: u32, pos: CGPoint, button: u32) -> CGEventRef;
@@ -1014,6 +1016,56 @@ impl Emulator for MacEmulator {
     fn cursor(&mut self) -> Option<Point> {
         current_cursor()
     }
+
+    fn keep_active(&mut self) {
+        keep_active();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Activité partagée
+// ---------------------------------------------------------------------------
+
+/// L'utilisateur est actif sur l'autre machine : l'écran du Mac reste allumé
+/// (ni veille ni économiseur), et les apps qui mesurent le temps écoulé
+/// depuis le dernier événement (Teams, Discord, Slack…) le voient présent.
+fn keep_active() {
+    let name = cf_string(c"Bascule");
+    let mut id = 0u32;
+    // SAFETY: chaîne CF valide, libérée ensuite ; événement créé, envoyé
+    // puis libéré.
+    unsafe {
+        IOPMAssertionDeclareUserActivity(name, 0, &mut id);
+        CFRelease(name);
+        // Événement neutre : déplacement nul du curseur (pas pendant un clic
+        // fait sur le Mac lui-même).
+        if (0..3).any(|b| CGEventSourceButtonState(SOURCE_HID_STATE, b)) {
+            return;
+        }
+        let here = CGEventCreate(null_mut());
+        if here.is_null() {
+            return;
+        }
+        let pos = CGEventGetLocation(here);
+        CFRelease(here);
+        let source = CGEventSourceCreate(SOURCE_HID_STATE);
+        let ev = CGEventCreateMouseEvent(source, EV_MOUSE_MOVED, pos, 0);
+        if !ev.is_null() {
+            CGEventPost(TAP_HID, ev);
+            CFRelease(ev);
+        }
+        if !source.is_null() {
+            CFRelease(source);
+        }
+    }
+}
+
+/// Temps écoulé depuis la dernière entrée du Mac (clavier, souris, trackpad).
+fn idle_time() -> Option<Duration> {
+    const ANY_INPUT: u32 = !0;
+    // SAFETY: fonction sans précondition.
+    let s = unsafe { CGEventSourceSecondsSinceLastEventType(SOURCE_HID_STATE, ANY_INPUT) };
+    (s.is_finite() && s >= 0.0).then(|| Duration::from_secs_f64(s))
 }
 
 // ---------------------------------------------------------------------------
@@ -1139,6 +1191,10 @@ impl Host for MacHost {
 
     fn send(&mut self, msg: Message) {
         self.link.send_input(msg);
+    }
+
+    fn keep_active(&mut self) {
+        keep_active();
     }
 }
 
@@ -1914,7 +1970,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
                 unsafe { CGRequestPostEventAccess() };
                 status::set_warning(Some(i18n::t("status.needAccessibility")));
             }
-            app::start_secondary(&settings, hooks, MacEmulator::new(&settings))
+            app::start_secondary(&settings, hooks, MacEmulator::new(&settings), idle_time)
         }
         Role::Primary => {
             log::warn!("macOS en machine principale : fonctionnement expérimental");
@@ -1955,6 +2011,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
                 return_hotkey: settings.return_hotkey.clone(),
                 lock_hotkey: settings.lock_hotkey.clone(),
                 media_keys: settings.media_keys,
+                mirror_activity: settings.mirror_activity,
             };
             // Le crochet clavier peut relever les raccourcis pour les réglages.
             crate::capture::set_supported(true);

@@ -7,6 +7,7 @@ use crate::geometry::{Layout, Point, Step};
 use crate::protocol::{Edge, Message, MouseButton};
 use crate::status;
 use std::collections::BTreeMap;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 /// Injection des événements dans le système local.
@@ -29,6 +30,21 @@ pub trait Emulator {
     fn cursor(&mut self) -> Option<Point> {
         None
     }
+    /// L'utilisateur est actif sur la machine principale : repousse la veille
+    /// de l'écran, l'économiseur et le statut « absent » des messageries.
+    fn keep_active(&mut self) {}
+}
+
+/// Dernier événement injecté par Bascule sur cette machine : ce qui suit
+/// vient de son propre clavier ou trackpad.
+static INJECTED_AT: Mutex<Option<Instant>> = Mutex::new(None);
+
+pub fn note_injected() {
+    *INJECTED_AT.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
+}
+
+pub fn injected_at() -> Option<Instant> {
+    *INJECTED_AT.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 /// Si le curseur a été déplacé localement (trackpad du Mac…) depuis notre

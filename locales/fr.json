@@ -161,7 +161,9 @@
         "generate": "Générer",
         "newSecretWarning": "Le nouveau secret devra aussi être recopié sur l'autre machine.",
         "listen": "Adresse d'écoute",
-        "listenHelp": "Utilisée quand « Se connecter à » est vide. Rarement à changer."
+        "listenHelp": "Utilisée quand « Se connecter à » est vide. Rarement à changer.",
+        "activity": "Activité partagée",
+        "activityHelp": "Cette machine reste active tant que vous l'êtes sur l'autre : pas de veille de l'écran ni d'économiseur, statut « actif » dans Teams, Discord… Quand vous vous absentez, elle le voit aussi. À activer sur les deux machines."
       },
       "switching": {
         "goToSecondary": "Aller sur la machine pilotée",
@@ -268,7 +270,9 @@
           "debug": "Détaillé",
           "trace": "Très détaillé"
         },
-        "configFile": "Fichier de configuration"
+        "configFile": "Fichier de configuration",
+        "commands": "Commandes",
+        "commandsHelp": "Pour d'autres applications (Keyboard Maestro, Raccourcis, AutoHotkey…) : le clavier et la souris passent sur cette machine (here), sur l'autre (other) ou sur celle où ils ne sont pas (toggle). « status » donne l'état de Bascule. « Copier » donne la commande complète, avec le chemin de Bascule :"
       },
       "linuxNotice": "Sous Linux, Bascule ne partage pas encore le clavier et la souris : ces réglages n'ont pas d'effet ici."
     },

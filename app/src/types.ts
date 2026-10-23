@@ -24,6 +24,7 @@ export interface BasculeConfig {
   buttons: { side_buttons: "buttons" | "swipe" };
   keyboard: { iso_swap: "auto" | "on" | "off"; media_keys: "cursor" | "primary" | "secondary"; remap: Record<string, string> };
   clipboard: { enabled: boolean; images: boolean; html: boolean; max_size_mb: number; skip_sensitive: boolean };
+  activity: { mirror: boolean };
   hotkeys: { switch_to_secondary: string; return_to_primary: string; toggle_lock: string };
   ui: { theme: "system" | "light" | "dark"; language: "system" | "fr" | "en"; tray_icon: "color" | "mono" };
   log: { level: string };
@@ -40,6 +41,8 @@ export interface DaemonInfo {
   /** Adresse IP de cette machine sur le réseau local. */
   address: string | null;
   version: string;
+  /** Exécutable de Bascule (commandes `bascule switch …`). */
+  exe: string | null;
 }
 
 /** Réponse de `daemon_status`. */

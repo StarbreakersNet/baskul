@@ -101,6 +101,13 @@ max_size_mb = 32
 # de passe…).
 skip_sensitive = true
 
+[activity]
+# Activité partagée : tant que vous êtes actif sur l'autre machine, celle-ci
+# reste active elle aussi (pas de veille de l'écran ni d'économiseur, statut
+# « actif » dans Teams, Discord, Slack…). Quand vous vous absentez, les deux
+# machines le voient.
+mirror = true
+
 [hotkeys]
 # Format : modificateurs (Ctrl, Shift, Alt, Win / Cmd) puis une touche,
 # séparés par « + ». Exemples : "Shift+F12", "Ctrl+Alt+B". Vide = désactivé.
