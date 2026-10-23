@@ -46,6 +46,8 @@ pub struct Args {
     pub console: bool,
     /// Ouvre seulement l'app de réglages.
     pub settings: bool,
+    /// Lancé par un redémarrage : attend la fin de l'instance précédente.
+    pub relaunched: bool,
 }
 
 impl Args {
@@ -59,6 +61,7 @@ impl Args {
                 }
                 "--console" => a.console = true,
                 "--settings" => a.settings = true,
+                platform::RELAUNCH_ARG => a.relaunched = true,
                 "--print-config" => {
                     print!("{}", config::default_config_text(config::default_role(), &config::generate_secret()));
                     std::process::exit(0);
@@ -108,7 +111,7 @@ enum LockError {
 
 /// Empêche deux instances simultanées. Un redémarrage attend que l'instance
 /// précédente se termine ; un lancement par l'utilisateur s'arrête aussitôt.
-fn acquire_instance_lock() -> Result<File, LockError> {
+fn acquire_instance_lock(relaunched: bool) -> Result<File, LockError> {
     let dir = config::config_dir();
     let _ = std::fs::create_dir_all(&dir);
     let path = dir.join("bascule.lock");
@@ -118,7 +121,6 @@ fn acquire_instance_lock() -> Result<File, LockError> {
         .write(true)
         .open(&path)
         .map_err(|e| LockError::Other(format!("impossible de créer {} : {e}", path.display())))?;
-    let relaunched = std::env::var_os(platform::RELAUNCH_ENV).is_some();
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         match file.try_lock() {
@@ -152,7 +154,7 @@ fn main() {
         platform::open_settings(&path, false);
         std::process::exit(0);
     }
-    let _lock = match acquire_instance_lock() {
+    let _lock = match acquire_instance_lock(args.relaunched) {
         Ok(f) => f,
         // Bascule tourne déjà : on ouvre ses réglages.
         Err(LockError::Running) => {

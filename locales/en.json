@@ -207,6 +207,8 @@
         "smoothnessHelp": "How long scrolling glides after each notch. Same settings as Mac Mouse Fix.",
         "regular": "Regular",
         "high": "High",
+        "precision": "Precise",
+        "precisionHelp": "A single notch scrolls only 10 pixels; quick notches still accelerate (Mac Mouse Fix option).",
         "trackpad": "Trackpad simulation",
         "trackpadHelp": "Scrolling is sent as a trackpad gesture followed by its momentum: bounce at the end of pages, momentum handled by apps… (Mac Mouse Fix option).",
         "linesPerNotch": "Lines per notch",

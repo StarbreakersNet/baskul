@@ -8,6 +8,7 @@ use crate::primary::{PeerEvent, RECONNECT_GRACE};
 use crate::protocol::Message;
 use crate::secondary::{Emulator, SecondaryCore};
 use crossbeam_channel::{Receiver, unbounded};
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -16,6 +17,24 @@ use std::sync::{Arc, Mutex, OnceLock};
 pub struct ClipboardHooks {
     pub sequence: fn() -> Option<u64>,
     pub sensitive: fn() -> bool,
+    /// Image du presse-papiers en PNG, lue par le système (macOS : PNG
+    /// d'origine ou conversion native du TIFF).
+    pub image: fn() -> Option<Vec<u8>>,
+    /// Fichier image converti en PNG par le système (macOS : HEIC compris).
+    pub image_file: fn(&Path) -> Option<Vec<u8>>,
+    /// Formats présents dans le presse-papiers, pour le journal.
+    pub formats: fn() -> Vec<String>,
+}
+
+impl ClipboardHooks {
+    /// Aucune fonction propre à la plateforme : tout passe par arboard.
+    pub const NONE: ClipboardHooks = ClipboardHooks {
+        sequence: || None,
+        sensitive: || false,
+        image: || None,
+        image_file: |_| None,
+        formats: Vec::new,
+    };
 }
 
 pub struct Services {
@@ -68,10 +87,7 @@ pub fn start_services(
             }
         },
     );
-    let seq = hooks.sequence;
-    let sensitive = hooks.sensitive;
-    let clipboard =
-        clipboard::start(move || SystemBackend::new(seq, sensitive), settings.clipboard.clone(), link.clone());
+    let clipboard = clipboard::start(move || SystemBackend::new(hooks), settings.clipboard.clone(), link.clone());
     let _ = clip_cell.set(clipboard.clone());
     // Si la connexion s'est établie avant que le presse-papiers soit prêt.
     if link.is_connected() {
@@ -207,7 +223,7 @@ mod tests {
     #[test]
     fn primary_and_secondary_end_to_end() {
         let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-        let hooks = ClipboardHooks { sequence: || None, sensitive: || false };
+        let hooks = ClipboardHooks::NONE;
 
         let emu = RecEmu::default();
         let sec = settings("secondary", Endpoint::Listen(format!("127.0.0.1:{port}")));

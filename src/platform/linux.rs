@@ -47,7 +47,7 @@ impl Emulator for NullEmulator {
 pub fn run(settings: Settings, _config_path: PathBuf, args: Args) -> ! {
     log::warn!("Linux : partage du clavier et de la souris non pris en charge (connexion, presse-papiers et réglages)");
     crate::api::set_restart_handler(super::request_restart);
-    let hooks = ClipboardHooks { sequence: || None, sensitive: || false };
+    let hooks = ClipboardHooks::NONE;
     let _services = match settings.role {
         Role::Primary => app::start_primary(&settings, hooks, || {}).0,
         Role::Secondary => app::start_secondary(&settings, hooks, NullEmulator),

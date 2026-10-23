@@ -16,6 +16,7 @@ export interface BasculeConfig {
     pixels_per_notch: number;
     smooth_speed: "low" | "medium" | "high";
     smoothness: "regular" | "high";
+    smooth_precision: boolean;
     trackpad_simulation: boolean;
     invert_vertical: boolean;
     invert_horizontal: boolean;

@@ -49,6 +49,9 @@ const mode = computed(() => props.config.scroll.mode);
           ]"
         />
       </setting-row>
+      <setting-row :label="$t('settings.mouse.precision')" :help="$t('settings.mouse.precisionHelp')">
+        <n-switch v-model:value="config.scroll.smooth_precision" />
+      </setting-row>
       <setting-row
         v-if="config.scroll.smoothness === 'high'"
         :label="$t('settings.mouse.trackpad')"

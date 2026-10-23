@@ -11,8 +11,10 @@
 //!   un changement de sens arrête net le défilement.
 //!
 //! Les constantes viennent de Mac Mouse Fix (ScrollConfig.swift,
-//! ScrollAnalyzer.m, Scroll.m) ; seule la courbe du « fast scroll » est une
-//! approximation. Comme Mac Mouse Fix, on produit des défilements continus au
+//! ScrollAnalyzer.m, Scroll.m, BezierCappedAccelerationCurve.swift) ; seule
+//! la courbe du « fast scroll » est une approximation. L'option « Précision »
+//! réduit à 10 pixels un cran isolé, en gardant l'accélération des crans
+//! rapprochés. Comme Mac Mouse Fix, on produit des défilements continus au
 //! pixel ; avec la simulation du trackpad (GestureScrollSimulator.m), la
 //! phase à vitesse constante devient un geste à deux doigts et le freinage
 //! l'élan qui suit (« momentum ») : les apps réagissent comme avec un
@@ -98,13 +100,31 @@ const TAP: [Event; 2] = [
     Event::Gesture { v: 0, h: 0, phase: GesturePhase::Cancelled },
 ];
 
+/// Réglages du défilement fluide.
+#[derive(Debug, Clone, Copy)]
+pub struct Options {
+    pub speed: SmoothSpeed,
+    pub smoothness: Smoothness,
+    /// Option « Précision » de Mac Mouse Fix.
+    pub precise: bool,
+    /// Simulation du trackpad : gestes et élan au lieu de défilements simples.
+    pub trackpad: bool,
+}
+
+/// Hauteur et largeur d'écran (points) pour lesquelles les distances sont
+/// prévues ; Mac Mouse Fix les augmente un peu sur un écran plus grand.
+const BASE_SCREEN: (f64, f64) = (1920.0, 1080.0);
+/// Part de la distance maximale qui suit la taille de l'écran.
+const SCREEN_WEIGHT: f64 = 0.1;
+
 /// Paramètres dérivés des réglages.
 #[derive(Debug, Clone, Copy)]
 struct Params {
     /// Distance (px) d'un cran isolé, puis des crans les plus rapides.
     min_px: f64,
     max_px: f64,
-    /// Bombement de la courbe d'accélération (0 = droite).
+    /// Bombement de la courbe d'accélération (0 = droite) : un bombement
+    /// élevé fait aller plus loin les crans de vitesse moyenne.
     curvature: f64,
     /// Durée (s) de la phase à vitesse constante, crans lents → rapides.
     base_slow: f64,
@@ -122,17 +142,17 @@ struct Params {
 }
 
 impl Params {
-    fn new(speed: SmoothSpeed, smoothness: Smoothness) -> Params {
+    fn new(speed: SmoothSpeed, smoothness: Smoothness, precise: bool) -> Params {
         let i = match speed {
             SmoothSpeed::Low => 0,
             SmoothSpeed::Medium => 1,
             SmoothSpeed::High => 2,
         };
-        match smoothness {
+        let mut p = match smoothness {
             Smoothness::Regular => Params {
                 min_px: [30.0, 60.0, 120.0][i],
                 max_px: [90.0, 120.0, 180.0][i],
-                curvature: [0.25, 0.0, 0.0][i],
+                curvature: if precise { [0.75, 0.75, 0.25][i] } else { [0.25, 0.0, 0.0][i] },
                 base_slow: 0.180,
                 base_fast: 0.110,
                 drag_coef: 23.0,
@@ -145,7 +165,7 @@ impl Params {
             Smoothness::High => Params {
                 min_px: [60.0, 90.0, 150.0][i],
                 max_px: [120.0, 180.0, 240.0][i],
-                curvature: 0.0,
+                curvature: if precise { [1.5, 1.25, 0.75][i] } else { 0.0 },
                 base_slow: 0.220,
                 base_fast: 0.220,
                 drag_coef: 40.0,
@@ -153,18 +173,24 @@ impl Params {
                 swipe_max_pause: 0.600,
                 swipe_min_speed: 12.0,
                 fast_threshold: 2.0,
-                slow_start: true,
+                // Avec la précision, les petits gestes rapides sont déjà courts.
+                slow_start: !precise,
             },
+        };
+        if precise {
+            p.min_px = 10.0;
         }
+        p
     }
 
     /// Distance d'un cran selon l'intervalle (lissé) entre les crans.
-    fn tick_px(&self, interval: f64) -> f64 {
+    /// `screen` : taille de l'écran rapportée à `BASE_SCREEN` (axe du défilement).
+    fn tick_px(&self, interval: f64, screen: f64) -> f64 {
         let x = 1.0 / interval.max(ACCELERATION_END);
         let (x0, x1) = (1.0 / TICK_INTERVAL_MAX, 1.0 / ACCELERATION_END);
         let u = ((x - x0) / (x1 - x0)).clamp(0.0, 1.0);
-        let shape = u + self.curvature * u * (1.0 - u);
-        self.min_px + (self.max_px - self.min_px) * shape
+        let max = self.max_px * (1.0 - SCREEN_WEIGHT + SCREEN_WEIGHT * screen);
+        self.min_px + (max - self.min_px) * accel_shape(self.curvature, u)
     }
 
     /// Durée de la phase à vitesse constante : elle raccourcit quand la
@@ -209,6 +235,46 @@ impl Params {
         let (c, e) = (self.drag_coef, self.drag_exp);
         if e == 1.0 { v * (-c * s).exp() } else { (v.powf(1.0 - e) - (1.0 - e) * c * s).max(0.0).powf(1.0 / (1.0 - e)) }
     }
+}
+
+/// Courbe d'accélération de Mac Mouse Fix (BezierCappedAccelerationCurve),
+/// ramenée à [0, 1] × [0, 1] : courbe de Bézier dont le premier point de
+/// contrôle est en bas et les suivants en haut, espacés de 1 / (bombement + 1)
+/// sur l'axe horizontal (le dernier ramené à 1).
+fn accel_shape(curvature: f64, u: f64) -> f64 {
+    let degree = curvature + 1.0;
+    let mut xs = vec![0.0];
+    let mut i = 1.0;
+    loop {
+        xs.push((i / degree).min(1.0));
+        if i >= degree {
+            break;
+        }
+        i += 1.0;
+    }
+    // Abscisses croissantes : x(t) croît, on cherche t tel que x(t) = u.
+    let (mut lo, mut hi) = (0.0, 1.0);
+    for _ in 0..50 {
+        let t = (lo + hi) / 2.0;
+        if bezier(&xs, t) < u {
+            lo = t;
+        } else {
+            hi = t;
+        }
+    }
+    // Ordonnées 0, 1, 1… : 1 − (1 − t)^n.
+    1.0 - (1.0 - (lo + hi) / 2.0).powi(xs.len() as i32 - 1)
+}
+
+/// Courbe de Bézier à une dimension (algorithme de De Casteljau).
+fn bezier(points: &[f64], t: f64) -> f64 {
+    let mut p = points.to_vec();
+    for n in (1..p.len()).rev() {
+        for k in 0..n {
+            p[k] += (p[k + 1] - p[k]) * t;
+        }
+    }
+    p[0]
 }
 
 /// Mesure du rythme des crans (ScrollAnalyzer de Mac Mouse Fix).
@@ -340,18 +406,28 @@ pub struct Scroller {
     part: Option<Part>,
     /// Événements à envoyer à la prochaine image (arrêt net).
     pending: Vec<Event>,
+    /// Largeur et hauteur de l'écran rapportées à `BASE_SCREEN`.
+    screen: (f64, f64),
 }
 
 impl Scroller {
-    pub fn new(speed: SmoothSpeed, smoothness: Smoothness, trackpad: bool) -> Scroller {
+    pub fn new(o: Options) -> Scroller {
         Scroller {
-            params: Params::new(speed, smoothness),
+            params: Params::new(o.speed, o.smoothness, o.precise),
             analyzer: Analyzer::default(),
             anim: None,
             carry: 0.0,
-            trackpad,
+            trackpad: o.trackpad,
             part: None,
             pending: vec![],
+            screen: (1.0, 1.0),
+        }
+    }
+
+    /// Taille (points) de l'écran sous le pointeur.
+    pub fn set_screen(&mut self, width: f64, height: f64) {
+        if width > 0.0 && height > 0.0 {
+            self.screen = (width / BASE_SCREEN.0, height / BASE_SCREEN.1);
         }
     }
 
@@ -380,7 +456,8 @@ impl Scroller {
                 0.0
             }
         };
-        let px = p.tick_px(a.interval) * weight * p.fast_scroll(a.swipes);
+        let screen = if matches!(dir, Dir::Left | Dir::Right) { self.screen.0 } else { self.screen.1 };
+        let px = p.tick_px(a.interval, screen) * weight * p.fast_scroll(a.swipes);
         self.anim = Some(Animation::new(&p, now, dir, px + left, p.base_duration(a.interval)));
     }
 
@@ -501,8 +578,12 @@ mod tests {
         frames.iter().map(|f| f.0).sum()
     }
 
+    fn scroller(speed: SmoothSpeed, smoothness: Smoothness, precise: bool, trackpad: bool) -> Scroller {
+        Scroller::new(Options { speed, smoothness, precise, trackpad })
+    }
+
     fn regular() -> Scroller {
-        Scroller::new(SmoothSpeed::Medium, Smoothness::Regular, false)
+        scroller(SmoothSpeed::Medium, Smoothness::Regular, false, false)
     }
 
     #[test]
@@ -602,7 +683,7 @@ mod tests {
 
     #[test]
     fn high_smoothness_glides_longer() {
-        let mut s = Scroller::new(SmoothSpeed::Medium, Smoothness::High, false);
+        let mut s = scroller(SmoothSpeed::Medium, Smoothness::High, false, false);
         let frames = simulate(&mut s, &[(0, Dir::Up, 1.0)]);
         assert_eq!(vertical(&frames), 90);
         assert!(frames.len() * 8 > 320, "{} ms", frames.len() * 8);
@@ -610,17 +691,68 @@ mod tests {
 
     #[test]
     fn speed_setting_scales_distance() {
-        let low =
-            vertical(&simulate(&mut Scroller::new(SmoothSpeed::Low, Smoothness::Regular, false), &[(0, Dir::Up, 1.0)]));
-        let high = vertical(&simulate(
-            &mut Scroller::new(SmoothSpeed::High, Smoothness::Regular, false),
-            &[(0, Dir::Up, 1.0)],
-        ));
-        assert_eq!((low, high), (30, 120));
+        let one =
+            |speed| vertical(&simulate(&mut scroller(speed, Smoothness::Regular, false, false), &[(0, Dir::Up, 1.0)]));
+        assert_eq!((one(SmoothSpeed::Low), one(SmoothSpeed::High)), (30, 120));
+    }
+
+    #[test]
+    fn acceleration_curve_matches_mac_mouse_fix() {
+        // Sans bombement : droite.
+        for u in [0.0, 0.3, 0.5, 1.0] {
+            assert!((accel_shape(0.0, u) - u).abs() < 1e-9);
+        }
+        // Bombement entier n − 1 : 1 − (1 − u)^n (points équidistants).
+        for u in [0.2, 0.5, 0.8] {
+            assert!((accel_shape(1.0, u) - (1.0 - (1.0 - u).powi(2))).abs() < 1e-9);
+            assert!((accel_shape(2.0, u) - (1.0 - (1.0 - u).powi(3))).abs() < 1e-9);
+        }
+        // Bombement 0,75 : points (0, 0), (4/7, 1), (1, 1). À t = 0,5 :
+        // x = 2 · 0,5 · 0,5 · 4/7 + 0,25 = 0,5357…, y = 0,75.
+        assert!((accel_shape(0.75, 0.25 + 2.0 / 7.0) - 0.75).abs() < 1e-9);
+        // Croissante, de 0 à 1, au-dessus de la droite.
+        let mut prev = 0.0;
+        for k in 0..=100 {
+            let u = k as f64 / 100.0;
+            let y = accel_shape(1.25, u);
+            assert!(y >= prev - 1e-12 && y >= u - 1e-9, "{u} → {y}");
+            prev = y;
+        }
+        assert!((prev - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn precision_shortens_single_notches_only() {
+        let precise = || scroller(SmoothSpeed::Medium, Smoothness::High, true, false);
+        // Cran isolé : 10 pixels.
+        assert_eq!(vertical(&simulate(&mut precise(), &[(0, Dir::Up, 1.0)])), 10);
+        // Crans rapides : l'accélération reste (même distance maximale).
+        let p = precise().params;
+        let normal = scroller(SmoothSpeed::Medium, Smoothness::High, false, false).params;
+        assert!((p.tick_px(ACCELERATION_END, 1.0) - normal.tick_px(ACCELERATION_END, 1.0)).abs() < 1e-9);
+        // Vitesse moyenne : la courbe bombée relève la distance.
+        let mid = 0.040;
+        let linear = 10.0 + (180.0 - 10.0) * (1.0 / mid - 6.25) / (1.0 / ACCELERATION_END - 6.25);
+        assert!(p.tick_px(mid, 1.0) > linear + 10.0, "{}", p.tick_px(mid, 1.0));
+        // Pas de démarrage progressif en douceur élevée avec la précision.
+        assert!(!p.slow_start && normal.slow_start);
+    }
+
+    #[test]
+    fn bigger_screens_scroll_a_bit_further() {
+        let mut s = regular();
+        s.set_screen(2560.0, 1440.0);
+        let p = s.params;
+        let (w, h) = s.screen;
+        // Distance maximale : 120 × (0,9 + 0,1 × 1440 / 1080) = 124.
+        assert!((p.tick_px(ACCELERATION_END, h) - 124.0).abs() < 1e-9);
+        assert!((p.tick_px(ACCELERATION_END, w) - 120.0 * (0.9 + 0.1 * 2560.0 / 1920.0)).abs() < 1e-9);
+        // Un cran isolé ne change pas.
+        assert!((p.tick_px(TICK_INTERVAL_MAX, h) - 60.0).abs() < 1e-9);
     }
 
     fn trackpad() -> Scroller {
-        Scroller::new(SmoothSpeed::Medium, Smoothness::High, true)
+        scroller(SmoothSpeed::Medium, Smoothness::High, false, true)
     }
 
     fn phases(evs: &[Event]) -> Vec<String> {

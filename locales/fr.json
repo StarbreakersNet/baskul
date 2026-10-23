@@ -207,6 +207,8 @@
         "smoothnessHelp": "Durée de l'élan après chaque cran. Mêmes réglages que dans Mac Mouse Fix.",
         "regular": "Normale",
         "high": "Élevée",
+        "precision": "Précision",
+        "precisionHelp": "Un cran isolé ne fait défiler que 10 pixels ; les crans rapprochés accélèrent toujours (option de Mac Mouse Fix).",
         "trackpad": "Simulation du trackpad",
         "trackpadHelp": "Défilement envoyé comme un geste de trackpad suivi de son élan : rebond en bout de page, élan géré par les apps… (option de Mac Mouse Fix).",
         "linesPerNotch": "Lignes par cran",

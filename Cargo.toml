@@ -4,7 +4,7 @@ resolver = "3"
 
 # Version commune au daemon et à l'app de réglages.
 [workspace.package]
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
 license = "MIT"
 
@@ -27,6 +27,7 @@ chrono = { version = "0.4.45", default-features = false, features = ["clock", "s
 crossbeam-channel = "0.5.17"
 dirs = "7.0.0"
 getrandom = "0.4.3"
+image = { version = "0.25.10", default-features = false, features = ["bmp", "gif", "jpeg", "png", "tiff", "webp"] }
 log = "0.4.34"
 png = "0.18.1"
 postcard = { version = "1.1.3", features = ["use-std"] }

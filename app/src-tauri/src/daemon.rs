@@ -91,10 +91,7 @@ pub fn start() -> Result<(), String> {
     if let Some(config) = std::env::var_os("BASCULE_CONFIG") {
         cmd.arg("--config").arg(config);
     }
-    let mut child = cmd
-        .env_remove("BASCULE_RELAUNCH")
-        .spawn()
-        .map_err(|e| format!("lancement de {} impossible : {e}", daemon.display()))?;
+    let mut child = cmd.spawn().map_err(|e| format!("lancement de {} impossible : {e}", daemon.display()))?;
     // On attend sa fin pour ne pas laisser de processus zombie.
     std::thread::spawn(move || child.wait());
     Ok(())

@@ -6,7 +6,7 @@ Bascule partage **le clavier, la souris et le presse-papiers** de votre PC Windo
 - **Pas de bug des touches mortes**, contrairement à Deskflow / Synergy (voir [plus bas](#pourquoi-pas-de-bug-des-touches-mortes)). `^` puis `e` donne `ê`, et `¨` puis `i` donne `ï`.
 - Les **2 boutons latéraux de la souris (4/5)** sont transmis. Ils peuvent aussi devenir un geste « précédent / suivant » compris par Safari, le Finder, Xcode…
 - La **molette** est réglable : défilement par lignes ou au pixel, vitesse, inversion.
-- Le **presse-papiers** est partagé dans les deux sens : texte, texte mis en forme (HTML), images. Les mots de passe copiés depuis un gestionnaire de mots de passe sont ignorés.
+- Le **presse-papiers** est partagé dans les deux sens : texte, texte mis en forme (HTML), images. Une image copiée en tant que fichier (Finder, Explorateur : PNG, JPEG, GIF, BMP, TIFF, WebP, et HEIC sur Mac) est envoyée comme image. Les mots de passe copiés depuis un gestionnaire de mots de passe sont ignorés ; un contenu non transmis (plusieurs fichiers, format inconnu…) est signalé dans le journal.
 - La liaison est **chiffrée** (protocole Noise) et protégée par un secret partagé. Bascule se reconnecte automatiquement.
 - Tous les réglages se changent **sans recompiler**, dans la fenêtre de Bascule (ou directement dans le fichier texte).
 
@@ -20,11 +20,11 @@ Bascule partage **le clavier, la souris et le presse-papiers** de votre PC Windo
 
 1. Créez un dépôt **privé** sur GitHub et poussez-y ce dossier.
 2. Mettez à jour `version` dans la section `[workspace.package]` de `Cargo.toml` (c'est la version affichée par les apps), puis, au choix :
-   - onglet **Actions** → **release** → **Run workflow** : le tag (la version de `Cargo.toml`, par exemple `0.5.0`) est créé avec la Release ;
+   - onglet **Actions** → **release** → **Run workflow** : le tag (la version de `Cargo.toml`, par exemple `0.6.0`) est créé avec la Release ;
    - ou créez un tag et poussez-le :
      ```bash
-     git tag 0.5.0
-     git push origin 0.5.0
+     git tag 0.6.0
+     git push origin 0.6.0
      ```
 3. À la fin, une **Release** apparaît dans la page **Releases** du dépôt, avec :
    - `Bascule-Windows.zip` : `bascule.exe` et son app de réglages `bascule-settings.exe` ;
@@ -151,6 +151,7 @@ Le fichier complet et commenté est dans [`docs/config.exemple.toml`](docs/confi
 | | `pixels_per_notch = 60.0` | Vitesse en mode pixels |
 | | `smooth_speed = "medium"` | Mode fluide : vitesse `"low"`, `"medium"` ou `"high"`, comme le réglage « Vitesse » de Mac Mouse Fix |
 | | `smoothness = "regular"` | Mode fluide : `"regular"` (animation courte) ou `"high"` (élan plus long), comme le réglage « Douceur » de Mac Mouse Fix |
+| | `smooth_precision = false` | Mode fluide : un cran isolé ne fait défiler que 10 pixels, les crans rapprochés accélèrent toujours, comme l'option « Précision » de Mac Mouse Fix |
 | | `trackpad_simulation = false` | Douceur `"high"` : défilement envoyé comme un geste de trackpad suivi de son élan (rebond en bout de page…), comme l'option de Mac Mouse Fix |
 | | `invert_vertical`, `invert_horizontal` | Inverser le sens |
 | `[buttons]` (Mac) | `side_buttons = "buttons"` / `"swipe"` | Boutons 4/5 bruts (Chrome, Firefox, VS Code…) ou geste précédent/suivant (Safari, Finder, Xcode…) |
@@ -170,7 +171,7 @@ Le fichier complet et commenté est dans [`docs/config.exemple.toml`](docs/confi
 
 Pour le défilement, commencez par `mode = "lines"`. Si la vitesse varie trop d'une app à l'autre (Safari vs Chrome), essayez `mode = "pixels"` avec `pixels_per_notch` entre 60 et 120. Pour retrouver le défilement de Mac Mouse Fix, choisissez `mode = "smooth"` avec la même vitesse et la même douceur que dans Mac Mouse Fix.
 
-> **Mac Mouse Fix** et les logiciels du même genre ne s'activent que si une souris est branchée sur le Mac : ils n'agissent donc pas sur la souris du PC. Le mode `"smooth"` de Bascule reprend leur algorithme : la vitesse de rotation de la molette est mesurée (les crans rapprochés vont plus loin), plusieurs gestes rapides enchaînés accélèrent encore, et chaque cran est animé à vitesse constante puis freiné jusqu'à l'arrêt ; un changement de sens arrête net le défilement. Avec la simulation du trackpad, la phase à vitesse constante est envoyée comme un geste à deux doigts et le freinage comme l'élan qui suit. La vitesse « macOS » de Mac Mouse Fix n'existe pas dans Bascule : elle reprend l'accélération que macOS applique à une souris branchée sur le Mac, que Bascule ne reçoit pas.
+> **Mac Mouse Fix** et les logiciels du même genre ne s'activent que si une souris est branchée sur le Mac : ils n'agissent donc pas sur la souris du PC. (D'après son code source, si une souris, même inutilisée, est branchée sur le Mac, Mac Mouse Fix traite aussi les défilements envoyés par Bascule en mode `"lines"` : réglez alors `lines_per_notch = 1.0`, un cran de Bascule valant un cran pour Mac Mouse Fix. Les modes `"pixels"` et `"smooth"` lui échappent.) Le mode `"smooth"` de Bascule reprend leur algorithme : la vitesse de rotation de la molette est mesurée (les crans rapprochés vont plus loin), plusieurs gestes rapides enchaînés accélèrent encore, et chaque cran est animé à vitesse constante puis freiné jusqu'à l'arrêt ; un changement de sens arrête net le défilement. Avec la simulation du trackpad, la phase à vitesse constante est envoyée comme un geste à deux doigts et le freinage comme l'élan qui suit. La vitesse « macOS » de Mac Mouse Fix n'existe pas dans Bascule : elle reprend l'accélération que macOS applique à une souris branchée sur le Mac, que Bascule ne reçoit pas.
 
 ---
 
@@ -311,4 +312,4 @@ app/               app de Bascule : Tauri 2 + Vue 3 + Naive UI
   src-tauri/       commandes Tauri, client de l'API du daemon
 ```
 
-Tests : `cargo test` (92 tests, dont un test de bout en bout sur une vraie connexion TCP). Le code Windows et macOS se vérifie aussi depuis Linux avec `./scripts/xcheck.sh`.
+Tests : `cargo test` (99 tests, dont un test de bout en bout sur une vraie connexion TCP). Le code Windows et macOS se vérifie aussi depuis Linux avec `./scripts/xcheck.sh`.

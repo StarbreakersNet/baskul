@@ -41,7 +41,8 @@ use windows_sys::Win32::Graphics::Gdi::{
 };
 use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 use windows_sys::Win32::System::DataExchange::{
-    GetClipboardSequenceNumber, IsClipboardFormatAvailable, RegisterClipboardFormatW,
+    CloseClipboard, EnumClipboardFormats, GetClipboardFormatNameW, GetClipboardSequenceNumber,
+    IsClipboardFormatAvailable, OpenClipboard, RegisterClipboardFormatW,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::System::Registry::{
@@ -226,6 +227,48 @@ fn clip_sensitive() -> bool {
         }
     }
     false
+}
+
+/// Formats présents dans le presse-papiers, pour le journal.
+fn clip_formats() -> Vec<String> {
+    const STANDARD: [(u32, &str); 10] = [
+        (1, "CF_TEXT"),
+        (2, "CF_BITMAP"),
+        (3, "CF_METAFILEPICT"),
+        (7, "CF_OEMTEXT"),
+        (8, "CF_DIB"),
+        (13, "CF_UNICODETEXT"),
+        (14, "CF_ENHMETAFILE"),
+        (15, "CF_HDROP"),
+        (16, "CF_LOCALE"),
+        (17, "CF_DIBV5"),
+    ];
+    let mut out = vec![];
+    // SAFETY: presse-papiers ouvert puis refermé dans ce bloc ; tampon de
+    // taille annoncée.
+    unsafe {
+        if OpenClipboard(null_mut()) == 0 {
+            return out;
+        }
+        let mut f = 0;
+        while out.len() < 10 {
+            f = EnumClipboardFormats(f);
+            if f == 0 {
+                break;
+            }
+            let name = match STANDARD.iter().find(|(id, _)| *id == f) {
+                Some((_, name)) => name.to_string(),
+                None => {
+                    let mut buf = [0u16; 128];
+                    let len = GetClipboardFormatNameW(f, buf.as_mut_ptr(), buf.len() as i32);
+                    if len > 0 { String::from_utf16_lossy(&buf[..len as usize]) } else { format!("#{f}") }
+                }
+            };
+            out.push(name);
+        }
+        CloseClipboard();
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -1267,7 +1310,12 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
         })
     });
 
-    let hooks = ClipboardHooks { sequence: clip_sequence, sensitive: clip_sensitive };
+    let hooks = ClipboardHooks {
+        sequence: clip_sequence,
+        sensitive: clip_sensitive,
+        formats: clip_formats,
+        ..ClipboardHooks::NONE
+    };
     let _services: Services = match settings.role {
         Role::Primary => {
             let (services, rx) = app::start_primary(&settings, hooks, || post(WM_APP_NET, 0, 0));

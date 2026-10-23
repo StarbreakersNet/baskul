@@ -56,6 +56,9 @@ pixels_per_notch = 60.0
 smooth_speed = "medium"
 # Douceur : "regular" (animation courte) ou "high" (élan plus long).
 smoothness = "regular"
+# Précision : un cran isolé ne fait défiler que 10 pixels ; les crans
+# rapprochés accélèrent toujours.
+smooth_precision = false
 # Douceur "high" : simulation du trackpad (gestes et élan, rebond en bout de
 # page…), comme l'option de Mac Mouse Fix.
 trackpad_simulation = false

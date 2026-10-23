@@ -5,10 +5,12 @@
 //! l'autre machine, découpé en morceaux. Le contenu reçu est écrit dans le
 //! presse-papiers local ; le changement qui en résulte n'est pas renvoyé.
 
+use crate::app::ClipboardHooks;
 use crate::config::ClipboardCfg;
 use crate::net::LinkHandle;
 use crate::protocol::{CLIP_CHUNK, ClipPayload, Message};
 use crossbeam_channel::{Receiver, Sender, select, unbounded};
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 const POLL: Duration = Duration::from_millis(250);
@@ -19,8 +21,17 @@ pub trait Backend {
     fn sequence(&mut self) -> Option<u64>;
     /// Le contenu actuel est marqué « sensible » (gestionnaire de mots de passe…).
     fn is_sensitive(&mut self) -> bool;
-    fn read(&mut self, images: bool, html: bool) -> Option<ClipPayload>;
+    fn read(&mut self, images: bool, html: bool) -> Result<ClipPayload, Unread>;
     fn write(&mut self, p: &ClipPayload) -> bool;
+}
+
+/// Pourquoi le presse-papiers local n'a pas été lu.
+#[derive(Debug, PartialEq)]
+pub enum Unread {
+    /// Vide, ou occupé par une autre application.
+    Empty,
+    /// Contenu présent mais non transmissible ; la raison va au journal.
+    Unsupported(String),
 }
 
 /// Messages pour le thread du presse-papiers.
@@ -177,13 +188,19 @@ impl<B: Backend> Sync<B> {
                 return;
             }
         }
-        let Some(payload) = self.backend.read(self.cfg.images, self.cfg.html) else {
-            // Presse-papiers vide, format non géré, ou occupé : réessai une fois.
-            if changed {
-                self.retry_at = Some(Instant::now() + Duration::from_millis(500));
+        let payload = match self.backend.read(self.cfg.images, self.cfg.html) {
+            Ok(p) => p,
+            Err(why) => {
+                // Presse-papiers occupé, ou contenu pas encore disponible :
+                // réessai une fois, puis explication dans le journal.
+                if changed {
+                    self.retry_at = Some(Instant::now() + Duration::from_millis(500));
+                } else if let Unread::Unsupported(why) = why {
+                    log::info!("presse-papiers non transmis : {why}");
+                }
+                self.last_seq = seq;
+                return;
             }
-            self.last_seq = seq;
-            return;
         };
         self.last_seq = seq;
         if payload.is_empty() {
@@ -275,27 +292,90 @@ fn run<B: Backend>(mut sync: Sync<B>, rx: Receiver<ClipEvent>) {
 // Implémentation réelle (arboard + fonctions de la plateforme)
 // ---------------------------------------------------------------------------
 
+/// Taille maximale d'un fichier image copié (avant conversion).
+const MAX_IMAGE_FILE: u64 = 64 * 1024 * 1024;
+
+/// Fichier image, d'après son extension.
+fn is_image_file(path: &Path) -> bool {
+    const EXTENSIONS: [&str; 10] = ["png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff", "webp", "heic", "heif"];
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| EXTENSIONS.iter().any(|x| e.eq_ignore_ascii_case(x)))
+}
+
+/// Fichier image converti en PNG (un PNG est transmis tel quel).
+pub fn load_image_file(path: &Path) -> Result<Vec<u8>, String> {
+    let data = std::fs::read(path).map_err(|e| e.to_string())?;
+    let format = image::guess_format(&data).map_err(|_| "format d'image non reconnu".to_string())?;
+    if format == image::ImageFormat::Png {
+        return Ok(data);
+    }
+    let rgba = image::load_from_memory_with_format(&data, format).map_err(|e| e.to_string())?.into_rgba8();
+    encode_png(rgba.width(), rgba.height(), rgba.as_raw()).ok_or_else(|| "conversion en PNG impossible".to_string())
+}
+
 pub struct SystemBackend {
     cb: arboard::Clipboard,
-    seq: fn() -> Option<u64>,
-    sensitive: fn() -> bool,
+    hooks: ClipboardHooks,
 }
 
 impl SystemBackend {
-    pub fn new(seq: fn() -> Option<u64>, sensitive: fn() -> bool) -> Option<SystemBackend> {
+    pub fn new(hooks: ClipboardHooks) -> Option<SystemBackend> {
         match arboard::Clipboard::new() {
-            Ok(cb) => Some(SystemBackend { cb, seq, sensitive }),
+            Ok(cb) => Some(SystemBackend { cb, hooks }),
             Err(e) => {
                 log::error!("presse-papiers : {e}");
                 None
             }
         }
     }
+
+    /// Fichiers copiés (Finder, Explorateur) : une image seule est transmise
+    /// en tant qu'image ; le reste n'est pas transmis.
+    fn read_files(&mut self, images: bool) -> Option<Result<ClipPayload, Unread>> {
+        let files = self.cb.get().file_list().ok().filter(|f| !f.is_empty())?;
+        let unsupported = |why: String| Some(Err(Unread::Unsupported(why)));
+        let [path] = files.as_slice() else {
+            return unsupported(format!("{} fichiers copiés (seule une image est transmise)", files.len()));
+        };
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        if !is_image_file(path) {
+            return unsupported(format!("fichier copié « {name} » (seules les images sont transmises)"));
+        }
+        if !images {
+            return unsupported(format!("image « {name} » : partage des images désactivé"));
+        }
+        match std::fs::metadata(path) {
+            Ok(m) if m.len() > MAX_IMAGE_FILE => {
+                return unsupported(format!("image « {name} » trop volumineuse ({} Mo)", m.len() >> 20));
+            }
+            Ok(_) => {}
+            Err(e) => return unsupported(format!("image « {name} » : {e}")),
+        }
+        let png = match (self.hooks.image_file)(path) {
+            Some(png) => png,
+            None => match load_image_file(path) {
+                Ok(png) => png,
+                Err(e) => return unsupported(format!("image « {name} » : {e}")),
+            },
+        };
+        Some(Ok(ClipPayload { png: Some(png), ..Default::default() }))
+    }
+
+    /// Image copiée (capture d'écran, « Copier l'image »…), en PNG.
+    fn read_image(&mut self) -> Result<Option<Vec<u8>>, String> {
+        if let Some(png) = (self.hooks.image)() {
+            return Ok(Some(png));
+        }
+        match self.cb.get_image() {
+            Ok(img) => Ok(encode_png(img.width as u32, img.height as u32, &img.bytes)),
+            Err(arboard::Error::ContentNotAvailable) => Ok(None),
+            Err(e) => Err(format!("image illisible : {e}")),
+        }
+    }
 }
 
 impl Backend for SystemBackend {
     fn sequence(&mut self) -> Option<u64> {
-        (self.seq)().or_else(|| {
+        (self.hooks.sequence)().or_else(|| {
             // Pas de compteur fourni par le système (Linux) : empreinte du texte.
             use std::hash::{Hash, Hasher};
             let text = self.cb.get_text().ok()?;
@@ -306,25 +386,39 @@ impl Backend for SystemBackend {
     }
 
     fn is_sensitive(&mut self) -> bool {
-        (self.sensitive)()
+        (self.hooks.sensitive)()
     }
 
-    fn read(&mut self, images: bool, html: bool) -> Option<ClipPayload> {
-        let text = self.cb.get_text().ok().filter(|t| !t.is_empty());
-        let html =
-            if html && text.is_some() { self.cb.get().html().ok().filter(|h| !h.trim().is_empty()) } else { None };
-        let png = if images && text.is_none() {
-            match self.cb.get_image() {
-                Ok(img) => encode_png(img.width as u32, img.height as u32, &img.bytes),
-                Err(_) => None,
-            }
-        } else {
-            None
-        };
-        if text.is_none() && png.is_none() {
-            return None;
+    fn read(&mut self, images: bool, html: bool) -> Result<ClipPayload, Unread> {
+        // En premier : le Finder accompagne un fichier copié de son nom en texte.
+        if let Some(r) = self.read_files(images) {
+            return r;
         }
-        Some(ClipPayload { text, html, png })
+        let text = self.cb.get_text().ok().filter(|t| !t.is_empty());
+        if text.is_some() {
+            let html = if html { self.cb.get().html().ok().filter(|h| !h.trim().is_empty()) } else { None };
+            return Ok(ClipPayload { text, html, png: None });
+        }
+        let mut why = None;
+        if images {
+            match self.read_image() {
+                Ok(Some(png)) => return Ok(ClipPayload { png: Some(png), ..Default::default() }),
+                Ok(None) => {}
+                Err(e) => why = Some(e),
+            }
+        }
+        let formats = (self.hooks.formats)();
+        if why.is_none() && formats.is_empty() {
+            return Err(Unread::Empty);
+        }
+        let mut why = why.unwrap_or_else(|| "format non pris en charge".to_string());
+        if !formats.is_empty() {
+            why = format!("{why} ({})", formats.join(", "));
+        }
+        if !images {
+            why.push_str(" ; partage des images désactivé");
+        }
+        Err(Unread::Unsupported(why))
     }
 
     fn write(&mut self, p: &ClipPayload) -> bool {
@@ -395,6 +489,9 @@ mod tests {
         seq: u64,
         content: Option<ClipPayload>,
         sensitive: bool,
+        /// Contenu présent mais non transmissible.
+        unsupported: bool,
+        reads: u32,
     }
 
     #[derive(Clone, Default)]
@@ -415,8 +512,13 @@ mod tests {
         fn is_sensitive(&mut self) -> bool {
             self.0.lock().unwrap().sensitive
         }
-        fn read(&mut self, _images: bool, _html: bool) -> Option<ClipPayload> {
-            self.0.lock().unwrap().content.clone()
+        fn read(&mut self, _images: bool, _html: bool) -> Result<ClipPayload, Unread> {
+            let mut s = self.0.lock().unwrap();
+            s.reads += 1;
+            if s.unsupported {
+                return Err(Unread::Unsupported("format inconnu".into()));
+            }
+            s.content.clone().ok_or(Unread::Empty)
         }
         fn write(&mut self, p: &ClipPayload) -> bool {
             let mut s = self.0.lock().unwrap();
@@ -499,6 +601,59 @@ mod tests {
         fake.user_copies(&"y".repeat(2 * 1024 * 1024));
         s.poll();
         assert!(sent(&rx).is_empty());
+    }
+
+    #[test]
+    fn unsupported_content_is_read_twice_then_left() {
+        let fake = Fake::default();
+        let (link, rx) = LinkHandle::detached_bulk();
+        let mut s = Sync::new(fake.clone(), ClipboardCfg::default(), link);
+        s.handle(ClipEvent::Connected);
+        {
+            let mut st = fake.0.lock().unwrap();
+            st.seq += 1;
+            st.unsupported = true;
+        }
+        s.poll();
+        s.poll();
+        assert_eq!(fake.0.lock().unwrap().reads, 1);
+        s.retry_at = Some(Instant::now());
+        s.poll();
+        s.poll();
+        assert_eq!(fake.0.lock().unwrap().reads, 2);
+        assert!(sent(&rx).is_empty());
+    }
+
+    #[test]
+    fn image_files_by_extension() {
+        assert!(is_image_file(Path::new("/tmp/Capture.PNG")));
+        assert!(is_image_file(Path::new("C:\\Photos\\IMG_0001.heic")));
+        assert!(is_image_file(Path::new("photo.jpeg")));
+        assert!(!is_image_file(Path::new("notes.txt")));
+        assert!(!is_image_file(Path::new("png")));
+    }
+
+    #[test]
+    fn image_files_become_png() {
+        let dir = std::env::temp_dir().join(format!("bascule-clip-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let img = image::RgbaImage::from_fn(4, 3, |x, y| image::Rgba([x as u8 * 60, y as u8 * 80, 7, 255]));
+        for (name, format) in [("a.bmp", image::ImageFormat::Bmp), ("a.jpg", image::ImageFormat::Jpeg)] {
+            let path = dir.join(name);
+            let pixels = image::DynamicImage::ImageRgba8(img.clone());
+            let pixels = if format == image::ImageFormat::Jpeg { pixels.to_rgb8().into() } else { pixels };
+            pixels.save_with_format(&path, format).unwrap();
+            let png = load_image_file(&path).unwrap();
+            let (w, h, _) = decode_png(&png).unwrap();
+            assert_eq!((w, h), (4, 3), "{name}");
+        }
+        // Un PNG est transmis tel quel.
+        let png = encode_png(4, 3, img.as_raw()).unwrap();
+        std::fs::write(dir.join("a.png"), &png).unwrap();
+        assert_eq!(load_image_file(&dir.join("a.png")).unwrap(), png);
+        std::fs::write(dir.join("b.png"), b"pas une image").unwrap();
+        assert!(load_image_file(&dir.join("b.png")).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

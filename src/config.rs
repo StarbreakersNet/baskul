@@ -158,6 +158,9 @@ pub struct ScrollCfg {
     pub pixels_per_notch: f64,
     pub smooth_speed: SmoothSpeed,
     pub smoothness: Smoothness,
+    /// Un cran isolé ne fait défiler que 10 pixels (option « Précision » de
+    /// Mac Mouse Fix).
+    pub smooth_precision: bool,
     /// Douceur élevée : défilement simulé comme sur un trackpad (gestes et
     /// élan), comme l'option de Mac Mouse Fix.
     pub trackpad_simulation: bool,
@@ -173,6 +176,7 @@ impl Default for ScrollCfg {
             pixels_per_notch: 60.0,
             smooth_speed: SmoothSpeed::Medium,
             smoothness: Smoothness::Regular,
+            smooth_precision: false,
             trackpad_simulation: false,
             invert_vertical: false,
             invert_horizontal: false,
@@ -658,6 +662,9 @@ pixels_per_notch = 60.0
 smooth_speed = "medium"
 # Douceur : "regular" (animation courte) ou "high" (élan plus long).
 smoothness = "regular"
+# Précision : un cran isolé ne fait défiler que 10 pixels ; les crans
+# rapprochés accélèrent toujours.
+smooth_precision = false
 # Douceur "high" : simulation du trackpad (gestes et élan, rebond en bout de
 # page…), comme l'option de Mac Mouse Fix.
 trackpad_simulation = false

@@ -25,12 +25,13 @@ use objc2::rc::{Retained, autoreleasepool};
 use objc2::runtime::{AnyObject, NSObject, ProtocolObject};
 use objc2::{AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationPolicy, NSApplicationDelegate, NSControlStateValueOff, NSControlStateValueOn,
-    NSEvent, NSEventModifierFlags, NSEventType, NSImage, NSMenu, NSMenuItem, NSPasteboard, NSStatusBar, NSStatusItem,
+    NSApplication, NSApplicationActivationPolicy, NSApplicationDelegate, NSBitmapImageFileType, NSBitmapImageRep,
+    NSControlStateValueOff, NSControlStateValueOn, NSEvent, NSEventModifierFlags, NSEventType, NSImage, NSMenu,
+    NSMenuItem, NSPasteboard, NSPasteboardTypePNG, NSPasteboardTypeTIFF, NSStatusBar, NSStatusItem,
     NSWindowOcclusionState,
 };
 use objc2_foundation::{
-    NSActivityOptions, NSData, NSObjectProtocol, NSPoint, NSProcessInfo, NSSize, NSString, NSTimer,
+    NSActivityOptions, NSData, NSDictionary, NSObjectProtocol, NSPoint, NSProcessInfo, NSSize, NSString, NSTimer, NSURL,
 };
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -524,8 +525,12 @@ struct SmoothScroller {
 impl SmoothScroller {
     fn start(cfg: &ScrollCfg) -> SmoothScroller {
         let (tx, rx) = crossbeam_channel::unbounded::<(Instant, smooth::Dir, f64, u64)>();
-        let trackpad = cfg.trackpad_simulation && cfg.smoothness == Smoothness::High;
-        let mut scroller = smooth::Scroller::new(cfg.smooth_speed, cfg.smoothness, trackpad);
+        let mut scroller = smooth::Scroller::new(smooth::Options {
+            speed: cfg.smooth_speed,
+            smoothness: cfg.smoothness,
+            precise: cfg.smooth_precision,
+            trackpad: cfg.trackpad_simulation && cfg.smoothness == Smoothness::High,
+        });
         let spawned = std::thread::Builder::new().name("bascule-scroll".into()).spawn(move || {
             // SAFETY: source d'événements propre à ce thread.
             let source = unsafe { CGEventSourceCreate(SOURCE_HID_STATE) };
@@ -535,6 +540,11 @@ impl SmoothScroller {
                 if scroller.is_idle() {
                     // Rien à animer : attente du prochain cran.
                     let Ok((at, dir, weight, f)) = rx.recv() else { return };
+                    // Les distances suivent un peu la taille de l'écran sous
+                    // le pointeur, comme dans Mac Mouse Fix.
+                    if let Some(r) = current_cursor().and_then(|p| displays().display_at(p).copied()) {
+                        scroller.set_screen(f64::from(r.width()), f64::from(r.height()));
+                    }
                     scroller.tick(at, dir, weight);
                     flags = f;
                 }
@@ -1027,6 +1037,57 @@ fn clip_sensitive() -> bool {
     })
 }
 
+/// Image du presse-papiers en PNG : le PNG d'origine s'il y en a un (la
+/// plupart des applications), sinon le TIFF converti par AppKit, qui lit
+/// toutes ses variantes.
+fn clip_image() -> Option<Vec<u8>> {
+    autoreleasepool(|_| {
+        let pb = NSPasteboard::generalPasteboard();
+        // SAFETY: constantes d'AppKit.
+        let (png, tiff) = unsafe { (NSPasteboardTypePNG, NSPasteboardTypeTIFF) };
+        if let Some(data) = pb.dataForType(png) {
+            return Some(data.to_vec());
+        }
+        let tiff = pb.dataForType(tiff)?;
+        png_from_image_data(&tiff)
+    })
+}
+
+/// Fichier image converti en PNG par AppKit : tous les formats ouverts par
+/// Aperçu (HEIC des iPhone compris). Un PNG est laissé tel quel.
+fn clip_image_file(path: &Path) -> Option<Vec<u8>> {
+    if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("png")) {
+        return None;
+    }
+    autoreleasepool(|_| {
+        let path = NSString::from_str(path.to_str()?);
+        let image = NSImage::initWithContentsOfURL(NSImage::alloc(), &NSURL::fileURLWithPath(&path))?;
+        let tiff = image.TIFFRepresentation()?;
+        png_from_image_data(&tiff)
+    })
+}
+
+fn png_from_image_data(data: &NSData) -> Option<Vec<u8>> {
+    let rep = NSBitmapImageRep::imageRepWithData(data)?;
+    // SAFETY: dictionnaire de propriétés vide, du type attendu.
+    let png = unsafe { rep.representationUsingType_properties(NSBitmapImageFileType::PNG, &NSDictionary::new()) }?;
+    Some(png.to_vec())
+}
+
+/// Formats présents dans le presse-papiers, pour le journal (sans les types
+/// hérités ou dynamiques, sans intérêt).
+fn clip_formats() -> Vec<String> {
+    autoreleasepool(|_| {
+        let Some(types) = NSPasteboard::generalPasteboard().types() else { return vec![] };
+        types
+            .iter()
+            .map(|t| t.to_string())
+            .filter(|t| !t.starts_with("dyn.") && !t.starts_with("CorePasteboardFlavorType") && !t.starts_with("NeXT"))
+            .take(10)
+            .collect()
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Machine principale : capture (sens inverse, expérimental)
 // ---------------------------------------------------------------------------
@@ -1362,6 +1423,8 @@ struct MacUi {
     _controller: Retained<Controller>,
     last: Option<Snapshot>,
     menu: Retained<NSMenu>,
+    /// Création de l'icône (elle met un instant à apparaître).
+    created_at: Instant,
     /// Depuis quand l'icône n'est plus à l'écran.
     hidden_since: Option<Instant>,
     recreated_at: Option<Instant>,
@@ -1559,7 +1622,8 @@ fn recreate_status_item(ui: &mut MacUi, mtm: MainThreadMarker) {
     item.setAutosaveName(Some(&NSString::from_str(STATUS_AUTOSAVE)));
     item.setMenu(Some(&ui.menu));
     ui.item = item;
-    ui.recreated_at = Some(Instant::now());
+    ui.created_at = Instant::now();
+    ui.recreated_at = Some(ui.created_at);
     ui.hidden_since = None;
     let snap = status::snapshot();
     update_status_item(ui, mtm, &snap);
@@ -1635,11 +1699,12 @@ fn ui_tick(mtm: MainThreadMarker) {
         }
         // Icône absente de l'écran (cachée par macOS, ou disparue) : notée
         // dans le journal, puis recréée si cela dure.
-        let on_screen = ui
-            .item
-            .button(mtm)
-            .and_then(|b| b.window())
-            .is_some_and(|w| w.occlusionState().contains(NSWindowOcclusionState::Visible));
+        let on_screen = ui.created_at.elapsed() < Duration::from_secs(5)
+            || ui
+                .item
+                .button(mtm)
+                .and_then(|b| b.window())
+                .is_some_and(|w| w.occlusionState().contains(NSWindowOcclusionState::Visible));
         match (on_screen, ui.hidden_since) {
             (true, Some(_)) => {
                 log::info!("icône de la barre des menus de nouveau visible");
@@ -1832,7 +1897,13 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
     menu.addItem(&menu_item(mtm, &i18n::t("menu.quit"), Some(sel!(quit:)), &controller));
     item.setMenu(Some(&menu));
 
-    let hooks = ClipboardHooks { sequence: clip_sequence, sensitive: clip_sensitive };
+    let hooks = ClipboardHooks {
+        sequence: clip_sequence,
+        sensitive: clip_sensitive,
+        image: clip_image,
+        image_file: clip_image_file,
+        formats: clip_formats,
+    };
     let permissions_ok;
     let _services: Services = match settings.role {
         Role::Secondary => {
@@ -1930,6 +2001,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
             _controller: controller.clone(),
             last: None,
             menu: menu.clone(),
+            created_at: Instant::now(),
             hidden_since: None,
             recreated_at: None,
             tray_icon: settings.ui.tray_icon,

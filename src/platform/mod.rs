@@ -1,6 +1,6 @@
 //! Code propre à chaque système.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(any(windows, all(feature = "xcheck", target_os = "linux")))]
@@ -21,9 +21,10 @@ pub use self::macos::{early_init, fatal, first_run, open_in_editor, run};
 #[cfg(not(any(windows, target_os = "macos")))]
 pub use self::linux::{early_init, fatal, first_run, open_in_editor, run};
 
-/// Variable d'environnement posée lors d'un redémarrage : la nouvelle
-/// instance attend alors la fin de l'ancienne.
-pub const RELAUNCH_ENV: &str = "BASCULE_RELAUNCH";
+/// Option ajoutée lors d'un redémarrage : la nouvelle instance attend alors
+/// la fin de l'ancienne. (Une option plutôt qu'une variable d'environnement :
+/// `open` ne transmet pas l'environnement.)
+pub const RELAUNCH_ARG: &str = "--relaunched";
 
 static RESTART_REQUESTED: AtomicBool = AtomicBool::new(false);
 
@@ -53,31 +54,58 @@ pub fn open_settings(path: &Path, welcome: bool) {
 }
 
 /// Relance Bascule avec les mêmes arguments puis quitte ce processus.
-#[cfg(not(target_os = "macos"))]
 pub fn relaunch(args: &crate::Args) -> ! {
-    match std::env::current_exe() {
-        Ok(exe) => match std::process::Command::new(&exe).args(args.to_vec()).env(RELAUNCH_ENV, "1").spawn() {
-            Ok(_) => log::info!("redémarrage…"),
-            Err(e) => log::error!("redémarrage impossible : {e}"),
-        },
+    let mut argv = args.to_vec();
+    argv.push(RELAUNCH_ARG.into());
+    match launch_again(&argv) {
+        Ok(()) => log::info!("redémarrage…"),
         Err(e) => log::error!("redémarrage impossible : {e}"),
     }
     crate::logging::flush();
     std::process::exit(0)
 }
 
-/// Relance Bascule (même processus : les autorisations macOS sont conservées).
-#[cfg(target_os = "macos")]
-pub fn relaunch(args: &crate::Args) -> ! {
-    use std::os::unix::process::CommandExt;
-    crate::logging::flush();
-    match std::env::current_exe() {
-        Ok(exe) => {
-            let err = std::process::Command::new(&exe).args(args.to_vec()).env(RELAUNCH_ENV, "1").exec();
-            log::error!("redémarrage impossible : {err}");
+fn launch_again(argv: &[String]) -> std::io::Result<()> {
+    let exe = std::env::current_exe()?;
+    // macOS, dans Bascule.app : relance par LaunchServices, comme depuis le
+    // Finder. Un nouveau processus, et non le même relancé par `exec` : avec
+    // `exec`, l'ancienne icône laissait un emplacement vide dans la barre des
+    // menus, et la nouvelle restait invisible.
+    if cfg!(target_os = "macos")
+        && let Some(app) = app_bundle(&exe)
+    {
+        let status =
+            std::process::Command::new("/usr/bin/open").arg("-n").arg(&app).arg("--args").args(argv).status()?;
+        if status.success() {
+            return Ok(());
         }
-        Err(e) => log::error!("redémarrage impossible : {e}"),
+        log::warn!("relance par open impossible ({status}) : lancement direct");
     }
-    crate::logging::flush();
-    std::process::exit(1)
+    std::process::Command::new(&exe).args(argv).spawn().map(drop)
+}
+
+/// Bundle `.app` dont `exe` est l'exécutable principal
+/// (`Bascule.app/Contents/MacOS/bascule`).
+fn app_bundle(exe: &Path) -> Option<PathBuf> {
+    let macos = exe.parent()?;
+    let contents = macos.parent()?;
+    let app = contents.parent()?;
+    let ok = macos.file_name()? == "MacOS" && contents.file_name()? == "Contents" && app.extension()? == "app";
+    ok.then(|| app.to_path_buf())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn app_bundle_of_the_main_executable() {
+        assert_eq!(
+            app_bundle(Path::new("/Applications/Bascule.app/Contents/MacOS/bascule")),
+            Some(PathBuf::from("/Applications/Bascule.app"))
+        );
+        assert_eq!(app_bundle(Path::new("/Users/moi/bascule/target/release/bascule")), None);
+        assert_eq!(app_bundle(Path::new("/Applications/Bascule.app/Contents/Resources/bascule")), None);
+        assert_eq!(app_bundle(Path::new("bascule")), None);
+    }
 }
