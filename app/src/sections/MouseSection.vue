@@ -6,9 +6,9 @@ import LinuxNotice from "../components/LinuxNotice.vue";
 import NumberInput from "../components/NumberInput.vue";
 import SettingRow from "../components/SettingRow.vue";
 import { osKey } from "../keys";
-import type { BasculeConfig } from "../types";
+import type { BaskulConfig } from "../types";
 
-const props = defineProps<{ config: BasculeConfig }>();
+const props = defineProps<{ config: BaskulConfig }>();
 const os = inject(osKey);
 const mode = computed(() => props.config.scroll.mode);
 </script>

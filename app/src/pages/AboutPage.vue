@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// À propos de Bascule.
+// À propos de Baskul.
 import { onMounted, ref } from "vue";
 import { NAvatar, NButton, NCard, NDescriptions, NDescriptionsItem, NFlex, NH2, NText, useMessage } from "naive-ui";
 import { getVersion } from "@tauri-apps/api/app";
@@ -9,7 +9,7 @@ import { useActions } from "../composables/useActions";
 import { useSettings } from "../composables/useSettings";
 import { copyText, osLabel } from "../utils";
 
-const REPO = "https://github.com/StarbreakersNet/bascule";
+const REPO = "https://github.com/StarbreakersNet/baskul";
 
 const { info } = useSettings();
 const actions = useActions();
@@ -36,7 +36,7 @@ async function copyRepo() {
     <n-card>
       <n-flex vertical align="center" :size="6" style="padding: 8px 0">
         <n-avatar :src="logo" :size="80" color="transparent" />
-        <n-h2 style="margin: 8px 0 0">Bascule</n-h2>
+        <n-h2 style="margin: 8px 0 0">Baskul</n-h2>
         <n-text depth="3">{{ $t("common.version", { version: info?.version ?? appVersion }) }}</n-text>
         <n-text style="text-align: center">{{ $t("about.tagline") }}</n-text>
       </n-flex>
@@ -44,7 +44,7 @@ async function copyRepo() {
 
     <n-card :title="$t('about.info')" size="small">
       <n-descriptions label-placement="left" :column="1" size="small" bordered label-style="white-space: nowrap">
-        <n-descriptions-item :label="$t('about.bascule')">{{ info?.version ?? $t("about.notRunning") }}</n-descriptions-item>
+        <n-descriptions-item :label="$t('about.baskul')">{{ info?.version ?? $t("about.notRunning") }}</n-descriptions-item>
         <n-descriptions-item :label="$t('about.app')">{{ appVersion }}</n-descriptions-item>
         <n-descriptions-item v-if="info" :label="$t('about.machine')">
           {{ info.hostname }} · {{ osLabel(info.os) }}

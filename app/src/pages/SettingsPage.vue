@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Réglages de Bascule : rôle de la machine, puis onglets par thème. Les
+// Réglages de Baskul : rôle de la machine, puis onglets par thème. Les
 // onglets qui ne concernent pas le rôle choisi sont masqués.
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -29,7 +29,7 @@ const tab = computed({
   set: (onglet: string) => void router.replace({ query: { onglet } }),
 });
 watch(role, (r) => {
-  if ((r === "primary" && tab.value === "souris") || (r === "secondary" && tab.value === "bascule")) {
+  if ((r === "primary" && tab.value === "souris") || (r === "secondary" && tab.value === "baskul")) {
     tab.value = "connexion";
   }
 });
@@ -64,7 +64,7 @@ watch(role, (r) => {
             <n-tab-pane name="connexion" :tab="$t('settings.tabs.connection')">
               <connection-section :config="config" :info="info" />
             </n-tab-pane>
-            <n-tab-pane v-if="role === 'primary'" name="bascule" :tab="$t('settings.tabs.switching')">
+            <n-tab-pane v-if="role === 'primary'" name="baskul" :tab="$t('settings.tabs.switching')">
               <switching-section :config="config" :info="info" />
             </n-tab-pane>
             <n-tab-pane v-if="role === 'secondary'" name="souris" :tab="$t('settings.tabs.mouse')">

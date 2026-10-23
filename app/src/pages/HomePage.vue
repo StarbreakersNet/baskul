@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Accueil : l'état de Bascule en un coup d'œil (connexion, machine pilotée en
+// Accueil : l'état de Baskul en un coup d'œil (connexion, machine pilotée en
 // ce moment, raccourcis), mis à jour en direct.
 import { computed, onActivated, onDeactivated, ref, type Component } from "vue";
 import { useRouter } from "vue-router";
@@ -61,7 +61,7 @@ const conn = computed((): { icon: Component; color: string; title: string; help?
   if (s.state === "error") {
     return { icon: IconCircleXFilled, color: vars.value.errorColor, title: t("home.noConnection"), help: capitalize(s.detail) };
   }
-  // L'état détaillé vient de Bascule, dans la langue choisie.
+  // L'état détaillé vient de Baskul, dans la langue choisie.
   return {
     icon: IconHourglassHigh,
     color: vars.value.warningColor,
@@ -195,7 +195,7 @@ const editSettings = (onglet?: string) => router.push({ name: "settings", query:
       <n-gi>
         <n-card v-if="primary" :title="$t('home.switching')" size="small" style="height: 100%">
           <template #header-extra>
-            <n-button text type="primary" @click="editSettings('bascule')">{{ $t("common.edit") }}</n-button>
+            <n-button text type="primary" @click="editSettings('baskul')">{{ $t("common.edit") }}</n-button>
           </template>
           <n-descriptions label-placement="left" :column="1" size="small">
             <n-descriptions-item v-for="hk in hotkeys" :key="hk.label" :label="hk.label">

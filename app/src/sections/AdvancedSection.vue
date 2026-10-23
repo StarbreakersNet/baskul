@@ -4,10 +4,10 @@ import { NButton, NFlex, NSelect, NText, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import ChoiceGroup from "../components/ChoiceGroup.vue";
 import SettingRow from "../components/SettingRow.vue";
-import type { BasculeConfig, DaemonInfo } from "../types";
+import type { BaskulConfig, DaemonInfo } from "../types";
 import { copyText } from "../utils";
 
-const props = defineProps<{ config: BasculeConfig; info: DaemonInfo; restarting?: boolean }>();
+const props = defineProps<{ config: BaskulConfig; info: DaemonInfo; restarting?: boolean }>();
 const emit = defineEmits<{ openFile: []; restart: [] }>();
 
 const { t } = useI18n();
@@ -17,16 +17,16 @@ const levels = computed(() =>
 );
 
 /** Commandes pour d'autres applications ; « Copier » donne la commande
- * complète, avec le chemin de Bascule sur cette machine. */
+ * complète, avec le chemin de Baskul sur cette machine. */
 const commands = computed(() => {
-  const exe = props.info.exe ?? "bascule";
+  const exe = props.info.exe ?? "baskul";
   const quoted = !/[\s'"()&;]/.test(exe)
     ? exe
     : props.info.os === "windows"
       ? `"${exe}"`
       : `'${exe.replace(/'/g, "'\\''")}'`;
   return ["switch here", "switch other", "switch toggle", "status"].map((c) => ({
-    shown: `bascule ${c}`,
+    shown: `baskul ${c}`,
     full: `${quoted} ${c}`,
   }));
 });
@@ -77,7 +77,7 @@ async function copy(text: string) {
       <template #help><span class="mono" style="word-break: break-all">{{ info.path }}</span></template>
       <n-button size="small" @click="emit('openFile')">{{ $t("common.openFile") }}</n-button>
     </setting-row>
-    <setting-row label="Bascule" :help="$t('common.version', { version: info.version })">
+    <setting-row label="Baskul" :help="$t('common.version', { version: info.version })">
       <n-button size="small" :loading="restarting" @click="emit('restart')">{{ $t("common.restart") }}</n-button>
     </setting-row>
   </div>

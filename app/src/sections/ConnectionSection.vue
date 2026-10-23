@@ -3,10 +3,10 @@ import { computed } from "vue";
 import { NButton, NInput, NPopconfirm, NSwitch, NText, useMessage } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import SettingRow from "../components/SettingRow.vue";
-import type { BasculeConfig, DaemonInfo } from "../types";
+import type { BaskulConfig, DaemonInfo } from "../types";
 import { copyText, newSecret } from "../utils";
 
-const props = defineProps<{ config: BasculeConfig; info: DaemonInfo }>();
+const props = defineProps<{ config: BaskulConfig; info: DaemonInfo }>();
 const message = useMessage();
 const { t } = useI18n();
 const secretTooShort = computed(() => props.config.network.secret.trim().length < 12);

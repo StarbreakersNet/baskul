@@ -1,13 +1,13 @@
 [package]
-name = "bascule-settings"
+name = "baskul-settings"
 version.workspace = true
 edition.workspace = true
-description = "Réglages de Bascule (interface Tauri + Vue 3)"
+description = "Réglages de Baskul (interface Tauri + Vue 3)"
 license.workspace = true
 publish = false
 
 [[bin]]
-name = "bascule-settings"
+name = "baskul-settings"
 path = "src/main.rs"
 
 [build-dependencies]

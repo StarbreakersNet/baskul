@@ -1,11 +1,11 @@
 // État de l'app de réglages, partagé par tous les composants.
 //
-// Cycle : chargement → prêt ; si Bascule ne répond pas → hors ligne (l'état
+// Cycle : chargement → prêt ; si Baskul ne répond pas → hors ligne (l'état
 // est réinterrogé régulièrement) ; après un enregistrement → redémarrage,
 // jusqu'à ce que le daemon réponde avec une nouvelle date de démarrage.
 import { computed, ref } from "vue";
 import { daemon, errorMessage, isOffline } from "../daemon";
-import type { BasculeConfig, DaemonInfo, DaemonStatus } from "../types";
+import type { BaskulConfig, DaemonInfo, DaemonStatus } from "../types";
 
 type Phase = "loading" | "offline" | "starting" | "ready" | "restarting";
 
@@ -15,7 +15,7 @@ const RESTART_TIMEOUT_MS = 20_000;
 
 const phase = ref<Phase>("loading");
 const info = ref<DaemonInfo | null>(null);
-const config = ref<BasculeConfig | null>(null);
+const config = ref<BaskulConfig | null>(null);
 const status = ref<DaemonStatus | null>(null);
 const savedJson = ref("");
 const saving = ref(false);

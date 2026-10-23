@@ -1,4 +1,4 @@
-//! Réglages de Bascule : interface Tauri + Vue 3. Le front (dossier `app/src`)
+//! Réglages de Baskul : interface Tauri + Vue 3. Le front (dossier `app/src`)
 //! appelle ces commandes, qui relaient les demandes à l'API locale du daemon.
 
 // Pas de fenêtre console sous Windows.
@@ -45,7 +45,7 @@ async fn open_config_file() -> Result<Value, Error> {
     call("POST", "/api/open-file", None).await
 }
 
-/// Fin du journal de Bascule.
+/// Fin du journal de Baskul.
 #[tauri::command]
 async fn read_log() -> Result<Value, Error> {
     call("GET", "/api/log", None).await
@@ -74,7 +74,7 @@ fn start_daemon() -> Result<(), Error> {
     daemon::start().map_err(Error::Refused)
 }
 
-/// Options de lancement : `--bienvenue` au premier lancement de Bascule.
+/// Options de lancement : `--bienvenue` au premier lancement de Baskul.
 #[tauri::command]
 fn launch_options() -> Value {
     json!({ "welcome": std::env::args().any(|a| a == "--bienvenue") })
@@ -91,7 +91,7 @@ fn main() {
             }
         }))
         .setup(|app| {
-            // Lancée par Bascule, la fenêtre doit passer au premier plan.
+            // Lancée par Baskul, la fenêtre doit passer au premier plan.
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_focus();
             }

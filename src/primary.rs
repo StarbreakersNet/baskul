@@ -30,7 +30,7 @@ pub enum Decision {
 enum Target {
     Local,
     Remote,
-    /// Touche utilisée par un raccourci de Bascule : supprimée partout.
+    /// Touche utilisée par un raccourci de Baskul : supprimée partout.
     Consumed,
 }
 
@@ -51,7 +51,7 @@ pub enum PeerEvent {
     /// Fin du délai de grâce ouvert par la n-ième coupure (voir
     /// `RECONNECT_GRACE`).
     GraceOver(u64),
-    /// Commande `bascule switch`, lancée ici ou sur l'autre machine.
+    /// Commande `baskul switch`, lancée ici ou sur l'autre machine.
     Switch(SwitchTo),
     /// L'utilisateur est actif sur l'autre machine (son propre clavier ou
     /// trackpad).
@@ -64,7 +64,7 @@ pub const ACTIVITY_INTERVAL: Duration = Duration::from_secs(10);
 
 /// Coupure pendant que l'on pilote l'autre machine : on attend ce délai
 /// avant de ramener le curseur ici. Une reconnexion entre-temps (redémarrage
-/// de Bascule sur l'autre machine, après un changement de réglages…) reprend
+/// de Baskul sur l'autre machine, après un changement de réglages…) reprend
 /// le pilotage là où il en était.
 pub const RECONNECT_GRACE: std::time::Duration = std::time::Duration::from_secs(4);
 
@@ -473,7 +473,7 @@ impl PrimaryCore {
         }
     }
 
-    /// Commande `bascule switch` : le clavier et la souris passent sur la
+    /// Commande `baskul switch` : le clavier et la souris passent sur la
     /// machine demandée, comme avec les raccourcis.
     pub fn switch_to<H: Host>(&mut self, host: &mut H, to: SwitchTo) {
         match (to, self.mode) {
@@ -784,7 +784,7 @@ mod tests {
         let (mut core, mut host) = setup();
         capture::set_supported(true);
         assert!(capture::start());
-        // Shift+F12 est relevée au lieu de faire basculer, et n'arrive pas
+        // Shift+F12 est relevée au lieu de faire baskulr, et n'arrive pas
         // aux applications.
         let f12 = hid_from_name("F12").unwrap();
         let d = press(&mut core, &mut host, &[HID_SHIFT_RIGHT, f12]);

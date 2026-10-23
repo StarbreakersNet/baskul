@@ -11,7 +11,7 @@ export default defineConfig({
     strictPort: true,
     watch: { ignored: ["**/src-tauri/**"] },
     // Les traductions (locales/*.json) sont à la racine du dépôt, partagées
-    // avec Bascule.
+    // avec Baskul.
     fs: { allow: [".."] },
   },
   // vue-i18n : API Composition seulement.

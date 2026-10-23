@@ -3,12 +3,12 @@
     "menu": {
       "settings": "Réglages…",
       "openLog": "Ouvrir le journal",
-      "openFolder": "Ouvrir le dossier de Bascule",
+      "openFolder": "Ouvrir le dossier de Baskul",
       "openAtLogin": "Ouvrir à l'ouverture de session",
       "startWithWindows": "Lancer au démarrage de Windows",
-      "restart": "Redémarrer Bascule",
-      "quit": "Quitter Bascule",
-      "allowAccessibility": "Autoriser Bascule (Accessibilité)…",
+      "restart": "Redémarrer Baskul",
+      "quit": "Quitter Baskul",
+      "allowAccessibility": "Autoriser Baskul (Accessibilité)…",
       "returnHereMac": "Ramener le curseur sur ce Mac",
       "lockMac": "Verrouiller le curseur sur ce Mac",
       "returnHerePc": "Ramener le curseur sur ce PC",
@@ -47,38 +47,38 @@
       "copyFailed": "Copie impossible : sélectionnez le texte et copiez-le à la main.",
       "openFile": "Ouvrir le fichier",
       "open": "Ouvrir",
-      "restart": "Redémarrer Bascule",
+      "restart": "Redémarrer Baskul",
       "none": "Aucun",
       "osOnly": "{os} uniquement",
       "version": "Version {version}",
       "edit": "Modifier"
     },
     "status": {
-      "notRunning": "Bascule n'est pas lancé",
+      "notRunning": "Baskul n'est pas lancé",
       "starting": "Démarrage…",
       "restarting": "Redémarrage…"
     },
     "layout": {
-      "offlineTitle": "Bascule n'est pas lancé",
-      "offlineText": "Cette page s'affiche dès que Bascule fonctionne.",
-      "start": "Démarrer Bascule",
+      "offlineTitle": "Baskul n'est pas lancé",
+      "offlineText": "Cette page s'affiche dès que Baskul fonctionne.",
+      "start": "Démarrer Baskul",
       "unsaved": "Modifications non enregistrées.",
-      "restartingWith": "Bascule redémarre avec les nouveaux réglages…",
+      "restartingWith": "Baskul redémarre avec les nouveaux réglages…",
       "saveRestart": "Enregistrer et redémarrer",
       "closeTitle": "Modifications non enregistrées",
       "closeText": "Fermer sans enregistrer ?"
     },
     "actions": {
       "saved": "Réglages enregistrés et appliqués.",
-      "savedNoRestart": "Réglages enregistrés, mais Bascule n'a pas redémarré.",
-      "restarted": "Bascule a redémarré."
+      "savedNoRestart": "Réglages enregistrés, mais Baskul n'a pas redémarré.",
+      "restarted": "Baskul a redémarré."
     },
     "home": {
       "starting": "Démarrage…",
       "connectedTo": "Connecté à « {peer} »",
       "noConnection": "Pas de connexion",
       "waiting": "En attente de l'autre machine",
-      "waitingHelp": "Vérifiez que Bascule est lancé sur l'autre machine, avec le même secret.",
+      "waitingHelp": "Vérifiez que Baskul est lancé sur l'autre machine, avec le même secret.",
       "since": "{os} · depuis {time} ({ago})",
       "thisMachine": "Cette machine",
       "otherMachine": "Autre machine",
@@ -121,13 +121,13 @@
       "log": "Journal"
     },
     "settings": {
-      "restarting": "Redémarrage de Bascule…",
-      "welcomeTitle": "Bienvenue dans Bascule !",
+      "restarting": "Redémarrage de Baskul…",
+      "welcomeTitle": "Bienvenue dans Baskul !",
       "welcomeIntro": "Pour relier vos deux machines :",
       "welcomeStep1": "Choisissez le rôle de cette machine. La principale est celle qui a le clavier et la souris.",
       "welcomeStep2": "Le secret doit être identique sur les deux machines : copiez celui-ci dans les réglages de l'autre machine, ou collez ici le sien.",
       "welcomeStep3": "Sur la machine principale, indiquez l'adresse de l'autre dans « Se connecter à ». L'autre machine laisse ce champ vide.",
-      "welcomeEnd": "Enregistrez : Bascule redémarre avec ces réglages.",
+      "welcomeEnd": "Enregistrez : Baskul redémarre avec ces réglages.",
       "configUnreadable": "Le fichier de configuration ne peut pas être lu",
       "tabs": {
         "connection": "Connexion",
@@ -249,7 +249,7 @@
         "light": "Clair",
         "dark": "Sombre",
         "language": "Langue",
-        "languageHelp": "Langue de Bascule (fenêtre et menus).",
+        "languageHelp": "Langue de Baskul (fenêtre et menus).",
         "systemLanguage": "Langue du système",
         "trayIcon": "Icône",
         "trayIconHelp": "Icône de la barre des menus ou de la zone de notification. Monochrome : assortie aux autres icônes du système.",
@@ -272,9 +272,9 @@
         },
         "configFile": "Fichier de configuration",
         "commands": "Commandes",
-        "commandsHelp": "Pour d'autres applications (Keyboard Maestro, Raccourcis, AutoHotkey…) : le clavier et la souris passent sur cette machine (here), sur l'autre (other) ou sur celle où ils ne sont pas (toggle). « status » donne l'état de Bascule. « Copier » donne la commande complète, avec le chemin de Bascule :"
+        "commandsHelp": "Pour d'autres applications (Keyboard Maestro, Raccourcis, AutoHotkey…) : le clavier et la souris passent sur cette machine (here), sur l'autre (other) ou sur celle où ils ne sont pas (toggle). « status » donne l'état de Baskul. « Copier » donne la commande complète, avec le chemin de Baskul :"
       },
-      "linuxNotice": "Sous Linux, Bascule ne partage pas encore le clavier et la souris : ces réglages n'ont pas d'effet ici."
+      "linuxNotice": "Sous Linux, Baskul ne partage pas encore le clavier et la souris : ces réglages n'ont pas d'effet ici."
     },
     "log": {
       "title": "Dernières lignes",
@@ -283,7 +283,7 @@
     "about": {
       "tagline": "Un seul clavier, une seule souris et un presse-papiers partagé entre un PC et un Mac.",
       "info": "Informations",
-      "bascule": "Bascule",
+      "baskul": "Baskul",
       "app": "Application",
       "notRunning": "non lancé",
       "machine": "Machine",

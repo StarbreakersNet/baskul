@@ -44,7 +44,7 @@ pub fn open_settings(path: &Path, welcome: bool) {
     match crate::api::launch_settings_app(path, welcome) {
         Ok(mut child) => {
             // On attend sa fin pour ne pas laisser de processus zombie.
-            let _ = std::thread::Builder::new().name("bascule-settings-wait".into()).spawn(move || child.wait());
+            let _ = std::thread::Builder::new().name("baskul-settings-wait".into()).spawn(move || child.wait());
         }
         Err(e) => {
             log::warn!("{e} : ouverture du fichier de configuration");
@@ -53,7 +53,7 @@ pub fn open_settings(path: &Path, welcome: bool) {
     }
 }
 
-/// Relance Bascule avec les mêmes arguments puis quitte ce processus.
+/// Relance Baskul avec les mêmes arguments puis quitte ce processus.
 pub fn relaunch(args: &crate::Args) -> ! {
     let mut argv = args.to_vec();
     argv.push(RELAUNCH_ARG.into());
@@ -67,7 +67,7 @@ pub fn relaunch(args: &crate::Args) -> ! {
 
 fn launch_again(argv: &[String]) -> std::io::Result<()> {
     let exe = std::env::current_exe()?;
-    // macOS, dans Bascule.app : relance par LaunchServices, comme depuis le
+    // macOS, dans Baskul.app : relance par LaunchServices, comme depuis le
     // Finder. Un nouveau processus, et non le même relancé par `exec` : avec
     // `exec`, l'ancienne icône laissait un emplacement vide dans la barre des
     // menus, et la nouvelle restait invisible.
@@ -85,7 +85,7 @@ fn launch_again(argv: &[String]) -> std::io::Result<()> {
 }
 
 /// Bundle `.app` dont `exe` est l'exécutable principal
-/// (`Bascule.app/Contents/MacOS/bascule`).
+/// (`Baskul.app/Contents/MacOS/baskul`).
 fn app_bundle(exe: &Path) -> Option<PathBuf> {
     let macos = exe.parent()?;
     let contents = macos.parent()?;
@@ -101,11 +101,11 @@ mod tests {
     #[test]
     fn app_bundle_of_the_main_executable() {
         assert_eq!(
-            app_bundle(Path::new("/Applications/Bascule.app/Contents/MacOS/bascule")),
-            Some(PathBuf::from("/Applications/Bascule.app"))
+            app_bundle(Path::new("/Applications/Baskul.app/Contents/MacOS/baskul")),
+            Some(PathBuf::from("/Applications/Baskul.app"))
         );
-        assert_eq!(app_bundle(Path::new("/Users/moi/bascule/target/release/bascule")), None);
-        assert_eq!(app_bundle(Path::new("/Applications/Bascule.app/Contents/Resources/bascule")), None);
-        assert_eq!(app_bundle(Path::new("bascule")), None);
+        assert_eq!(app_bundle(Path::new("/Users/moi/baskul/target/release/baskul")), None);
+        assert_eq!(app_bundle(Path::new("/Applications/Baskul.app/Contents/Resources/baskul")), None);
+        assert_eq!(app_bundle(Path::new("baskul")), None);
     }
 }

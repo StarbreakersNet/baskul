@@ -1,4 +1,4 @@
-//! Raccourcis clavier de Bascule (ex. « Ctrl+Alt+Shift+B »).
+//! Raccourcis clavier de Baskul (ex. « Ctrl+Alt+Shift+B »).
 
 use crate::keymap::{self, *};
 use std::collections::HashSet;

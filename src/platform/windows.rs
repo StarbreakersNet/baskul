@@ -83,9 +83,9 @@ const WM_APP_SHOW: u32 = WM_APP + 5;
 const WM_APP_RESTART: u32 = WM_APP + 6;
 const WM_APP_ACTIVE: u32 = WM_APP + 7;
 
-/// Marque des entrées injectées par Bascule pour l'activité partagée : son
+/// Marque des entrées injectées par Baskul pour l'activité partagée : son
 /// propre crochet les laisse passer sans les traiter.
-const BASCULE_INPUT: usize = 0x4241_5343; // "BASC"
+const BASKUL_INPUT: usize = 0x4241_5343; // "BASC"
 
 const TIMER_WATCHDOG: usize = 1;
 const TIMER_REHOOK: usize = 2;
@@ -101,7 +101,7 @@ const ID_RESTART: usize = 16;
 const ID_QUIT: usize = 17;
 
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
-const RUN_VALUE: &str = "Bascule";
+const RUN_VALUE: &str = "Baskul";
 
 /// Marqueur dans le scancode du faux Ctrl gauche que Windows génère avec AltGr.
 const FAKE_LCTRL_BIT: u32 = 0x200;
@@ -147,7 +147,7 @@ fn monitors() -> Layout {
 
 fn message_box(text: &str, flags: MESSAGEBOX_STYLE) {
     let t = wide(text);
-    let c = wide("Bascule");
+    let c = wide("Baskul");
     // SAFETY: chaînes terminées par un zéro.
     unsafe { MessageBoxW(null_mut(), t.as_ptr(), c.as_ptr(), flags | MB_SETFOREGROUND | MB_TOPMOST) };
 }
@@ -176,7 +176,7 @@ fn shell_open(file: &str, params: Option<&str>) {
 pub fn early_init(args: &Args) {
     // SAFETY: appels sans précondition.
     unsafe {
-        // Journal ou résultat d'une commande dans le terminal qui a lancé Bascule.
+        // Journal ou résultat d'une commande dans le terminal qui a lancé Baskul.
         if args.console || args.command.is_some() {
             AttachConsole(ATTACH_PARENT_PROCESS);
         }
@@ -469,7 +469,7 @@ impl PrimaryState {
 
 unsafe extern "system" fn mouse_proc(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
     // SAFETY: pour WH_MOUSE_LL, lParam pointe vers un MSLLHOOKSTRUCT.
-    if code == HC_ACTION as i32 && unsafe { &*(l as *const MSLLHOOKSTRUCT) }.dwExtraInfo != BASCULE_INPUT {
+    if code == HC_ACTION as i32 && unsafe { &*(l as *const MSLLHOOKSTRUCT) }.dwExtraInfo != BASKUL_INPUT {
         // SAFETY: idem.
         let info = unsafe { &*(l as *const MSLLHOOKSTRUCT) };
         let d = PRIMARY.with(|p| match p.try_borrow_mut() {
@@ -730,7 +730,7 @@ fn keep_active() {
     // SAFETY: appel sans précondition.
     unsafe { SetThreadExecutionState(ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED) };
     // Déplacement nul : remet à zéro le délai d'inactivité de Windows.
-    mouse_input_tagged(0, 0, 0, MOUSEEVENTF_MOVE, BASCULE_INPUT);
+    mouse_input_tagged(0, 0, 0, MOUSEEVENTF_MOVE, BASKUL_INPUT);
 }
 
 /// Temps écoulé depuis la dernière entrée de Windows.
@@ -981,7 +981,7 @@ impl Ui {
         nid.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE;
         nid.uCallbackMessage = WM_APP_TRAY;
         nid.hIcon = hicon;
-        let tip: Vec<u16> = format!("Bascule — {}", snap.summary()).encode_utf16().take(127).collect();
+        let tip: Vec<u16> = format!("Baskul — {}", snap.summary()).encode_utf16().take(127).collect();
         nid.szTip[..tip.len()].copy_from_slice(&tip);
         // SAFETY: structure correctement remplie.
         unsafe {
@@ -1036,6 +1036,17 @@ fn autostart_enabled() -> bool {
     unsafe {
         RegGetValueW(HKEY_CURRENT_USER, k.as_ptr(), v.as_ptr(), RRF_RT_REG_SZ, null_mut(), null_mut(), null_mut())
             == ERROR_SUCCESS
+    }
+}
+
+/// Ancien nom (Bascule) : son lancement au démarrage passe à Baskul.
+fn migrate_old_autostart(args: &Args) {
+    let k = wide(RUN_KEY);
+    let v = wide(crate::config::OLD_NAME);
+    // SAFETY: chaînes terminées par un zéro.
+    if unsafe { RegDeleteKeyValueW(HKEY_CURRENT_USER, k.as_ptr(), v.as_ptr()) } == ERROR_SUCCESS {
+        log::info!("lancement au démarrage repris de {}", crate::config::OLD_NAME);
+        set_autostart(true, args);
     }
 }
 
@@ -1294,9 +1305,10 @@ fn register_class(name: &[u16], proc_: WNDPROC, hinst: HINSTANCE, with_cursor: b
 }
 
 pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
-    let main_class = wide("BasculeMain");
-    let hider_class = wide("BasculeHider");
-    let title = wide("Bascule");
+    migrate_old_autostart(&args);
+    let main_class = wide("BaskulMain");
+    let hider_class = wide("BaskulHider");
+    let title = wide("Baskul");
     let empty = wide("");
     // SAFETY: création de nos fenêtres sur ce thread, qui exécute ensuite la
     // boucle de messages.
@@ -1334,7 +1346,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
             null(),
         );
         if hwnd.is_null() || hider.is_null() {
-            fatal("impossible de créer les fenêtres de Bascule");
+            fatal("impossible de créer les fenêtres de Baskul");
         }
         // Presque transparente (une opacité nulle la rendrait « traversable »).
         SetLayeredWindowAttributes(hider, 0, 1, LWA_ALPHA);

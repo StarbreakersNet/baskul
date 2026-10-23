@@ -6,9 +6,9 @@ import NumberInput from "../components/NumberInput.vue";
 import PositionPicker from "../components/PositionPicker.vue";
 import SettingRow from "../components/SettingRow.vue";
 import LinuxNotice from "../components/LinuxNotice.vue";
-import type { BasculeConfig, DaemonInfo } from "../types";
+import type { BaskulConfig, DaemonInfo } from "../types";
 
-const props = defineProps<{ config: BasculeConfig; info: DaemonInfo }>();
+const props = defineProps<{ config: BaskulConfig; info: DaemonInfo }>();
 const edges = computed(() => props.config.screen.edge_switching);
 const missingHotkey = computed(
   () => !props.config.hotkeys.switch_to_secondary || !props.config.hotkeys.return_to_primary,

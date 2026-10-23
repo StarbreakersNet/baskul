@@ -2,10 +2,10 @@
 import { computed } from "vue";
 import { NCard, NGi, NGrid, NInput, NText, useThemeVars } from "naive-ui";
 import SettingRow from "../components/SettingRow.vue";
-import type { BasculeConfig, DaemonInfo, Role } from "../types";
+import type { BaskulConfig, DaemonInfo, Role } from "../types";
 
 // Les sections modifient directement l'objet `config` partagé (formulaire).
-defineProps<{ config: BasculeConfig; info: DaemonInfo }>();
+defineProps<{ config: BaskulConfig; info: DaemonInfo }>();
 
 const roles: { value: Role; key: string }[] = [
   { value: "primary", key: "primary" },

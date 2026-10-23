@@ -15,7 +15,7 @@ export async function copyText(text: string): Promise<void> {
   }
 }
 
-/** Nouveau secret partagé, au même format que celui créé par Bascule. */
+/** Nouveau secret partagé, au même format que celui créé par Baskul. */
 export function newSecret(): string {
   const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
   const bytes = crypto.getRandomValues(new Uint8Array(24));

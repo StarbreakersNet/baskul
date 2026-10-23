@@ -3,11 +3,11 @@
 import { computed, watch } from "vue";
 import { useOsTheme } from "naive-ui";
 import { i18n, systemLocale, type Locale } from "../i18n";
-import type { BasculeConfig } from "../types";
+import type { BaskulConfig } from "../types";
 import { useSettings } from "./useSettings";
 
-type Ui = BasculeConfig["ui"];
-const STORAGE_KEY = "bascule.ui";
+type Ui = BaskulConfig["ui"];
+const STORAGE_KEY = "baskul.ui";
 
 function cached(): Partial<Ui> {
   try {

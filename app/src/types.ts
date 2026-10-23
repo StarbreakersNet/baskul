@@ -4,7 +4,7 @@ export type Role = "primary" | "secondary";
 export type Edge = "left" | "right" | "top" | "bottom";
 
 /** Contenu du fichier `config.toml`, tel que le daemon le renvoie. */
-export interface BasculeConfig {
+export interface BaskulConfig {
   role: Role;
   name: string;
   network: { listen: string; connect: string; secret: string };
@@ -33,7 +33,7 @@ export interface BasculeConfig {
 /** Réponse de `load_settings`. */
 export interface DaemonInfo {
   /** `null` si le fichier ne peut pas être lu (voir `error`). */
-  config: BasculeConfig | null;
+  config: BaskulConfig | null;
   error: string | null;
   path: string;
   os: string;
@@ -41,7 +41,7 @@ export interface DaemonInfo {
   /** Adresse IP de cette machine sur le réseau local. */
   address: string | null;
   version: string;
-  /** Exécutable de Bascule (commandes `bascule switch …`). */
+  /** Exécutable de Baskul (commandes `baskul switch …`). */
   exe: string | null;
 }
 

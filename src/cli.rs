@@ -1,12 +1,12 @@
 //! Commandes pour d'autres applications (Keyboard Maestro, Raccourcis,
-//! AutoHotkey, scripts…). Elles s'adressent au Bascule en cours d'exécution
+//! AutoHotkey, scripts…). Elles s'adressent au Baskul en cours d'exécution
 //! par son API locale :
 //!
-//! - `bascule switch primary|secondary|toggle|here|other` : le clavier et la
+//! - `baskul switch primary|secondary|toggle|here|other` : le clavier et la
 //!   souris passent sur la machine principale, sur la machine pilotée, sur
 //!   l'autre que maintenant, sur celle où la commande est lancée, ou sur
 //!   l'autre ;
-//! - `bascule status` : état de Bascule, une information par ligne.
+//! - `baskul status` : état de Baskul, une information par ligne.
 //!
 //! Code de sortie : 0 si tout va bien, 1 sinon (message sur la sortie
 //! d'erreur).
@@ -24,7 +24,7 @@ pub enum Command {
 /// Noms des commandes (premier argument).
 pub const NAMES: [&str; 2] = ["switch", "status"];
 
-/// La ligne de commande demande une commande (et non le lancement de Bascule).
+/// La ligne de commande demande une commande (et non le lancement de Baskul).
 pub fn requested() -> bool {
     std::env::args().skip(1).any(|a| NAMES.contains(&a.as_str()))
 }
@@ -45,12 +45,12 @@ pub fn run(cmd: &Command, config_path: &Path) -> i32 {
 
 /// Erreur d'une commande : message sur la sortie d'erreur, code 1.
 pub fn fail(msg: &str) -> i32 {
-    eprintln!("bascule : {msg}");
+    eprintln!("baskul : {msg}");
     1
 }
 
-/// `bascule status` : clés et valeurs en anglais, faciles à lire dans un
-/// script (`bascule status | grep active`).
+/// `baskul status` : clés et valeurs en anglais, faciles à lire dans un
+/// script (`baskul status | grep active`).
 fn status_text(v: &Value) -> String {
     let connected = v["state"] == "connected";
     let active = if v["remote_active"].as_bool().unwrap_or(false) { "secondary" } else { "primary" };

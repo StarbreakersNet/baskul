@@ -10,7 +10,7 @@ declare module "vue-router" {
   interface RouteMeta {
     /** Clé de traduction du titre affiché dans l'en-tête. */
     title: string;
-    /** La page a besoin que Bascule soit lancé. */
+    /** La page a besoin que Baskul soit lancé. */
     daemon: boolean;
   }
 }

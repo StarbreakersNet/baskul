@@ -179,7 +179,7 @@ unsafe extern "C" {
 
 // Fonctions privées ou dépréciées : résolues à l'exécution (dlsym) plutôt
 // qu'à l'édition de liens, pour que la compilation ne dépende jamais de leur
-// présence dans le SDK. Si l'une manque, Bascule utilise un repli.
+// présence dans le SDK. Si l'une manque, Baskul utilise un repli.
 #[cfg_attr(target_os = "macos", link(name = "Carbon", kind = "framework"))]
 unsafe extern "C" {}
 
@@ -533,7 +533,7 @@ impl SmoothScroller {
             precise: cfg.smooth_precision,
             trackpad: cfg.trackpad_simulation && cfg.smoothness == Smoothness::High,
         });
-        let spawned = std::thread::Builder::new().name("bascule-scroll".into()).spawn(move || {
+        let spawned = std::thread::Builder::new().name("baskul-scroll".into()).spawn(move || {
             // SAFETY: source d'événements propre à ce thread.
             let source = unsafe { CGEventSourceCreate(SOURCE_HID_STATE) };
             let mut flags = 0u64;
@@ -764,7 +764,7 @@ impl MacEmulator {
         if due {
             self.last_activity = Some(Instant::now());
             // Empêche la mise en veille de l'écran du Mac pendant qu'on le pilote.
-            let name = cf_string(c"Bascule");
+            let name = cf_string(c"Baskul");
             let mut id = 0u32;
             // SAFETY: chaîne CF valide, libérée ensuite.
             unsafe {
@@ -1030,7 +1030,7 @@ impl Emulator for MacEmulator {
 /// (ni veille ni économiseur), et les apps qui mesurent le temps écoulé
 /// depuis le dernier événement (Teams, Discord, Slack…) le voient présent.
 fn keep_active() {
-    let name = cf_string(c"Bascule");
+    let name = cf_string(c"Baskul");
     let mut id = 0u32;
     // SAFETY: chaîne CF valide, libérée ensuite ; événement créé, envoyé
     // puis libéré.
@@ -1496,13 +1496,13 @@ define_class!(
     // Controller n'implémente pas Drop.
     #[unsafe(super(NSObject))]
     #[thread_kind = MainThreadOnly]
-    #[name = "BasculeController"]
+    #[name = "BaskulController"]
     struct Controller;
 
     unsafe impl NSObjectProtocol for Controller {}
 
     unsafe impl NSApplicationDelegate for Controller {
-        /// Double-clic sur Bascule.app alors qu'il tourne déjà : réglages.
+        /// Double-clic sur Baskul.app alors qu'il tourne déjà : réglages.
         #[unsafe(method(applicationShouldHandleReopen:hasVisibleWindows:))]
         fn should_handle_reopen(&self, _app: &NSApplication, _visible: bool) -> bool {
             if let Some(p) = ui_value(|u| u.config_path.clone()) {
@@ -1629,8 +1629,8 @@ fn menu_item(
 }
 
 /// Nom de sauvegarde de l'icône : macOS garde sa place (déplaçable avec
-/// ⌘ + glisser), y compris après un redémarrage de Bascule.
-const STATUS_AUTOSAVE: &str = "fr.bascule.status";
+/// ⌘ + glisser), y compris après un redémarrage de Baskul.
+const STATUS_AUTOSAVE: &str = "fr.baskul.status";
 
 /// Image de la barre des menus : la même icône que sous Windows (voir
 /// `icon.rs`), dessinée en 36 pixels pour 18 points (écrans Retina). En
@@ -1664,7 +1664,7 @@ fn update_status_item(ui: &MacUi, mtm: MainThreadMarker, snap: &Snapshot) {
                 button.setTitle(&NSString::from_str("⌨︎"));
             }
         }
-        button.setToolTip(Some(&NSString::from_str(&format!("Bascule — {}", snap.summary()))));
+        button.setToolTip(Some(&NSString::from_str(&format!("Baskul — {}", snap.summary()))));
     }
     ui.status_line.setTitle(&NSString::from_str(&snap.summary()));
 }
@@ -1824,7 +1824,7 @@ fn shutdown() {
 // Ouverture à la connexion (LaunchAgent)
 // ---------------------------------------------------------------------------
 
-const LOGIN_LABEL: &str = "fr.bascule.app";
+const LOGIN_LABEL: &str = "fr.baskul.app";
 
 fn login_plist() -> Option<PathBuf> {
     Some(dirs::home_dir()?.join("Library/LaunchAgents").join(format!("{LOGIN_LABEL}.plist")))
@@ -1836,6 +1836,15 @@ fn login_item_enabled() -> bool {
 
 fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+}
+
+/// Ancien nom (Bascule) : son ouverture à la connexion passe à Baskul.
+fn migrate_old_login_item() {
+    let Some(old) = dirs::home_dir().map(|h| h.join("Library/LaunchAgents/fr.bascule.app.plist")) else { return };
+    if old.exists() && std::fs::remove_file(&old).is_ok() {
+        log::info!("ouverture à la connexion reprise de {}", crate::config::OLD_NAME);
+        set_login_item(true);
+    }
 }
 
 fn set_login_item(on: bool) {
@@ -1888,9 +1897,8 @@ pub fn early_init(_args: &Args) {}
 pub fn fatal(msg: &str) -> ! {
     log::error!("{msg}");
     crate::logging::flush();
-    eprintln!("Bascule : {msg}");
-    let script =
-        format!("display alert \"Bascule\" message {} as critical buttons {{\"OK\"}}", applescript_string(msg));
+    eprintln!("Baskul : {msg}");
+    let script = format!("display alert \"Baskul\" message {} as critical buttons {{\"OK\"}}", applescript_string(msg));
     let _ = std::process::Command::new("/usr/bin/osascript").arg("-e").arg(script).status();
     std::process::exit(1)
 }
@@ -1905,13 +1913,14 @@ pub fn open_in_editor(path: &Path) {
 
 pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
     let Some(mtm) = MainThreadMarker::new() else {
-        fatal("Bascule doit démarrer sur le thread principal");
+        fatal("Baskul doit démarrer sur le thread principal");
     };
+    migrate_old_login_item();
     let app = NSApplication::sharedApplication(mtm);
     // Pas d'icône dans le Dock : uniquement la barre des menus.
     app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
     // Pas d'« App Nap » : sans fenêtre visible, macOS ralentirait sinon les
-    // minuteries et les threads de Bascule (latence de la souris).
+    // minuteries et les threads de Baskul (latence de la souris).
     let activity = NSProcessInfo::processInfo().beginActivityWithOptions_reason(
         NSActivityOptions::UserInitiatedAllowingIdleSystemSleep | NSActivityOptions::LatencyCritical,
         &NSString::from_str("Partage du clavier et de la souris"),
@@ -1926,7 +1935,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
     let menu = NSMenu::new(mtm);
     menu.setAutoenablesItems(false);
 
-    let status_line = menu_item(mtm, "Bascule", None, &controller);
+    let status_line = menu_item(mtm, "Baskul", None, &controller);
     status_line.setEnabled(false);
     menu.addItem(&status_line);
     let access_item = menu_item(mtm, &i18n::t("menu.allowAccessibility"), Some(sel!(openAccessibility:)), &controller);

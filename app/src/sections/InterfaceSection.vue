@@ -1,11 +1,11 @@
 <script setup lang="ts">
 // Apparence et langue. Le thème et la langue s'appliquent aussitôt à cette
-// fenêtre ; les menus de Bascule suivent après l'enregistrement.
+// fenêtre ; les menus de Baskul suivent après l'enregistrement.
 import ChoiceGroup from "../components/ChoiceGroup.vue";
 import SettingRow from "../components/SettingRow.vue";
-import type { BasculeConfig } from "../types";
+import type { BaskulConfig } from "../types";
 
-defineProps<{ config: BasculeConfig }>();
+defineProps<{ config: BaskulConfig }>();
 </script>
 
 <template>

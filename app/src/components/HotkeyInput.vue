@@ -2,7 +2,7 @@
 // Raccourci clavier : « Modifier » puis taper la combinaison. Le format est
 // celui de la configuration, par exemple « Shift+F12 » ou « Ctrl+Alt+B ».
 //
-// Sur la machine principale, c'est le crochet clavier de Bascule qui relève
+// Sur la machine principale, c'est le crochet clavier de Baskul qui relève
 // la combinaison : elle ne déclenche alors aucun raccourci, et les touches que
 // la fenêtre ne reçoit pas (F11, F12…) fonctionnent aussi. Sinon, la fenêtre
 // la relève elle-même.
@@ -39,7 +39,7 @@ function modifiers(e: KeyboardEvent): string[] {
   return m;
 }
 
-/** Nom Bascule d'une touche physique (codes `KeyboardEvent.code`). */
+/** Nom Baskul d'une touche physique (codes `KeyboardEvent.code`). */
 function keyName(code: string): string {
   return /^Key([A-Z])$/.exec(code)?.[1] ?? /^Digit(\d)$/.exec(code)?.[1] ?? code;
 }

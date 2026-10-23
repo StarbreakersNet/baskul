@@ -1,14 +1,14 @@
-# Bascule
+# Baskul
 
-Bascule partage **le clavier, la souris et le presse-papiers** de votre PC Windows avec votre Mac. Pour piloter le Mac, il suffit d'amener le curseur au bord de l'écran du PC, ou d'appuyer sur un raccourci clavier (**Maj + F12** par défaut).
+Baskul partage **le clavier, la souris et le presse-papiers** de votre PC Windows avec votre Mac. Pour piloter le Mac, il suffit d'amener le curseur au bord de l'écran du PC, ou d'appuyer sur un raccourci clavier (**Maj + F12** par défaut).
 
-- Le **clavier est transparent** : Bascule transmet la *position physique* de chaque touche. Il ne transmet jamais de caractère. C'est la disposition clavier du Mac qui produit les caractères, comme si le clavier était branché sur le Mac. **Ctrl reste Ctrl.** Aucune combinaison n'est convertie.
+- Le **clavier est transparent** : Baskul transmet la *position physique* de chaque touche. Il ne transmet jamais de caractère. C'est la disposition clavier du Mac qui produit les caractères, comme si le clavier était branché sur le Mac. **Ctrl reste Ctrl.** Aucune combinaison n'est convertie.
 - **Pas de bug des touches mortes**, contrairement à Deskflow / Synergy (voir [plus bas](#pourquoi-pas-de-bug-des-touches-mortes)). `^` puis `e` donne `ê`, et `¨` puis `i` donne `ï`.
 - Les **2 boutons latéraux de la souris (4/5)** sont transmis. Ils peuvent aussi devenir un geste « précédent / suivant » compris par Safari, le Finder, Xcode…
 - La **molette** est réglable : défilement par lignes ou au pixel, vitesse, inversion.
 - Le **presse-papiers** est partagé dans les deux sens : texte, texte mis en forme (HTML), images. Une image copiée en tant que fichier (Finder, Explorateur : PNG, JPEG, GIF, BMP, TIFF, WebP, et HEIC sur Mac) est envoyée comme image. Les mots de passe copiés depuis un gestionnaire de mots de passe sont ignorés ; un contenu non transmis (plusieurs fichiers, format inconnu…) est signalé dans le journal.
-- La liaison est **chiffrée** (protocole Noise) et protégée par un secret partagé. Bascule se reconnecte automatiquement.
-- Tous les réglages se changent **sans recompiler**, dans la fenêtre de Bascule (ou directement dans le fichier texte).
+- La liaison est **chiffrée** (protocole Noise) et protégée par un secret partagé. Baskul se reconnecte automatiquement.
+- Tous les réglages se changent **sans recompiler**, dans la fenêtre de Baskul (ou directement dans le fichier texte).
 
 > Le sens Mac → PC (le Mac pilote le PC) est aussi prévu, mais il est **expérimental** (voir [Sens inverse](#sens-inverse-mac--pc-expérimental)). Une [version Linux minimale](#linux-version-minimale) permet aussi de tester les réglages et la connexion.
 
@@ -27,9 +27,9 @@ Bascule partage **le clavier, la souris et le presse-papiers** de votre PC Windo
      git push origin 0.6.0
      ```
 3. À la fin, une **Release** apparaît dans la page **Releases** du dépôt, avec :
-   - `Bascule-Windows.zip` : `bascule.exe` et son app de réglages `bascule-settings.exe` ;
-   - `Bascule-macOS.zip` : `Bascule.app`, universelle (Apple Silicon et Intel), app de réglages incluse ;
-   - `Bascule-Linux.tar.gz` : la [version Linux minimale](#linux-version-minimale).
+   - `Baskul-Windows.zip` : `baskul.exe` et son app de réglages `baskul-settings.exe` ;
+   - `Baskul-macOS.zip` : `Baskul.app`, universelle (Apple Silicon et Intel), app de réglages incluse ;
+   - `Baskul-Linux.tar.gz` : la [version Linux minimale](#linux-version-minimale).
 
 Pour compiler sans publier de Release : onglet **Actions** → **build** → **Run workflow**. Les programmes sont alors dans les *artifacts*, en bas de la page de l'exécution. Le workflow **release** réutilise ce workflow **build** (tests puis compilation), puis publie.
 
@@ -43,13 +43,13 @@ Il faut [Rust](https://rustup.rs) et [Node.js](https://nodejs.org) 22 (pour l'ap
 xcode-select --install                                           # outils de compilation Apple
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh  # Rust (choix par défaut)
 source ~/.cargo/env
-./scripts/build-macos.sh      # produit dist/Bascule.app
+./scripts/build-macos.sh      # produit dist/Baskul.app
 ```
 
 **Sur le PC**, rustup propose d'installer les *Visual Studio Build Tools* : acceptez. Ensuite :
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\build-windows.ps1   # produit dist\Bascule\
+powershell -ExecutionPolicy Bypass -File scripts\build-windows.ps1   # produit dist\Baskul\
 ```
 
 **Sous Linux**, voir [Linux](#linux-version-minimale).
@@ -60,31 +60,31 @@ powershell -ExecutionPolicy Bypass -File scripts\build-windows.ps1   # produit d
 
 La configuration conseillée : **le Mac attend la connexion, le PC se connecte au Mac.** Le pare-feu de Windows n'a ainsi rien à autoriser.
 
-Quittez CursorHop (ou tout autre logiciel de partage de souris) avant de lancer Bascule : deux logiciels qui interceptent la souris en même temps se gênent.
+Quittez CursorHop (ou tout autre logiciel de partage de souris) avant de lancer Baskul : deux logiciels qui interceptent la souris en même temps se gênent.
 
 ### Sur le Mac
 
-1. Décompressez `Bascule-macOS.zip` et glissez **Bascule.app** dans **Applications**.
+1. Décompressez `Baskul-macOS.zip` et glissez **Baskul.app** dans **Applications**.
 2. Au premier lancement, macOS bloque l'app car elle n'est pas signée par un développeur identifié.
    - Faites un clic droit sur l'app, puis **Ouvrir**.
    - Sur macOS 15 et suivants, allez dans *Réglages Système → Confidentialité et sécurité*, puis cliquez sur **Ouvrir quand même** en bas de la page.
-   - Autre solution, dans le Terminal : `xattr -dr com.apple.quarantine /Applications/Bascule.app`
-3. Bascule crée sa configuration et ouvre ses **réglages**. « Pilotée » est déjà sélectionné. **Copiez le secret partagé** (bouton « Copier »), vous en aurez besoin sur le PC. Notez aussi l'**adresse de cette machine** affichée dans les réglages : c'est l'adresse IP du Mac. Ne touchez à rien d'autre.
-4. macOS demande l'autorisation **Accessibilité**. Ouvrez *Réglages Système → Confidentialité et sécurité → Accessibilité* et activez **Bascule**. Si macOS demande aussi d'accepter les connexions entrantes ou l'accès au réseau local, cliquez sur **Autoriser**.
+   - Autre solution, dans le Terminal : `xattr -dr com.apple.quarantine /Applications/Baskul.app`
+3. Baskul crée sa configuration et ouvre ses **réglages**. « Pilotée » est déjà sélectionné. **Copiez le secret partagé** (bouton « Copier »), vous en aurez besoin sur le PC. Notez aussi l'**adresse de cette machine** affichée dans les réglages : c'est l'adresse IP du Mac. Ne touchez à rien d'autre.
+4. macOS demande l'autorisation **Accessibilité**. Ouvrez *Réglages Système → Confidentialité et sécurité → Accessibilité* et activez **Baskul**. Si macOS demande aussi d'accepter les connexions entrantes ou l'accès au réseau local, cliquez sur **Autoriser**.
 5. Si les réglages n'affichent pas l'adresse IP du Mac, elle se trouve dans *Réglages Système → Wi-Fi (ou Réseau) → Détails*. Vous pouvez aussi taper `ipconfig getifaddr en0` dans le Terminal.
 
-L'icône ⌨︎ dans la barre des menus indique l'état. Son menu propose aussi « Autoriser Bascule (Accessibilité)… » si l'autorisation manque.
+L'icône ⌨︎ dans la barre des menus indique l'état. Son menu propose aussi « Autoriser Baskul (Accessibilité)… » si l'autorisation manque.
 
 ### Sur le PC
 
-1. Décompressez `Bascule-Windows.zip` dans un dossier définitif, par exemple `%LOCALAPPDATA%\Programs\Bascule`. Gardez `bascule.exe` et `bascule-settings.exe` ensemble. Si SmartScreen s'affiche, cliquez sur **Informations complémentaires**, puis **Exécuter quand même**.
-2. Lancez `bascule.exe`. Ses réglages s'ouvrent, avec « Principale » sélectionné. Renseignez :
+1. Décompressez `Baskul-Windows.zip` dans un dossier définitif, par exemple `%LOCALAPPDATA%\Programs\Baskul`. Gardez `baskul.exe` et `baskul-settings.exe` ensemble. Si SmartScreen s'affiche, cliquez sur **Informations complémentaires**, puis **Exécuter quand même**.
+2. Lancez `baskul.exe`. Ses réglages s'ouvrent, avec « Principale » sélectionné. Renseignez :
    - **Se connecter à** : l'adresse IP du Mac (par exemple `192.168.1.30`) ;
    - **Secret partagé** : collez EXACTEMENT le secret du Mac.
 
    Si le Mac n'est pas à droite du PC, choisissez sa place dans « Position de l'autre écran ».
 3. Cliquez sur **Enregistrer et redémarrer**.
-4. L'icône de Bascule, dans la zone de notification (à côté de l'horloge), devient **verte** une fois connectée. Appuyez sur **Maj + F12**, ou amenez la souris au bord droit de l'écran : le curseur passe sur le Mac. 🎉
+4. L'icône de Baskul, dans la zone de notification (à côté de l'horloge), devient **verte** une fois connectée. Appuyez sur **Maj + F12**, ou amenez la souris au bord droit de l'écran : le curseur passe sur le Mac. 🎉
 5. Facultatif : dans le menu, cochez **Lancer au démarrage de Windows**. Sur le Mac, cochez **Ouvrir à l'ouverture de session**.
 
 ---
@@ -97,7 +97,7 @@ L'icône ⌨︎ dans la barre des menus indique l'état. Son menu propose aussi 
 | Revenir sur le PC | **Maj + F11**, ou ramener le curseur par le même bord, côté Mac |
 | Copier / coller entre machines | Copier normalement d'un côté, coller de l'autre |
 
-Les raccourcis se changent dans les réglages. Le même raccourci pour l'aller et le retour permet de passer d'une machine à l'autre avec une seule combinaison. Bascule ne les intercepte que lorsque les deux machines sont connectées. Attention, **Maj + F12** sert aussi dans VS Code (« Rechercher toutes les références ») : choisissez-en un autre si vous en avez besoin.
+Les raccourcis se changent dans les réglages. Le même raccourci pour l'aller et le retour permet de passer d'une machine à l'autre avec une seule combinaison. Baskul ne les intercepte que lorsque les deux machines sont connectées. Attention, **Maj + F12** sert aussi dans VS Code (« Rechercher toutes les références ») : choisissez-en un autre si vous en avez besoin.
 
 Pour ne passer d'une machine à l'autre **qu'au clavier**, désactivez « Bascule par les bords de l'écran » dans les réglages.
 
@@ -107,17 +107,17 @@ Si la connexion tombe, le curseur revient tout seul sur le PC. Tout ce qui étai
 
 ### Commandes pour d'autres applications
 
-D'autres applications (Keyboard Maestro, Raccourcis, AutoHotkey, scripts…) peuvent dire à Bascule où envoyer le clavier et la souris, depuis l'une ou l'autre machine :
+D'autres applications (Keyboard Maestro, Raccourcis, AutoHotkey, scripts…) peuvent dire à Baskul où envoyer le clavier et la souris, depuis l'une ou l'autre machine :
 
 | Commande | Effet |
 |---|---|
-| `bascule switch primary` | Clavier et souris sur la machine principale (le PC) |
-| `bascule switch secondary` | … sur la machine pilotée (le Mac) |
-| `bascule switch here` / `other` | … sur la machine où la commande est lancée, ou sur l'autre |
-| `bascule switch toggle` | … sur celle où ils ne sont pas |
-| `bascule status` | État de Bascule, une information par ligne (`role`, `connected`, `peer`, `active`, `locked`) |
+| `baskul switch primary` | Clavier et souris sur la machine principale (le PC) |
+| `baskul switch secondary` | … sur la machine pilotée (le Mac) |
+| `baskul switch here` / `other` | … sur la machine où la commande est lancée, ou sur l'autre |
+| `baskul switch toggle` | … sur celle où ils ne sont pas |
+| `baskul status` | État de Baskul, une information par ligne (`role`, `connected`, `peer`, `active`, `locked`) |
 
-Bascule doit être lancé sur la machine où la commande s'exécute ; lancée sur le Mac, la commande est transmise au PC. En cas d'erreur (Bascule pas lancé, machines pas connectées…), un message s'affiche sur la sortie d'erreur et le code de sortie vaut 1. Le chemin complet de la commande, prêt à copier, est dans les réglages (onglet Avancé). Sur le Mac : `/Applications/Bascule.app/Contents/MacOS/bascule switch here`, par exemple dans une action « Execute Shell Script » de Keyboard Maestro. Sous Windows, `bascule.exe` est une application sans console : dans un script, lancez-la avec `start /wait` pour attendre son code de sortie.
+Baskul doit être lancé sur la machine où la commande s'exécute ; lancée sur le Mac, la commande est transmise au PC. En cas d'erreur (Baskul pas lancé, machines pas connectées…), un message s'affiche sur la sortie d'erreur et le code de sortie vaut 1. Le chemin complet de la commande, prêt à copier, est dans les réglages (onglet Avancé). Sur le Mac : `/Applications/Baskul.app/Contents/MacOS/baskul switch here`, par exemple dans une action « Execute Shell Script » de Keyboard Maestro. Sous Windows, `baskul.exe` est une application sans console : dans un script, lancez-la avec `start /wait` pour attendre son code de sortie.
 
 ### Correspondance des touches (position physique)
 
@@ -143,22 +143,22 @@ MetaLeft = "AltLeft"     # Windows du PC → ⌥
 
 ## 4. Réglages (sans recompiler)
 
-Dans le menu de Bascule, choisissez **Réglages…** : la fenêtre de Bascule s'ouvre. Relancer Bascule alors qu'il tourne déjà (double-clic sur l'app) l'ouvre aussi. Le menu de gauche mène à :
+Dans le menu de Baskul, choisissez **Réglages…** : la fenêtre de Baskul s'ouvre. Relancer Baskul alors qu'il tourne déjà (double-clic sur l'app) l'ouvre aussi. Le menu de gauche mène à :
 
-- **Accueil** : l'état de Bascule en direct (connexion, machine que pilotent le clavier et la souris, raccourcis) ;
-- **Réglages** : modifiez, puis cliquez sur **Enregistrer et redémarrer** ; Bascule redémarre et la fenêtre affiche aussitôt le nouvel état de la connexion ;
-- **Journal** : les dernières lignes du journal de Bascule, en direct ;
+- **Accueil** : l'état de Baskul en direct (connexion, machine que pilotent le clavier et la souris, raccourcis) ;
+- **Réglages** : modifiez, puis cliquez sur **Enregistrer et redémarrer** ; Baskul redémarre et la fenêtre affiche aussitôt le nouvel état de la connexion ;
+- **Journal** : les dernières lignes du journal de Baskul, en direct ;
 - **À propos** : versions, fichier de configuration, licence.
 
 Dans les réglages :
 
 - Les réglages sont rangés par onglets. Ceux qui ne concernent pas le rôle de cette machine sont masqués ; ceux qui ne servent que sur un système (par exemple « macOS uniquement ») sont grisés ailleurs.
-- Pour un raccourci, cliquez sur « Modifier » puis tapez la combinaison. Sur la machine principale, c'est Bascule lui-même qui la relève : elle ne déclenche alors aucun raccourci, et toutes les touches fonctionnent (F11, F12…).
+- Pour un raccourci, cliquez sur « Modifier » puis tapez la combinaison. Sur la machine principale, c'est Baskul lui-même qui la relève : elle ne déclenche alors aucun raccourci, et toutes les touches fonctionnent (F11, F12…).
 - Le bouton « Ouvrir le fichier » donne accès au fichier texte, par exemple pour le remappage de touches. Quand les réglages sont enregistrés, les commentaires du fichier sont conservés.
-- Si le fichier de configuration contient une erreur, Bascule ouvre ses réglages pour la corriger.
-- `bascule --settings` ouvre les réglages.
+- Si le fichier de configuration contient une erreur, Baskul ouvre ses réglages pour la corriger.
+- `baskul --settings` ouvre les réglages.
 
-Le fichier complet et commenté est dans [`docs/config.exemple.toml`](docs/config.exemple.toml). Après une modification à la main, faites **Redémarrer Bascule** dans le menu.
+Le fichier complet et commenté est dans [`docs/config.exemple.toml`](docs/config.exemple.toml). Après une modification à la main, faites **Redémarrer Baskul** dans le menu.
 
 | Section | Réglage | Effet |
 |---|---|---|
@@ -181,14 +181,14 @@ Le fichier complet et commenté est dans [`docs/config.exemple.toml`](docs/confi
 | | `toggle_lock` | Raccourci de verrouillage du curseur (ex. `"ScrollLock"`) |
 | `[clipboard]` | `enabled`, `images`, `html`, `max_size_mb`, `skip_sensitive` | Presse-papiers partagé |
 | `[activity]` | `mirror = true` | Activité partagée : cette machine reste active tant que vous l'êtes sur l'autre |
-| `[ui]` | `theme = "system"` / `"light"` / `"dark"` | Thème de la fenêtre de Bascule |
-| | `language = "system"` / `"fr"` / `"en"` | Langue de Bascule (fenêtre et menus) |
+| `[ui]` | `theme = "system"` / `"light"` / `"dark"` | Thème de la fenêtre de Baskul |
+| | `language = "system"` / `"fr"` / `"en"` | Langue de Baskul (fenêtre et menus) |
 | | `tray_icon = "color"` / `"mono"` | Icône en couleurs, ou monochrome (assortie aux icônes du système) |
 | `[log]` | `level = "debug"` | Journal détaillé, utile pour un diagnostic |
 
 Pour le défilement, commencez par `mode = "lines"`. Si la vitesse varie trop d'une app à l'autre (Safari vs Chrome), essayez `mode = "pixels"` avec `pixels_per_notch` entre 60 et 120. Pour retrouver le défilement de Mac Mouse Fix, choisissez `mode = "smooth"` avec la même vitesse et la même douceur que dans Mac Mouse Fix.
 
-> **Mac Mouse Fix** et les logiciels du même genre ne s'activent que si une souris est branchée sur le Mac : ils n'agissent donc pas sur la souris du PC. (D'après son code source, si une souris, même inutilisée, est branchée sur le Mac, Mac Mouse Fix traite aussi les défilements envoyés par Bascule en mode `"lines"` : réglez alors `lines_per_notch = 1.0`, un cran de Bascule valant un cran pour Mac Mouse Fix. Les modes `"pixels"` et `"smooth"` lui échappent.) Le mode `"smooth"` de Bascule reprend leur algorithme : la vitesse de rotation de la molette est mesurée (les crans rapprochés vont plus loin), plusieurs gestes rapides enchaînés accélèrent encore, et chaque cran est animé à vitesse constante puis freiné jusqu'à l'arrêt ; un changement de sens arrête net le défilement. Avec la simulation du trackpad, la phase à vitesse constante est envoyée comme un geste à deux doigts et le freinage comme l'élan qui suit. La vitesse « macOS » de Mac Mouse Fix n'existe pas dans Bascule : elle reprend l'accélération que macOS applique à une souris branchée sur le Mac, que Bascule ne reçoit pas.
+> **Mac Mouse Fix** et les logiciels du même genre ne s'activent que si une souris est branchée sur le Mac : ils n'agissent donc pas sur la souris du PC. (D'après son code source, si une souris, même inutilisée, est branchée sur le Mac, Mac Mouse Fix traite aussi les défilements envoyés par Baskul en mode `"lines"` : réglez alors `lines_per_notch = 1.0`, un cran de Baskul valant un cran pour Mac Mouse Fix. Les modes `"pixels"` et `"smooth"` lui échappent.) Le mode `"smooth"` de Baskul reprend leur algorithme : la vitesse de rotation de la molette est mesurée (les crans rapprochés vont plus loin), plusieurs gestes rapides enchaînés accélèrent encore, et chaque cran est animé à vitesse constante puis freiné jusqu'à l'arrêt ; un changement de sens arrête net le défilement. Avec la simulation du trackpad, la phase à vitesse constante est envoyée comme un geste à deux doigts et le freinage comme l'élan qui suit. La vitesse « macOS » de Mac Mouse Fix n'existe pas dans Baskul : elle reprend l'accélération que macOS applique à une souris branchée sur le Mac, que Baskul ne reçoit pas.
 
 ---
 
@@ -198,40 +198,40 @@ Pour le défilement, commencez par `mode = "lines"`. Si la vitesse varie trop d'
 - Le `secret` doit être **identique** des deux côtés. En cas d'erreur, le menu affiche « secret incorrect ».
 - Une seule machine doit avoir `connect` rempli, avec l'IP de l'autre.
 - Les rôles doivent être `primary` sur le PC et `secondary` sur le Mac. Le menu signale l'erreur si ce n'est pas le cas.
-- Les deux machines doivent avoir la **même version** de Bascule. Sinon, le menu affiche « versions incompatibles ».
-- Si le pare-feu du Mac est actif, autorisez Bascule : *Réglages → Réseau → Pare-feu → Options*.
+- Les deux machines doivent avoir la **même version** de Baskul. Sinon, le menu affiche « versions incompatibles ».
+- Si le pare-feu du Mac est actif, autorisez Baskul : *Réglages → Réseau → Pare-feu → Options*.
 - Les deux machines doivent être sur le même réseau. Pensez à donner une IP fixe au Mac dans votre box (bail DHCP statique).
 
-**Les touches `²` / `@` et `<` / `>` sont inversées.** Réglez `[keyboard] iso_swap = "on"` (ou `"off"`) sur le Mac, puis redémarrez Bascule.
+**Les touches `²` / `@` et `<` / `>` sont inversées.** Réglez `[keyboard] iso_swap = "on"` (ou `"off"`) sur le Mac, puis redémarrez Baskul.
 
 **Le défilement va dans le mauvais sens, trop vite ou trop lentement.** Voir la section `[scroll]` ci-dessus.
 
 **Précédent / suivant (boutons 4/5) ne fonctionne pas dans Safari ou le Finder.** Réglez `side_buttons = "swipe"`.
 
-**Après une mise à jour, le Mac ne réagit plus.** Une app non signée par un développeur change d'identité à chaque compilation. Dans *Accessibilité*, supprimez Bascule (bouton **−**), puis ajoutez-la à nouveau (**+**).
+**Après une mise à jour, le Mac ne réagit plus.** Une app non signée par un développeur change d'identité à chaque compilation. Dans *Accessibilité*, supprimez Baskul (bouton **−**), puis ajoutez-la à nouveau (**+**).
 
 Pour éviter cette manipulation, signez vos compilations locales avec un certificat local :
 1. Ouvrez *Trousseaux d'accès → Assistant de certification → Créer un certificat*.
-2. Indiquez le nom `Bascule Local`, le type *Racine auto-signée* et le type de certificat *Signature de code*.
-3. Compilez avec `CODESIGN_IDENTITY="Bascule Local" ./scripts/build-macos.sh`.
+2. Indiquez le nom `Baskul Local`, le type *Racine auto-signée* et le type de certificat *Signature de code*.
+3. Compilez avec `CODESIGN_IDENTITY="Baskul Local" ./scripts/build-macos.sh`.
 
-**Win + L verrouille le PC, même quand le curseur est sur le Mac.** C'est une limite de Windows, comme Ctrl + Alt + Suppr : ces combinaisons ne peuvent pas être interceptées. Bascule relâche alors tout proprement.
+**Win + L verrouille le PC, même quand le curseur est sur le Mac.** C'est une limite de Windows, comme Ctrl + Alt + Suppr : ces combinaisons ne peuvent pas être interceptées. Baskul relâche alors tout proprement.
 
-**Une fenêtre lancée en administrateur sur le PC (Gestionnaire des tâches…).** Windows interdit à un programme normal d'intercepter le clavier quand une telle fenêtre est active. Bascule reprend le premier plan quand vous passez sur le Mac. Pour couvrir aussi ce cas, lancez Bascule en administrateur.
+**Une fenêtre lancée en administrateur sur le PC (Gestionnaire des tâches…).** Windows interdit à un programme normal d'intercepter le clavier quand une telle fenêtre est active. Baskul reprend le premier plan quand vous passez sur le Mac. Pour couvrir aussi ce cas, lancez Baskul en administrateur.
 
-**Les réglages ne s'ouvrent pas sous Windows.** L'app de réglages utilise WebView2, inclus dans Windows 11 et installé par les mises à jour de Windows 10. Sinon, installez le *WebView2 Runtime* de Microsoft. En attendant, le menu « Ouvrir le dossier de Bascule » donne accès au fichier `config.toml`.
+**Les réglages ne s'ouvrent pas sous Windows.** L'app de réglages utilise WebView2, inclus dans Windows 11 et installé par les mises à jour de Windows 10. Sinon, installez le *WebView2 Runtime* de Microsoft. En attendant, le menu « Ouvrir le dossier de Baskul » donne accès au fichier `config.toml`.
 
 **Journaux**
-- PC : `%APPDATA%\Bascule\bascule.log`
-- Mac : `~/Library/Logs/Bascule/bascule.log`
-- Linux : `~/.config/Bascule/bascule.log`
+- PC : `%APPDATA%\Baskul\baskul.log`
+- Mac : `~/Library/Logs/Baskul/baskul.log`
+- Linux : `~/.config/Baskul/baskul.log`
 
 Le menu propose aussi **Ouvrir le journal**. Avec `[log] level = "debug"`, chaque touche ignorée et chaque changement d'écran sont détaillés.
 
 **Configuration**
-- PC : `%APPDATA%\Bascule\config.toml`
-- Mac : `~/Library/Application Support/Bascule/config.toml`
-- Linux : `~/.config/Bascule/config.toml`
+- PC : `%APPDATA%\Baskul\config.toml`
+- Mac : `~/Library/Application Support/Baskul/config.toml`
+- Linux : `~/.config/Baskul/config.toml`
 
 ---
 
@@ -243,28 +243,28 @@ Inversez simplement les rôles : `role = "primary"` sur le Mac, `role = "seconda
 
 ## Linux (version minimale)
 
-Sous Linux, Bascule se connecte à l'autre machine, partage le presse-papiers (texte surtout) et a les mêmes réglages. En revanche, il **ne partage ni le clavier ni la souris** : cette version sert à tester l'app de réglages et la connexion.
+Sous Linux, Baskul se connecte à l'autre machine, partage le presse-papiers (texte surtout) et a les mêmes réglages. En revanche, il **ne partage ni le clavier ni la souris** : cette version sert à tester l'app de réglages et la connexion.
 
 ```bash
 sudo apt install libwebkit2gtk-4.1-0     # pour l'app de réglages, s'il manque
-tar xzf Bascule-Linux.tar.gz
-./bascule/bascule
+tar xzf Baskul-Linux.tar.gz
+./baskul/baskul
 ```
 
-Au premier lancement, les réglages s'ouvrent. Il n'y a pas d'icône : pour les rouvrir, relancez `./bascule/bascule` (ou `./bascule/bascule --settings`). Pour tester la liaison avec le Mac, choisissez « Principale » sur Linux, puis indiquez l'adresse du Mac et son secret : les deux machines affichent « Connecté », et un texte copié d'un côté se colle de l'autre.
+Au premier lancement, les réglages s'ouvrent. Il n'y a pas d'icône : pour les rouvrir, relancez `./baskul/baskul` (ou `./baskul/baskul --settings`). Pour tester la liaison avec le Mac, choisissez « Principale » sur Linux, puis indiquez l'adresse du Mac et son secret : les deux machines affichent « Connecté », et un texte copié d'un côté se colle de l'autre.
 
 Pour compiler (Debian, Ubuntu) :
 
 ```bash
 sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libxdo-dev libssl-dev
-./scripts/build-linux.sh      # produit dist/bascule/ et dist/Bascule-Linux.tar.gz
+./scripts/build-linux.sh      # produit dist/baskul/ et dist/Baskul-Linux.tar.gz
 ```
 
 ---
 
 ## Développer l'interface (Tauri + Vue 3)
 
-Les réglages sont une app [Tauri 2](https://tauri.app) à part, `bascule-settings`, dans `app/` : Vue 3, TypeScript, Vite, Yarn 4 et [Naive UI](https://www.naiveui.com). Bascule (le daemon) la lance et lui répond par une API locale :
+Les réglages sont une app [Tauri 2](https://tauri.app) à part, `baskul-settings`, dans `app/` : Vue 3, TypeScript, Vite, Yarn 4 et [Naive UI](https://www.naiveui.com). Baskul (le daemon) la lance et lui répond par une API locale :
 
 ```
 Vue (app/src)  →  commandes Tauri (app/src-tauri)  →  API locale du daemon (src/api.rs)
@@ -275,15 +275,15 @@ Le daemon écrit le port et un jeton de son API dans `api.json`, à côté de `c
 ```bash
 corepack enable          # une fois : active Yarn 4 (champ packageManager)
 cd app && yarn install
-cargo run                # à la racine : lance Bascule (le daemon)
+cargo run                # à la racine : lance Baskul (le daemon)
 cd app && yarn tauri dev # fenêtre de réglages, avec rechargement à chaud
 ```
 
 - `src/types.ts` reprend la configuration de `src/config.rs`. Pour un nouveau réglage : `config.rs` (structure, modèle commenté, validation), puis `types.ts` et la section concernée dans `src/sections/`.
 - `src/composables/useSettings.ts` gère l'état : chargement, état en direct, enregistrement, attente du redémarrage.
 - Pages (`src/pages/`) et menu latéral (`src/layouts/AppLayout.vue`) : vue-router. Icônes : [Tabler Icons](https://tabler.io/icons) (`@tabler/icons-vue`).
-- **Traductions** : `locales/fr.json` et `locales/en.json`, à la racine du dépôt. La section `app` est lue par [vue-i18n](https://vue-i18n.intlify.dev) (`$t("…")` dans les composants), la section `daemon` par Bascule (`src/i18n.rs`, menus et état de la connexion). Pour une nouvelle langue : un fichier de plus, avec les mêmes clés.
-- `yarn build` vérifie les types (`vue-tsc`) puis construit le front, qui est intégré à l'exécutable par `cargo build -p bascule-settings --features custom-protocol`.
+- **Traductions** : `locales/fr.json` et `locales/en.json`, à la racine du dépôt. La section `app` est lue par [vue-i18n](https://vue-i18n.intlify.dev) (`$t("…")` dans les composants), la section `daemon` par Baskul (`src/i18n.rs`, menus et état de la connexion). Pour une nouvelle langue : un fichier de plus, avec les mêmes clés.
+- `yarn build` vérifie les types (`vue-tsc`) puis construit le front, qui est intégré à l'exécutable par `cargo build -p baskul-settings --features custom-protocol`.
 
 ---
 
@@ -291,10 +291,10 @@ cd app && yarn tauri dev # fenêtre de réglages, avec rechargement à chaud
 
 Deskflow et Synergy **traduisent les frappes en caractères sur le PC** (fonction Windows `ToUnicode`). Ils tentent ensuite de retrouver, sur l'autre machine, quelle touche produirait ce caractère. Or `ToUnicode` *consomme* l'état des touches mortes de Windows. Résultat : `^` puis `e` donne `^e`, `ê` en double, ou rien du tout. Il faut aussi deviner des correspondances entre des dispositions qui ne sont pas les mêmes (AZERTY PC et AZERTY Mac diffèrent).
 
-Bascule ne traduit **rien**. Sur le PC, un hook bas niveau lit le **scancode** de chaque touche, c'est-à-dire sa position physique. Bascule le convertit en code **USB HID**, puis en **keycode Mac**, et l'injecte. La composition `^` + `e` → `ê` est faite par macOS lui-même, avec la disposition choisie sur le Mac. L'état des touches mortes de Windows n'est jamais touché.
+Baskul ne traduit **rien**. Sur le PC, un hook bas niveau lit le **scancode** de chaque touche, c'est-à-dire sa position physique. Baskul le convertit en code **USB HID**, puis en **keycode Mac**, et l'injecte. La composition `^` + `e` → `ê` est faite par macOS lui-même, avec la disposition choisie sur le Mac. L'état des touches mortes de Windows n'est jamais touché.
 
 Deux détails de Windows sont gérés :
-- **AltGr** : Windows génère un faux « Ctrl gauche » en même temps qu'AltGr. Bascule le filtre, et le Mac ne reçoit que ⌥ droite.
+- **AltGr** : Windows génère un faux « Ctrl gauche » en même temps qu'AltGr. Baskul le filtre, et le Mac ne reçoit que ⌥ droite.
 - **Claviers ISO** (européens) : les touches `²` et `<` sont échangées comme le fait macOS pour ses claviers ISO. Le réglage `iso_swap` le contrôle.
 
 ---
@@ -319,13 +319,13 @@ src/
   icon.rs          icône (couleur ou monochrome)
   i18n.rs          traductions des menus et de l'état (locales/*.json)
   api.rs           API locale (127.0.0.1 + jeton) pour l'app de réglages et les commandes
-  cli.rs           commandes `bascule switch …` et `bascule status`
+  cli.rs           commandes `baskul switch …` et `baskul status`
   platform/
     windows.rs     hooks bas niveau, masquage du curseur, SendInput, icône
     macos.rs       CGEventPost, gestes, Verr. Maj (IOKit), CGEventTap, barre des menus
     linux.rs       version minimale (connexion, presse-papiers, réglages)
-locales/           traductions (fr, en), partagées par Bascule et l'app
-app/               app de Bascule : Tauri 2 + Vue 3 + Naive UI
+locales/           traductions (fr, en), partagées par Baskul et l'app
+app/               app de Baskul : Tauri 2 + Vue 3 + Naive UI
   src/             front (pages, sections, composants, état)
   src-tauri/       commandes Tauri, client de l'API du daemon
 ```

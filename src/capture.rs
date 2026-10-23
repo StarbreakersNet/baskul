@@ -1,6 +1,6 @@
 //! Saisie d'un raccourci depuis l'app de réglages : sur la machine
 //! principale, la prochaine combinaison tapée est relevée par le crochet
-//! clavier de Bascule. Elle ne déclenche alors aucun raccourci et n'arrive pas
+//! clavier de Baskul. Elle ne déclenche alors aucun raccourci et n'arrive pas
 //! aux applications, et les touches que la fenêtre de réglages ne reçoit pas
 //! (F11, F12…) fonctionnent aussi.
 

@@ -16,7 +16,7 @@ pub fn early_init(_args: &Args) {}
 pub fn fatal(msg: &str) -> ! {
     log::error!("{msg}");
     crate::logging::flush();
-    eprintln!("Bascule : {msg}");
+    eprintln!("Baskul : {msg}");
     std::process::exit(1)
 }
 

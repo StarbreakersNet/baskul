@@ -258,7 +258,7 @@ pub fn start<B: Backend + 'static>(
     let (tx, rx) = unbounded::<ClipEvent>();
     let enabled = cfg.enabled;
     std::thread::Builder::new()
-        .name("bascule-clipboard".into())
+        .name("baskul-clipboard".into())
         .spawn(move || {
             if !enabled {
                 log::info!("presse-papiers partagé désactivé");
@@ -635,7 +635,7 @@ mod tests {
 
     #[test]
     fn image_files_become_png() {
-        let dir = std::env::temp_dir().join(format!("bascule-clip-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("baskul-clip-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let img = image::RgbaImage::from_fn(4, 3, |x, y| image::Rgba([x as u8 * 60, y as u8 * 80, 7, 255]));
         for (name, format) in [("a.bmp", image::ImageFormat::Bmp), ("a.jpg", image::ImageFormat::Jpeg)] {

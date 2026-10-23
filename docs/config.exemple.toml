@@ -1,6 +1,6 @@
 # =====================================================================
-#  Bascule — configuration
-#  Après modification : menu Bascule > « Redémarrer ».
+#  Baskul — configuration
+#  Après modification : menu Baskul > « Redémarrer ».
 # =====================================================================
 
 # Rôle de cette machine :
@@ -123,7 +123,7 @@ return_to_primary = "Shift+F11"
 toggle_lock = ""
 
 [ui]
-# Thème de l'app de Bascule : "system", "light" (clair) ou "dark" (sombre).
+# Thème de l'app de Baskul : "system", "light" (clair) ou "dark" (sombre).
 theme = "system"
 # Langue : "system" (celle du système), "fr" ou "en".
 language = "system"

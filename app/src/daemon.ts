@@ -1,6 +1,6 @@
 // Commandes Tauri (voir `src-tauri/src/main.rs`), relayées à l'API du daemon.
 import { invoke } from "@tauri-apps/api/core";
-import type { BasculeConfig, CaptureState, DaemonInfo, DaemonStatus } from "./types";
+import type { BaskulConfig, CaptureState, DaemonInfo, DaemonStatus } from "./types";
 
 /** Erreur renvoyée par les commandes. */
 export interface CommandError {
@@ -11,12 +11,12 @@ export interface CommandError {
 export const daemon = {
   status: () => invoke<DaemonStatus>("daemon_status"),
   load: () => invoke<DaemonInfo>("load_settings"),
-  save: (config: BasculeConfig) => invoke<{ restart: boolean }>("save_settings", { config }),
+  save: (config: BaskulConfig) => invoke<{ restart: boolean }>("save_settings", { config }),
   restart: () => invoke<{ restart: boolean }>("restart_daemon"),
   openConfigFile: () => invoke("open_config_file"),
   readLog: () => invoke<{ path: string | null; text: string }>("read_log"),
   openLogFile: () => invoke("open_log_file"),
-  /** Saisie d'un raccourci par le crochet clavier de Bascule (machine principale). */
+  /** Saisie d'un raccourci par le crochet clavier de Baskul (machine principale). */
   captureHotkey: {
     start: () => invoke<object>("capture_hotkey", { action: "start" }),
     poll: () => invoke<CaptureState>("capture_hotkey", { action: "poll" }),

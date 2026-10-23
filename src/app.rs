@@ -107,7 +107,7 @@ pub fn start_primary(
 ) -> (Services, Receiver<PeerEvent>) {
     let (tx, rx) = unbounded::<PeerEvent>();
     let wake = Arc::new(wake);
-    // Commande `bascule switch`, traitée comme un événement de l'autre machine.
+    // Commande `baskul switch`, traitée comme un événement de l'autre machine.
     let (switch_tx, switch_wake) = (tx.clone(), wake.clone());
     api::set_switch_handler(Role::Primary, move |to| {
         let _ = switch_tx.send(PeerEvent::Switch(to));
@@ -122,7 +122,7 @@ pub fn start_primary(
                 // Fin du délai de grâce de cette coupure, signalée plus tard.
                 let n = disconnects.fetch_add(1, Ordering::Relaxed) + 1;
                 let (tx, wake) = (tx.clone(), wake.clone());
-                let _ = std::thread::Builder::new().name("bascule-grace".into()).spawn(move || {
+                let _ = std::thread::Builder::new().name("baskul-grace".into()).spawn(move || {
                     std::thread::sleep(RECONNECT_GRACE);
                     let _ = tx.send(PeerEvent::GraceOver(n));
                     wake();
@@ -180,7 +180,7 @@ pub fn start_secondary<E: Emulator + Send + 'static>(
         }
     });
     let _ = link_cell.set(services.link.clone());
-    // Commande `bascule switch` : transmise à la machine principale.
+    // Commande `baskul switch` : transmise à la machine principale.
     let link = services.link.clone();
     api::set_switch_handler(Role::Secondary, move |to| {
         if !link.is_connected() {
@@ -194,11 +194,11 @@ pub fn start_secondary<E: Emulator + Send + 'static>(
 }
 
 /// Machine pilotée : son propre clavier ou trackpad (et non les événements
-/// injectés par Bascule) compte aussi comme activité, signalée à la machine
+/// injectés par Baskul) compte aussi comme activité, signalée à la machine
 /// principale.
 fn watch_local_activity(link: LinkHandle, idle: fn() -> Option<Duration>) {
     const POLL: Duration = Duration::from_secs(2);
-    let _ = std::thread::Builder::new().name("bascule-activity".into()).spawn(move || {
+    let _ = std::thread::Builder::new().name("baskul-activity".into()).spawn(move || {
         let mut sent: Option<Instant> = None;
         loop {
             std::thread::sleep(POLL);
@@ -215,7 +215,7 @@ fn watch_local_activity(link: LinkHandle, idle: fn() -> Option<Duration>) {
 }
 
 /// La dernière entrée du système (il y a `idle`) n'est pas un événement
-/// injecté par Bascule (le dernier datant de `injected`).
+/// injecté par Baskul (le dernier datant de `injected`).
 fn is_local_input(now: Instant, idle: Duration, injected: Option<Instant>) -> bool {
     const MARGIN: Duration = Duration::from_millis(500);
     let Some(input) = now.checked_sub(idle) else { return false };
@@ -327,7 +327,7 @@ mod tests {
         link.send_input(Message::UserActive);
         assert!(wait_for(|| emu.0.lock().unwrap().last() == Some(&Ev::KeepActive)));
 
-        // Dans l'autre sens : commande `bascule switch` lancée sur la machine
+        // Dans l'autre sens : commande `baskul switch` lancée sur la machine
         // pilotée, activité de son propre clavier.
         secondary.link.send_input(Message::Switch { to: SwitchTo::Primary });
         assert_eq!(peer_rx.recv_timeout(Duration::from_secs(5)).unwrap(), PeerEvent::Switch(SwitchTo::Primary));
@@ -345,7 +345,7 @@ mod tests {
         let s = Duration::from_secs;
         // Rien d'injecté : toute entrée vient de la machine elle-même.
         assert!(is_local_input(now, s(1), None));
-        // Dernière entrée = dernier événement injecté par Bascule.
+        // Dernière entrée = dernier événement injecté par Baskul.
         assert!(!is_local_input(now, s(1), Some(now - s(1))));
         // Entrée 1 s après le dernier événement injecté : trackpad du Mac.
         assert!(is_local_input(now, s(1), Some(now - s(2))));

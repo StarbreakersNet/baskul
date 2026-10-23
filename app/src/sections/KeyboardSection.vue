@@ -4,9 +4,9 @@ import { NButton, NText } from "naive-ui";
 import ChoiceGroup from "../components/ChoiceGroup.vue";
 import LinuxNotice from "../components/LinuxNotice.vue";
 import SettingRow from "../components/SettingRow.vue";
-import type { BasculeConfig } from "../types";
+import type { BaskulConfig } from "../types";
 
-const props = defineProps<{ config: BasculeConfig }>();
+const props = defineProps<{ config: BaskulConfig }>();
 const emit = defineEmits<{ openFile: [] }>();
 const rules = computed(() => Object.keys(props.config.keyboard.remap).length);
 </script>

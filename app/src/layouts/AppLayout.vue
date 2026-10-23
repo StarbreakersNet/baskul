@@ -76,7 +76,7 @@ const menu = computed<MenuOption[]>(() => [
 const restarting = computed(() => phase.value === "restarting");
 const busy = computed(() => saving.value || restarting.value);
 const subtitle = computed(() => (info.value ? `${info.value.hostname} · ${osLabel(info.value.os)}` : ""));
-/** Bascule doit tourner pour afficher la page. */
+/** Baskul doit tourner pour afficher la page. */
 const gated = computed(() => route.meta.daemon && phase.value !== "ready" && !restarting.value);
 
 const footer = computed(
@@ -121,7 +121,7 @@ onMounted(async () => {
     >
       <n-flex align="center" :size="12" :wrap="false" :style="{ height: `${HEADER}px`, padding: '0 16px' }">
         <n-avatar :src="logo" :size="32" color="transparent" />
-        <n-text v-if="!collapsed" strong style="font-size: 17px">Bascule</n-text>
+        <n-text v-if="!collapsed" strong style="font-size: 17px">Baskul</n-text>
       </n-flex>
       <n-menu
         :value="String(route.name)"

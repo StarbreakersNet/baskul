@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Journal de Bascule : les dernières lignes, rafraîchies en direct.
+// Journal de Baskul : les dernières lignes, rafraîchies en direct.
 import { nextTick, onActivated, onDeactivated, ref } from "vue";
 import { NButton, NCard, NFlex, NLog, NSwitch, NText } from "naive-ui";
 import { useActions } from "../composables/useActions";
@@ -27,7 +27,7 @@ async function refresh() {
       }
     }
   } catch {
-    // Bascule redémarre : nouvel essai au prochain tour.
+    // Baskul redémarre : nouvel essai au prochain tour.
   } finally {
     loading.value = false;
   }

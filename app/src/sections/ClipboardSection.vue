@@ -2,9 +2,9 @@
 import { NSwitch } from "naive-ui";
 import NumberInput from "../components/NumberInput.vue";
 import SettingRow from "../components/SettingRow.vue";
-import type { BasculeConfig } from "../types";
+import type { BaskulConfig } from "../types";
 
-defineProps<{ config: BasculeConfig }>();
+defineProps<{ config: BaskulConfig }>();
 </script>
 
 <template>

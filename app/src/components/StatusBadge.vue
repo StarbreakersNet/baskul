@@ -9,7 +9,7 @@ const props = defineProps<{ status: DaemonStatus | null; restarting?: boolean }>
 
 const { t } = useI18n();
 
-// Le résumé vient de Bascule, dans la langue choisie.
+// Le résumé vient de Baskul, dans la langue choisie.
 const view = computed(() => {
   if (props.restarting) return { type: "info", text: t("status.restarting") } as const;
   const s = props.status;

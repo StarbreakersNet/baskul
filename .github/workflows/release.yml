@@ -37,15 +37,15 @@ jobs:
             tag=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
           fi
           files=(
-            artifacts/Bascule-Windows/Bascule-Windows.zip
-            artifacts/Bascule-macOS/Bascule-macOS.zip
-            artifacts/Bascule-Linux/Bascule-Linux.tar.gz
+            artifacts/Baskul-Windows/Baskul-Windows.zip
+            artifacts/Baskul-macOS/Baskul-macOS.zip
+            artifacts/Baskul-Linux/Baskul-Linux.tar.gz
           )
           if gh release view "$tag" > /dev/null 2>&1; then
             gh release upload "$tag" "${files[@]}" --clobber
           else
             gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" \
-              --title "Bascule $tag" --generate-notes
+              --title "Baskul $tag" --generate-notes
           fi
         env:
           GH_TOKEN: ${{ github.token }}

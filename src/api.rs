@@ -1,4 +1,4 @@
-//! API locale du daemon, utilisée par l'app de réglages (`bascule-settings`,
+//! API locale du daemon, utilisée par l'app de réglages (`baskul-settings`,
 //! en Tauri + Vue, dans `app/`).
 //!
 //! Un petit serveur HTTP écoute sur 127.0.0.1 (port aléatoire). Son port et un
@@ -36,16 +36,16 @@ struct Server {
 static RESTART: OnceLock<fn()> = OnceLock::new();
 
 type SwitchFn = Box<dyn Fn(SwitchTo) -> Result<(), String> + Send + Sync>;
-/// Rôle de cette machine et fonction de la commande `bascule switch`.
+/// Rôle de cette machine et fonction de la commande `baskul switch`.
 static SWITCH: Mutex<Option<(Role, SwitchFn)>> = Mutex::new(None);
 
-/// Fonction appelée par la commande `bascule switch` (depuis un thread du
+/// Fonction appelée par la commande `baskul switch` (depuis un thread du
 /// serveur), une fois la machine visée connue.
 pub fn set_switch_handler(role: Role, f: impl Fn(SwitchTo) -> Result<(), String> + Send + Sync + 'static) {
     *SWITCH.lock().unwrap_or_else(|e| e.into_inner()) = Some((role, Box::new(f)));
 }
 
-/// Fonction appelée pour redémarrer Bascule (après un enregistrement…).
+/// Fonction appelée pour redémarrer Baskul (après un enregistrement…).
 /// Elle est appelée depuis un thread du serveur : elle doit seulement
 /// prévenir la boucle principale.
 pub fn set_restart_handler(f: fn()) {
@@ -66,12 +66,12 @@ pub fn api_file(config_path: &Path) -> PathBuf {
     config_path.parent().unwrap_or(Path::new(".")).join(API_FILE)
 }
 
-/// Lance l'app de réglages, installée à côté de Bascule.
+/// Lance l'app de réglages, installée à côté de Baskul.
 pub fn launch_settings_app(config_path: &Path, welcome: bool) -> Result<Child, String> {
     let exe = settings_exe().ok_or("app de réglages introuvable")?;
     let mut cmd = Command::new(&exe);
-    // Pour joindre l'API, et relancer Bascule avec la même configuration.
-    cmd.env("BASCULE_API_FILE", api_file(config_path)).env("BASCULE_CONFIG", config_path);
+    // Pour joindre l'API, et relancer Baskul avec la même configuration.
+    cmd.env("BASKUL_API_FILE", api_file(config_path)).env("BASKUL_CONFIG", config_path);
     if welcome {
         cmd.arg("--bienvenue");
     }
@@ -81,10 +81,10 @@ pub fn launch_settings_app(config_path: &Path, welcome: bool) -> Result<Child, S
 fn settings_exe() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let dir = exe.parent()?;
-    let name = if cfg!(windows) { "bascule-settings.exe" } else { "bascule-settings" };
-    // À côté de Bascule (Windows, Linux, développement) ; sur macOS, dans
-    // Bascule.app/Contents/Helpers.
-    [dir.join(name), dir.join("../Helpers/BasculeSettings.app/Contents/MacOS").join(name)]
+    let name = if cfg!(windows) { "baskul-settings.exe" } else { "baskul-settings" };
+    // À côté de Baskul (Windows, Linux, développement) ; sur macOS, dans
+    // Baskul.app/Contents/Helpers.
+    [dir.join(name), dir.join("../Helpers/BaskulSettings.app/Contents/MacOS").join(name)]
         .into_iter()
         .find(|p| p.is_file())
 }
@@ -99,11 +99,11 @@ fn spawn(path: PathBuf) -> Result<Arc<Server>, String> {
     let server = Arc::new(Server { path, port, token, started });
     let s = server.clone();
     std::thread::Builder::new()
-        .name("bascule-api".into())
+        .name("baskul-api".into())
         .spawn(move || {
             for stream in listener.incoming().flatten() {
                 let s = s.clone();
-                let _ = std::thread::Builder::new().name("bascule-api-req".into()).spawn(move || serve(stream, &s));
+                let _ = std::thread::Builder::new().name("baskul-api-req".into()).spawn(move || serve(stream, &s));
             }
         })
         .map_err(|e| format!("API locale : {e}"))?;
@@ -144,7 +144,7 @@ impl Request {
 struct Response {
     status: u16,
     body: Value,
-    /// Redémarrer Bascule une fois la réponse envoyée.
+    /// Redémarrer Baskul une fois la réponse envoyée.
     restart: bool,
 }
 
@@ -258,7 +258,7 @@ fn route(req: &Request, server: &Server) -> Response {
     if !req.header("host").is_some_and(|h| local.iter().any(|l| l == h)) {
         return Response::error(403, "hôte non autorisé");
     }
-    if req.header("x-bascule-token") != Some(server.token.as_str()) {
+    if req.header("x-baskul-token") != Some(server.token.as_str()) {
         return Response::error(403, "jeton invalide");
     }
     if let Some(origin) = req.header("origin") {
@@ -320,13 +320,13 @@ fn route(req: &Request, server: &Server) -> Response {
     }
 }
 
-/// Commande `bascule switch` : `{"to": "primary" | "secondary" | "toggle" |
+/// Commande `baskul switch` : `{"to": "primary" | "secondary" | "toggle" |
 /// "here" | "other"}`. Renvoie la machine où agissent désormais le clavier et
 /// la souris.
 fn switch(body: &[u8]) -> Response {
     let guard = SWITCH.lock().unwrap_or_else(|e| e.into_inner());
     let Some((role, handler)) = guard.as_ref() else {
-        return Response::error(503, "Bascule n'est pas encore prêt");
+        return Response::error(503, "Baskul n'est pas encore prêt");
     };
     let to = serde_json::from_slice::<Value>(body).ok().and_then(|v| v["to"].as_str().map(str::to_owned));
     let s = status::snapshot();
@@ -343,7 +343,7 @@ fn switch(body: &[u8]) -> Response {
     }
 }
 
-/// Machine visée par `bascule switch`, lancée sur une machine de rôle `role`.
+/// Machine visée par `baskul switch`, lancée sur une machine de rôle `role`.
 /// `remote_active` : le clavier et la souris agissent en ce moment sur la
 /// machine pilotée (même sens des deux côtés).
 fn switch_target(to: &str, role: Role, remote_active: bool) -> Option<SwitchTo> {
@@ -363,9 +363,9 @@ fn side_name(side: SwitchTo) -> &'static str {
     }
 }
 
-/// Requête à l'API du Bascule en cours d'exécution (commandes `bascule …`).
+/// Requête à l'API du Baskul en cours d'exécution (commandes `baskul …`).
 pub fn call(config_path: &Path, method: &str, path: &str, body: Option<&Value>) -> Result<Value, String> {
-    let not_running = || "Bascule n'est pas lancé".to_string();
+    let not_running = || "Baskul n'est pas lancé".to_string();
     let text = std::fs::read_to_string(api_file(config_path)).map_err(|_| not_running())?;
     let api: Value = serde_json::from_str(&text).map_err(|_| not_running())?;
     let (Some(port), Some(token)) = (api["port"].as_u64(), api["token"].as_str()) else {
@@ -376,7 +376,7 @@ pub fn call(config_path: &Path, method: &str, path: &str, body: Option<&Value>) 
     let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
     let body = body.map(Value::to_string).unwrap_or_default();
     let head = format!(
-        "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nX-Bascule-Token: {token}\r\n\
+        "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nX-Baskul-Token: {token}\r\n\
          Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         body.len()
     );
@@ -385,10 +385,10 @@ pub fn call(config_path: &Path, method: &str, path: &str, body: Option<&Value>) 
         .write_all(head.as_bytes())
         .and_then(|_| stream.write_all(body.as_bytes()))
         .and_then(|_| stream.read_to_end(&mut resp))
-        .map_err(|e| format!("pas de réponse de Bascule : {e}"))?;
+        .map_err(|e| format!("pas de réponse de Baskul : {e}"))?;
     let resp = String::from_utf8_lossy(&resp);
-    let (head, body) = resp.split_once("\r\n\r\n").ok_or("réponse de Bascule illisible")?;
-    let status: u16 = head.get(9..12).and_then(|c| c.parse().ok()).ok_or("réponse de Bascule illisible")?;
+    let (head, body) = resp.split_once("\r\n\r\n").ok_or("réponse de Baskul illisible")?;
+    let status: u16 = head.get(9..12).and_then(|c| c.parse().ok()).ok_or("réponse de Baskul illisible")?;
     let value: Value = serde_json::from_str(body).unwrap_or(Value::Null);
     match status {
         200 => Ok(value),
@@ -461,7 +461,7 @@ fn config_info(path: &Path) -> Value {
         "hostname": config::hostname(),
         "address": local_address(),
         "version": crate::VERSION,
-        // Pour les commandes `bascule switch …` affichées par l'app.
+        // Pour les commandes `baskul switch …` affichées par l'app.
         "exe": std::env::current_exe().ok().map(|p| p.display().to_string()),
     })
 }
@@ -506,7 +506,7 @@ mod tests {
         fn new() -> TempDir {
             let mut b = [0u8; 8];
             getrandom::fill(&mut b).unwrap();
-            let dir = std::env::temp_dir().join(format!("bascule-test-{}", u64::from_le_bytes(b)));
+            let dir = std::env::temp_dir().join(format!("baskul-test-{}", u64::from_le_bytes(b)));
             std::fs::create_dir_all(&dir).unwrap();
             TempDir(dir)
         }
@@ -533,7 +533,7 @@ mod tests {
     #[test]
     fn log_tail_starts_on_a_line() {
         let tmp = TempDir::new();
-        let path = tmp.0.join("bascule.log");
+        let path = tmp.0.join("baskul.log");
         std::fs::write(&path, "première ligne\ndeuxième\ntroisième\n").unwrap();
         assert_eq!(read_tail(&path, 1000).unwrap(), "première ligne\ndeuxième\ntroisième\n");
         assert_eq!(read_tail(&path, 15).unwrap(), "troisième\n");
@@ -564,11 +564,11 @@ mod tests {
         let server = spawn(path.clone()).unwrap();
         let (port, token) = (server.port, server.token.clone());
         let host = format!("Host: 127.0.0.1:{port}");
-        let auth = format!("{host}\r\nX-Bascule-Token: {token}");
+        let auth = format!("{host}\r\nX-Baskul-Token: {token}");
 
         // Sans jeton, depuis un autre nom d'hôte ou une autre origine : refusé.
         assert_eq!(request(port, &format!("GET /api/config HTTP/1.1\r\n{host}"), "").0, 403);
-        let rebinding = format!("GET /api/config HTTP/1.1\r\nHost: attaquant.example\r\nX-Bascule-Token: {token}");
+        let rebinding = format!("GET /api/config HTTP/1.1\r\nHost: attaquant.example\r\nX-Baskul-Token: {token}");
         assert_eq!(request(port, &rebinding, "").0, 403);
         let evil = format!("POST /api/config HTTP/1.1\r\n{auth}\r\nOrigin: http://attaquant.example");
         assert_eq!(request(port, &evil, "{}").0, 403);

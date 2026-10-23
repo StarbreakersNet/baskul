@@ -35,7 +35,7 @@ pub trait Emulator {
     fn keep_active(&mut self) {}
 }
 
-/// Dernier événement injecté par Bascule sur cette machine : ce qui suit
+/// Dernier événement injecté par Baskul sur cette machine : ce qui suit
 /// vient de son propre clavier ou trackpad.
 static INJECTED_AT: Mutex<Option<Instant>> = Mutex::new(None);
 

@@ -9,7 +9,7 @@ edition = "2024"
 license = "MIT"
 
 [package]
-name = "bascule"
+name = "baskul"
 version.workspace = true
 edition.workspace = true
 description = "Partage clavier, souris et presse-papiers entre Windows et macOS"
@@ -17,7 +17,7 @@ license.workspace = true
 publish = false
 
 [[bin]]
-name = "bascule"
+name = "baskul"
 path = "src/main.rs"
 
 [dependencies]

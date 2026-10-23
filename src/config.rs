@@ -2,7 +2,7 @@
 //!
 //! Le même format sert sur les deux machines ; chaque machine ignore les
 //! sections qui ne la concernent pas. Tous les réglages se changent sans
-//! recompiler : il suffit de redémarrer Bascule (menu « Redémarrer »).
+//! recompiler : il suffit de redémarrer Baskul (menu « Redémarrer »).
 
 use crate::hotkey::Hotkey;
 use crate::protocol::{DEFAULT_PORT, Edge, Role};
@@ -273,7 +273,7 @@ pub enum Theme {
     Dark,
 }
 
-/// Langue de Bascule (app de réglages et menus).
+/// Langue de Baskul (app de réglages et menus).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Language {
@@ -556,9 +556,42 @@ fn with_default_port(s: &str) -> String {
     format!("{s}:{DEFAULT_PORT}")
 }
 
-/// Dossier de configuration de Bascule.
+/// Dossier de configuration de Baskul.
 pub fn config_dir() -> PathBuf {
-    dirs::config_dir().or_else(dirs::home_dir).unwrap_or_else(|| PathBuf::from(".")).join("Bascule")
+    config_base().join("Baskul")
+}
+
+fn config_base() -> PathBuf {
+    dirs::config_dir().or_else(dirs::home_dir).unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// Ancien nom de l'app (versions 0.6 et précédentes).
+pub const OLD_NAME: &str = "Bascule";
+
+/// Reprend les réglages de l'ancien nom (dossier « Bascule ») tant qu'il n'y
+/// a pas de dossier « Baskul ». Refuse si l'ancienne version tourne encore
+/// (elle tient son verrou d'instance).
+pub fn migrate_old_config_dir() -> Result<bool, String> {
+    migrate_dir(&config_base().join(OLD_NAME), &config_dir())
+}
+
+fn migrate_dir(old: &Path, new: &Path) -> Result<bool, String> {
+    if new.exists() || !old.is_dir() {
+        return Ok(false);
+    }
+    if let Ok(lock) = std::fs::File::options().write(true).open(old.join("bascule.lock")) {
+        if matches!(lock.try_lock(), Err(std::fs::TryLockError::WouldBlock)) {
+            return Err(format!(
+                "L'ancienne version ({OLD_NAME}) est encore lancée : quittez-la, puis relancez Baskul."
+            ));
+        }
+    }
+    std::fs::rename(old, new).map_err(|e| format!("reprise des réglages de {} impossible : {e}", old.display()))?;
+    // Fichiers propres à l'ancienne instance.
+    for f in ["bascule.lock", "api.json"] {
+        let _ = std::fs::remove_file(new.join(f));
+    }
+    Ok(true)
 }
 
 pub fn default_config_path() -> PathBuf {
@@ -569,7 +602,7 @@ pub fn default_config_path() -> PathBuf {
 pub fn log_dir() -> PathBuf {
     if cfg!(target_os = "macos") {
         if let Some(home) = dirs::home_dir() {
-            return home.join("Library").join("Logs").join("Bascule");
+            return home.join("Library").join("Logs").join("Baskul");
         }
     }
     config_dir()
@@ -625,8 +658,8 @@ pub fn default_config_text(role: &str, secret: &str) -> String {
 }
 
 const TEMPLATE: &str = r##"# =====================================================================
-#  Bascule — configuration
-#  Après modification : menu Bascule > « Redémarrer ».
+#  Baskul — configuration
+#  Après modification : menu Baskul > « Redémarrer ».
 # =====================================================================
 
 # Rôle de cette machine :
@@ -749,7 +782,7 @@ return_to_primary = "Shift+F11"
 toggle_lock = ""
 
 [ui]
-# Thème de l'app de Bascule : "system", "light" (clair) ou "dark" (sombre).
+# Thème de l'app de Baskul : "system", "light" (clair) ou "dark" (sombre).
 theme = "system"
 # Langue : "system" (celle du système), "fr" ou "en".
 language = "system"
@@ -937,5 +970,26 @@ mod tests {
         let s = generate_secret();
         assert_eq!(s.len(), 24 + 5);
         assert_ne!(s, generate_secret());
+    }
+
+    #[test]
+    fn old_settings_folder_is_taken_over() {
+        let base = std::env::temp_dir().join(format!("baskul-migration-{}", std::process::id()));
+        let (old, new) = (base.join("Bascule"), base.join("Baskul"));
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join("config.toml"), "role = \"primary\"").unwrap();
+        std::fs::write(old.join("api.json"), "{}").unwrap();
+        assert_eq!(migrate_dir(&old, &new), Ok(true));
+        assert!(new.join("config.toml").is_file() && !new.join("api.json").exists() && !old.exists());
+        // Déjà fait : rien à reprendre.
+        assert_eq!(migrate_dir(&old, &new), Ok(false));
+        // Ancienne version encore lancée : refus.
+        std::fs::remove_dir_all(&new).unwrap();
+        std::fs::create_dir_all(&old).unwrap();
+        let lock = std::fs::File::create(old.join("bascule.lock")).unwrap();
+        lock.lock().unwrap();
+        assert!(migrate_dir(&old, &new).is_err());
+        drop(lock);
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

@@ -105,7 +105,7 @@ pub fn start(settings: NetSettings, on_event: impl Fn(LinkEvent) + Send + Sync +
     let handle = LinkHandle { input_tx, bulk_tx, connected: connected.clone() };
     let on_event: EventFn = Arc::new(on_event);
     std::thread::Builder::new()
-        .name("bascule-net".into())
+        .name("baskul-net".into())
         .spawn(move || manager(settings, input_rx, bulk_rx, connected, on_event))
         .expect("thread réseau");
     handle
@@ -319,7 +319,7 @@ fn session(
     let in_rx = input_rx.clone();
     let b_rx = bulk_rx.clone();
     let writer = std::thread::Builder::new()
-        .name("bascule-net-tx".into())
+        .name("baskul-net-tx".into())
         .spawn(move || writer_loop(write_half, frame, sealer, in_rx, b_rx, stop_rx))
         .map_err(SessionError::Io)?;
 

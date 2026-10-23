@@ -1,4 +1,4 @@
-//! Bascule — partage du clavier, de la souris et du presse-papiers entre un
+//! Baskul — partage du clavier, de la souris et du presse-papiers entre un
 //! PC Windows et un Mac.
 
 // Pas de fenêtre console sous Windows (les journaux vont dans un fichier).
@@ -49,7 +49,7 @@ pub struct Args {
     pub settings: bool,
     /// Lancé par un redémarrage : attend la fin de l'instance précédente.
     pub relaunched: bool,
-    /// Commande pour Bascule en cours d'exécution (`switch`, `status`).
+    /// Commande pour Baskul en cours d'exécution (`switch`, `status`).
     pub command: Option<cli::Command>,
 }
 
@@ -75,14 +75,14 @@ impl Args {
                     std::process::exit(0);
                 }
                 "--version" | "-V" => {
-                    println!("bascule {VERSION}");
+                    println!("baskul {VERSION}");
                     std::process::exit(0);
                 }
                 "--help" | "-h" => {
                     println!(
-                        "bascule {VERSION}\n\nUsage : bascule [--config FICHIER] [--console] [--settings]\n       \
-                         bascule [--config FICHIER] switch primary|secondary|toggle|here|other\n       \
-                         bascule [--config FICHIER] status\n\n  \
+                        "baskul {VERSION}\n\nUsage : baskul [--config FICHIER] [--console] [--settings]\n       \
+                         baskul [--config FICHIER] switch primary|secondary|toggle|here|other\n       \
+                         baskul [--config FICHIER] status\n\n  \
                          --config FICHIER  fichier de configuration (défaut : {})\n  \
                          --console         affiche aussi le journal dans le terminal\n  \
                          --settings        ouvre l'app de réglages\n  \
@@ -90,7 +90,7 @@ impl Args {
                          switch CIBLE      le clavier et la souris passent sur la machine principale\n                    \
                          (primary), la machine pilotée (secondary), l'autre que maintenant\n                    \
                          (toggle), celle-ci (here) ou l'autre (other)\n  \
-                         status            état de Bascule (rôle, connexion, machine active)",
+                         status            état de Baskul (rôle, connexion, machine active)",
                         config::default_config_path().display()
                     );
                     std::process::exit(0);
@@ -118,7 +118,7 @@ impl Args {
 }
 
 enum LockError {
-    /// Bascule tourne déjà.
+    /// Baskul tourne déjà.
     Running,
     Other(String),
 }
@@ -128,7 +128,7 @@ enum LockError {
 fn acquire_instance_lock(relaunched: bool) -> Result<File, LockError> {
     let dir = config::config_dir();
     let _ = std::fs::create_dir_all(&dir);
-    let path = dir.join("bascule.lock");
+    let path = dir.join("baskul.lock");
     let file = File::options()
         .create(true)
         .truncate(false)
@@ -144,7 +144,7 @@ fn acquire_instance_lock(relaunched: bool) -> Result<File, LockError> {
                     return Err(LockError::Running);
                 }
                 if Instant::now() > deadline {
-                    return Err(LockError::Other("Bascule est déjà en cours d'exécution sur cette machine.".into()));
+                    return Err(LockError::Other("Baskul est déjà en cours d'exécution sur cette machine.".into()));
                 }
                 std::thread::sleep(Duration::from_millis(200));
             }
@@ -174,9 +174,15 @@ fn main() {
         platform::open_settings(&path, false);
         std::process::exit(0);
     }
+    // Ancien nom (Bascule) : ses réglages sont repris.
+    match config::migrate_old_config_dir() {
+        Ok(true) => eprintln!("Baskul : réglages de {} repris", config::OLD_NAME),
+        Ok(false) => {}
+        Err(e) => platform::fatal(&e),
+    }
     let _lock = match acquire_instance_lock(args.relaunched) {
         Ok(f) => f,
-        // Bascule tourne déjà : on ouvre ses réglages.
+        // Baskul tourne déjà : on ouvre ses réglages.
         Err(LockError::Running) => {
             platform::open_settings(&path, false);
             std::process::exit(0);
@@ -189,8 +195,8 @@ fn main() {
         Ok((cfg, _)) => cfg.validate().map_or(log::LevelFilter::Info, |s| s.log_level),
         Err(_) => log::LevelFilter::Info,
     };
-    logging::init(config::log_dir().join("bascule.log"), level, args.console);
-    log::info!("Bascule {VERSION} ({}) — configuration : {}", std::env::consts::OS, path.display());
+    logging::init(config::log_dir().join("baskul.log"), level, args.console);
+    log::info!("Baskul {VERSION} ({}) — configuration : {}", std::env::consts::OS, path.display());
     if let Err(e) = api::start(&path) {
         log::error!("{e}");
     }
@@ -215,7 +221,7 @@ fn main() {
 }
 
 /// Configuration illisible ou invalide : l'app de réglages s'ouvre pour la
-/// corriger, puis Bascule redémarre. Sans elle, le fichier s'ouvre dans
+/// corriger, puis Baskul redémarre. Sans elle, le fichier s'ouvre dans
 /// l'éditeur de texte.
 fn config_error(path: &Path, args: &Args, e: &str) -> ! {
     log::error!("{e}");
@@ -243,7 +249,7 @@ fn config_error(path: &Path, args: &Args, e: &str) -> ! {
             log::warn!("{err}");
             platform::open_in_editor(path);
             platform::fatal(&format!(
-                "Erreur dans la configuration :\n{e}\n\nFichier : {}\n\nCorrigez-la puis relancez Bascule.",
+                "Erreur dans la configuration :\n{e}\n\nFichier : {}\n\nCorrigez-la puis relancez Baskul.",
                 path.display()
             ));
         }

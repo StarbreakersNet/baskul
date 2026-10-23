@@ -34,7 +34,7 @@ impl log::Log for Logger {
             return;
         }
         let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
-        let target = record.target().trim_start_matches("bascule::");
+        let target = record.target().trim_start_matches("baskul::");
         let line = format!("{now} {:<5} [{target}] {}\n", record.level(), record.args());
         // try_send : si le thread d'écriture est en retard, on perd la ligne
         // plutôt que de bloquer un hook d'entrée.
@@ -95,7 +95,7 @@ pub fn init(path: PathBuf, level: log::LevelFilter, to_stderr: bool) {
     let (tx, rx) = bounded::<Item>(4096);
     let p = path.clone();
     std::thread::Builder::new()
-        .name("bascule-log".into())
+        .name("baskul-log".into())
         .spawn(move || writer(rx, p, to_stderr))
         .expect("thread de journal");
     let _ = LOG_PATH.set(path);

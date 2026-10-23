@@ -56,7 +56,7 @@ impl Edge {
     }
 }
 
-/// Machine où le clavier et la souris doivent agir (commande `bascule switch`).
+/// Machine où le clavier et la souris doivent agir (commande `baskul switch`).
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SwitchTo {
     Primary,
@@ -157,7 +157,7 @@ pub enum Message {
     },
 
     // --- Secondaire → principale ---
-    /// Commande `bascule switch` lancée sur la machine pilotée : c'est la
+    /// Commande `baskul switch` lancée sur la machine pilotée : c'est la
     /// machine principale qui décide où agissent le clavier et la souris.
     Switch {
         to: SwitchTo,

@@ -3,12 +3,12 @@
     "menu": {
       "settings": "Settings…",
       "openLog": "Open Log",
-      "openFolder": "Open Bascule Folder",
+      "openFolder": "Open Baskul Folder",
       "openAtLogin": "Open at Login",
       "startWithWindows": "Start with Windows",
-      "restart": "Restart Bascule",
-      "quit": "Quit Bascule",
-      "allowAccessibility": "Allow Bascule (Accessibility)…",
+      "restart": "Restart Baskul",
+      "quit": "Quit Baskul",
+      "allowAccessibility": "Allow Baskul (Accessibility)…",
       "returnHereMac": "Bring the Cursor Back to This Mac",
       "lockMac": "Lock the Cursor to This Mac",
       "returnHerePc": "Bring the cursor back to this PC",
@@ -47,38 +47,38 @@
       "copyFailed": "Cannot copy: select the text and copy it by hand.",
       "openFile": "Open File",
       "open": "Open",
-      "restart": "Restart Bascule",
+      "restart": "Restart Baskul",
       "none": "None",
       "osOnly": "{os} only",
       "version": "Version {version}",
       "edit": "Edit"
     },
     "status": {
-      "notRunning": "Bascule is not running",
+      "notRunning": "Baskul is not running",
       "starting": "Starting…",
       "restarting": "Restarting…"
     },
     "layout": {
-      "offlineTitle": "Bascule is not running",
-      "offlineText": "This page appears as soon as Bascule is running.",
-      "start": "Start Bascule",
+      "offlineTitle": "Baskul is not running",
+      "offlineText": "This page appears as soon as Baskul is running.",
+      "start": "Start Baskul",
       "unsaved": "Unsaved changes.",
-      "restartingWith": "Bascule is restarting with the new settings…",
+      "restartingWith": "Baskul is restarting with the new settings…",
       "saveRestart": "Save and Restart",
       "closeTitle": "Unsaved changes",
       "closeText": "Close without saving?"
     },
     "actions": {
       "saved": "Settings saved and applied.",
-      "savedNoRestart": "Settings saved, but Bascule did not restart.",
-      "restarted": "Bascule has restarted."
+      "savedNoRestart": "Settings saved, but Baskul did not restart.",
+      "restarted": "Baskul has restarted."
     },
     "home": {
       "starting": "Starting…",
       "connectedTo": "Connected to “{peer}”",
       "noConnection": "Not connected",
       "waiting": "Waiting for the other computer",
-      "waitingHelp": "Make sure Bascule is running on the other computer, with the same secret.",
+      "waitingHelp": "Make sure Baskul is running on the other computer, with the same secret.",
       "since": "{os} · since {time} ({ago})",
       "thisMachine": "This computer",
       "otherMachine": "Other computer",
@@ -121,13 +121,13 @@
       "log": "Log"
     },
     "settings": {
-      "restarting": "Restarting Bascule…",
-      "welcomeTitle": "Welcome to Bascule!",
+      "restarting": "Restarting Baskul…",
+      "welcomeTitle": "Welcome to Baskul!",
       "welcomeIntro": "To link your two computers:",
       "welcomeStep1": "Choose this computer's role. The main computer is the one with the keyboard and mouse.",
       "welcomeStep2": "The secret must be the same on both computers: copy this one into the other computer's settings, or paste its secret here.",
       "welcomeStep3": "On the main computer, enter the other computer's address in “Connect to”. The other computer leaves this field empty.",
-      "welcomeEnd": "Save: Bascule restarts with these settings.",
+      "welcomeEnd": "Save: Baskul restarts with these settings.",
       "configUnreadable": "The configuration file cannot be read",
       "tabs": {
         "connection": "Connection",
@@ -249,7 +249,7 @@
         "light": "Light",
         "dark": "Dark",
         "language": "Language",
-        "languageHelp": "Language of Bascule (window and menus).",
+        "languageHelp": "Language of Baskul (window and menus).",
         "systemLanguage": "System language",
         "trayIcon": "Icon",
         "trayIconHelp": "Icon in the menu bar or notification area. Monochrome: matches the other system icons.",
@@ -272,9 +272,9 @@
         },
         "configFile": "Configuration file",
         "commands": "Commands",
-        "commandsHelp": "For other apps (Keyboard Maestro, Shortcuts, AutoHotkey…): the keyboard and mouse move to this computer (here), to the other one (other) or to the one they are not on (toggle). “status” shows Bascule's state. “Copy” gives the full command, with Bascule's path:"
+        "commandsHelp": "For other apps (Keyboard Maestro, Shortcuts, AutoHotkey…): the keyboard and mouse move to this computer (here), to the other one (other) or to the one they are not on (toggle). “status” shows Baskul's state. “Copy” gives the full command, with Baskul's path:"
       },
-      "linuxNotice": "On Linux, Bascule does not share the keyboard and mouse yet: these settings have no effect here."
+      "linuxNotice": "On Linux, Baskul does not share the keyboard and mouse yet: these settings have no effect here."
     },
     "log": {
       "title": "Latest lines",
@@ -283,7 +283,7 @@
     "about": {
       "tagline": "One keyboard, one mouse and a shared clipboard between a PC and a Mac.",
       "info": "Information",
-      "bascule": "Bascule",
+      "baskul": "Baskul",
       "app": "App",
       "notRunning": "not running",
       "machine": "Computer",
