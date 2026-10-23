@@ -709,21 +709,25 @@ mod tests {
     fn the_same_machine_reconnecting_replaces_its_connection() {
         let port = free_port();
         let (a, a_rx) = start_with(settings(Role::Primary, "A", "id-a", "secret-de-test", port));
-        let (b1, b1_rx) = start_with(settings(Role::Secondary, "B", "id-b", "secret-de-test", port));
+        let (_b1, b1_rx) = start_with(settings(Role::Secondary, "B", "id-b", "secret-de-test", port));
         let (first, _) = wait_connected(&a_rx);
         wait_connected(&b1_rx);
         // Même machine (redémarrage de Baskul) : l'ancienne connexion est fermée.
+        // La fin de l'ancienne et l'arrivée de la nouvelle se signalent dans un
+        // ordre quelconque ; la première pilotée, toujours lancée ici, se
+        // reconnecte ensuite à son tour (événements ignorés).
         let (_b2, b2_rx) = start_with(settings(Role::Secondary, "B", "id-b", "secret-de-test", port));
-        let (second, _) = wait_connected(&a_rx);
         wait_connected(&b2_rx);
-        assert_ne!(first, second);
-        drop(b1);
-        let t = Instant::now();
-        while a.peers().iter().any(|p| p.id == first) {
-            assert!(t.elapsed() < Duration::from_secs(5));
-            std::thread::sleep(Duration::from_millis(20));
+        let (mut second, mut first_closed) = (None, false);
+        while second.is_none() || !first_closed {
+            match a_rx.recv_timeout(Duration::from_secs(10)).expect("événement") {
+                LinkEvent::Connected { peer, .. } => second = second.or(Some(peer)),
+                LinkEvent::Disconnected { peer } => first_closed |= peer == first,
+                LinkEvent::Message { .. } => {}
+            }
         }
-        assert_eq!(a.peers().iter().map(|p| p.id).collect::<Vec<_>>(), [second]);
+        assert_ne!(second, Some(first));
+        assert!(a.peers().iter().all(|p| p.id != first));
     }
 
     #[test]
