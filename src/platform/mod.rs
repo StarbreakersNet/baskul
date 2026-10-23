@@ -86,7 +86,7 @@ fn launch_again(argv: &[String]) -> std::io::Result<()> {
 
 /// Bundle `.app` dont `exe` est l'exécutable principal
 /// (`Baskul.app/Contents/MacOS/baskul`).
-fn app_bundle(exe: &Path) -> Option<PathBuf> {
+pub fn app_bundle(exe: &Path) -> Option<PathBuf> {
     let macos = exe.parent()?;
     let contents = macos.parent()?;
     let app = contents.parent()?;

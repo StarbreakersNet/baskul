@@ -9,17 +9,17 @@
       "restart": "Restart Baskul",
       "quit": "Quit Baskul",
       "allowAccessibility": "Allow Baskul (Accessibility)…",
-      "returnHereMac": "Bring the Cursor Back to This Mac",
-      "lockMac": "Lock the Cursor to This Mac",
-      "returnHerePc": "Bring the cursor back to this PC",
-      "lockPc": "Lock the cursor to this PC"
+      "returnHere": "Bring the Cursor Back to This Computer",
+      "lock": "Lock the Cursor to This Computer",
+      "updateReady": "Restart to update ({version})",
+      "goTo": "Go to “{name}”"
     },
     "status": {
       "waiting": "waiting for the other computer ({address})",
       "connecting": "connecting to {address}…",
       "listenFailed": "cannot listen on {address} ({error})",
-      "wrongSecret": "wrong secret: check the shared secret on both computers",
-      "versionMismatch": "incompatible versions ({here} here, {there} on “{name}”): install the same version on both computers",
+      "wrongSecret": "wrong secret: make sure the shared secret is the same on every computer",
+      "versionMismatch": "incompatible versions ({here} here, {there} on “{name}”): install the same version on every computer",
       "sameRole": "both computers are set as the {role} computer: one must be the main computer, the other the controlled one",
       "unexpectedReply": "unexpected reply from the other computer",
       "connected": "Connected to {peer}",
@@ -29,7 +29,12 @@
       "needAccessibility": "“Accessibility” permission required",
       "captureFailed": "cannot capture the keyboard and mouse: check the permissions",
       "rolePrimary": "main",
-      "roleSecondary": "controlled"
+      "roleSecondary": "controlled",
+      "waitingClients": "waiting for controlled computers ({address})",
+      "searching": "looking for the main computer on the network…",
+      "noAddress": "main computer address missing (automatic discovery is off)",
+      "noPrimary": "not connected to the main computer",
+      "nameTaken": "another controlled computer is already named “{name}”: change its “Display name”"
     }
   },
   "app": {

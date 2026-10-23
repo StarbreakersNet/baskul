@@ -9,14 +9,16 @@
 
 use crate::Args;
 use crate::app::{self, ClipboardHooks, Services};
+use crate::config::MachineCfg;
 use crate::config::{IsoSwap, ScrollCfg, ScrollMode, Settings, SideButtonsMode, Smoothness, TrayIcon};
 use crate::geometry::{Layout, Point, Rect};
 use crate::i18n;
 use crate::icon::{self, Tone};
 use crate::keymap::{self, *};
 use crate::net::LinkHandle;
+use crate::net::PeerId;
 use crate::primary::{Decision, Host, PeerEvent, PrimaryCore, PrimaryOptions};
-use crate::protocol::{Message, MouseButton, Role};
+use crate::protocol::{ClipHeader, ClipImage, ImageFormat, Message, MouseButton, Role, SwitchTo};
 use crate::secondary::Emulator;
 use crate::smooth;
 use crate::status::{self, Conn, Snapshot};
@@ -25,19 +27,26 @@ use objc2::rc::{Retained, autoreleasepool};
 use objc2::runtime::{AnyObject, NSObject, ProtocolObject};
 use objc2::{AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
+    NSAnimatablePropertyContainer, NSAnimationContext, NSBackingStoreType, NSBox, NSBoxType, NSColor, NSFont, NSPanel,
+    NSPopUpMenuWindowLevel, NSScreen, NSTextField, NSTitlePosition, NSView, NSWindowCollectionBehavior,
+    NSWindowStyleMask,
+};
+use objc2_app_kit::{
     NSApplication, NSApplicationActivationPolicy, NSApplicationDelegate, NSBitmapImageFileType, NSBitmapImageRep,
     NSControlStateValueOff, NSControlStateValueOn, NSEvent, NSEventModifierFlags, NSEventType, NSImage, NSMenu,
-    NSMenuItem, NSPasteboard, NSPasteboardTypePNG, NSPasteboardTypeTIFF, NSStatusBar, NSStatusItem,
-    NSWindowOcclusionState,
+    NSMenuItem, NSPasteboard, NSPasteboardItem, NSPasteboardTypeFileURL, NSPasteboardTypeHTML, NSPasteboardTypeString,
+    NSPasteboardTypeTIFF, NSPasteboardWriting, NSStatusBar, NSStatusItem, NSWindowOcclusionState,
 };
 use objc2_foundation::{
-    NSActivityOptions, NSData, NSDictionary, NSObjectProtocol, NSPoint, NSProcessInfo, NSSize, NSString, NSTimer, NSURL,
+    NSActivityOptions, NSArray, NSData, NSDictionary, NSObjectProtocol, NSPoint, NSProcessInfo, NSRect, NSSize,
+    NSString, NSTimer, NSURL,
 };
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::ffi::{c_char, c_void};
 use std::path::{Path, PathBuf};
 use std::ptr::{null, null_mut};
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
@@ -1013,6 +1022,10 @@ impl Emulator for MacEmulator {
         self.acc_y = 0.0;
     }
 
+    fn arrived(&mut self) {
+        request_bubble();
+    }
+
     fn cursor(&mut self) -> Option<Point> {
         current_cursor()
     }
@@ -1089,34 +1102,82 @@ fn clip_sensitive() -> bool {
     })
 }
 
-/// Image du presse-papiers en PNG : le PNG d'origine s'il y en a un (la
-/// plupart des applications), sinon le TIFF converti par AppKit, qui lit
-/// toutes ses variantes.
-fn clip_image() -> Option<Vec<u8>> {
+/// Images du presse-papiers, dans leur format d'origine : PNG, JPEG, GIF,
+/// HEIC, WebP ou BMP tels quels (plus un PNG pour les formats que l'autre
+/// machine ne sait pas forcément afficher). Seul le TIFF, format de transport
+/// d'AppKit quand l'application n'en fournit pas d'autre, devient un PNG.
+fn clip_read_images() -> Vec<ClipImage> {
+    const ORIGINALS: [ImageFormat; 6] =
+        [ImageFormat::Png, ImageFormat::Jpeg, ImageFormat::Gif, ImageFormat::Heic, ImageFormat::Webp, ImageFormat::Bmp];
     autoreleasepool(|_| {
         let pb = NSPasteboard::generalPasteboard();
-        // SAFETY: constantes d'AppKit.
-        let (png, tiff) = unsafe { (NSPasteboardTypePNG, NSPasteboardTypeTIFF) };
-        if let Some(data) = pb.dataForType(png) {
-            return Some(data.to_vec());
+        for format in ORIGINALS {
+            let Some(data) = pb.dataForType(&NSString::from_str(format.uti())) else { continue };
+            let mut out = vec![ClipImage { format, data: data.to_vec() }];
+            if matches!(format, ImageFormat::Heic | ImageFormat::Webp | ImageFormat::Bmp) {
+                if let Some(png) = png_from_image_data(&data) {
+                    out.push(ClipImage { format: ImageFormat::Png, data: png });
+                }
+            }
+            return out;
         }
-        let tiff = pb.dataForType(tiff)?;
-        png_from_image_data(&tiff)
+        // SAFETY: constante d'AppKit.
+        let tiff = unsafe { NSPasteboardTypeTIFF };
+        let png = pb.dataForType(tiff).and_then(|d| png_from_image_data(&d));
+        png.map(|data| vec![ClipImage { format: ImageFormat::Png, data }]).unwrap_or_default()
     })
 }
 
-/// Fichier image converti en PNG par AppKit : tous les formats ouverts par
-/// Aperçu (HEIC des iPhone compris). Un PNG est laissé tel quel.
-fn clip_image_file(path: &Path) -> Option<Vec<u8>> {
-    if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("png")) {
+/// Écrit le contenu reçu quand il comporte des images ou des fichiers (le
+/// texte seul passe par arboard) : les fichiers, puis chaque image dans son
+/// format d'origine, avec un PNG pour les formats peu lus par les
+/// applications Mac.
+fn clip_write(h: &ClipHeader, roots: &[PathBuf]) -> Option<bool> {
+    if h.images.is_empty() && roots.is_empty() {
         return None;
     }
-    autoreleasepool(|_| {
-        let path = NSString::from_str(path.to_str()?);
-        let image = NSImage::initWithContentsOfURL(NSImage::alloc(), &NSURL::fileURLWithPath(&path))?;
-        let tiff = image.TIFFRepresentation()?;
-        png_from_image_data(&tiff)
-    })
+    Some(autoreleasepool(|_| {
+        // SAFETY: constantes d'AppKit.
+        let (file_url, string, html) =
+            unsafe { (NSPasteboardTypeFileURL, NSPasteboardTypeString, NSPasteboardTypeHTML) };
+        let mut items: Vec<Retained<NSPasteboardItem>> = Vec::new();
+        for root in roots {
+            let Some(path) = root.to_str() else { continue };
+            let Some(url) = NSURL::fileURLWithPath(&NSString::from_str(path)).absoluteString() else { continue };
+            let item = NSPasteboardItem::new();
+            item.setString_forType(&url, file_url);
+            items.push(item);
+        }
+        if items.is_empty() {
+            items.push(NSPasteboardItem::new());
+        }
+        let first = &items[0];
+        for img in &h.images {
+            first.setData_forType(&NSData::with_bytes(&img.data), &NSString::from_str(img.format.uti()));
+        }
+        let readable =
+            |f: ImageFormat| matches!(f, ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::Gif | ImageFormat::Tiff);
+        if let Some(img) = h.images.first().filter(|_| !h.images.iter().any(|i| readable(i.format))) {
+            if let Some(png) = png_from_image_data(&NSData::with_bytes(&img.data)) {
+                first.setData_forType(&NSData::with_bytes(&png), &NSString::from_str(ImageFormat::Png.uti()));
+            }
+        }
+        if let Some(t) = &h.text {
+            first.setString_forType(&NSString::from_str(t), string);
+        }
+        if let Some(x) = &h.html {
+            first.setString_forType(&NSString::from_str(x), html);
+        }
+        let objects: Vec<Retained<ProtocolObject<dyn NSPasteboardWriting>>> =
+            items.into_iter().map(ProtocolObject::from_retained).collect();
+        let pb = NSPasteboard::generalPasteboard();
+        pb.clearContents();
+        let ok = pb.writeObjects(&NSArray::from_retained_slice(&objects));
+        if !ok {
+            log::warn!("écriture du presse-papiers refusée par macOS");
+        }
+        ok
+    }))
 }
 
 fn png_from_image_data(data: &NSData) -> Option<Vec<u8>> {
@@ -1149,6 +1210,7 @@ struct MacHost {
     layout_at: Instant,
     link: LinkHandle,
     hidden: bool,
+    config_path: PathBuf,
 }
 
 impl Host for MacHost {
@@ -1189,12 +1251,20 @@ impl Host for MacHost {
         }
     }
 
-    fn send(&mut self, msg: Message) {
-        self.link.send_input(msg);
+    fn send(&mut self, to: PeerId, msg: Message) {
+        self.link.send_input(to, msg);
     }
 
     fn keep_active(&mut self) {
         keep_active();
+    }
+
+    fn save_layout(&mut self, machines: Vec<MachineCfg>) {
+        app::save_layout(&self.config_path, machines);
+    }
+
+    fn arrived(&mut self, _pos: Point) {
+        request_bubble();
     }
 }
 
@@ -1474,7 +1544,14 @@ struct MacUi {
     item: Retained<NSStatusItem>,
     status_line: Retained<NSMenuItem>,
     access_item: Retained<NSMenuItem>,
+    /// « Redémarrer pour mettre à jour », visible quand une version est prête.
+    update_item: Retained<NSMenuItem>,
+    update_ready: Option<String>,
+    return_item: Option<Retained<NSMenuItem>>,
     lock_item: Option<Retained<NSMenuItem>>,
+    /// Entrées « Aller sur… », une par pilotée connectée.
+    goto_items: Vec<Retained<NSMenuItem>>,
+    goto_names: Vec<String>,
     login_item: Retained<NSMenuItem>,
     _controller: Retained<Controller>,
     last: Option<Snapshot>,
@@ -1561,6 +1638,33 @@ define_class!(
                 if let Ok(mut g) = p.try_borrow_mut() {
                     if let Some(s) = g.as_mut() {
                         s.core.return_home(&mut s.host);
+                    }
+                }
+            });
+        }
+
+        #[unsafe(method(installUpdate:))]
+        fn install_update(&self, _sender: Option<&AnyObject>) {
+            if let Err(e) = crate::update::install() {
+                log::warn!("{e}");
+            }
+        }
+
+        #[unsafe(method(bubbleTick:))]
+        fn bubble_tick(&self, _sender: Option<&AnyObject>) {
+            bubble_tick();
+        }
+
+        #[unsafe(method(goTo:))]
+        fn go_to(&self, sender: Option<&AnyObject>) {
+            let Some(sender) = sender else { return };
+            // SAFETY: l'expéditeur est une entrée de menu (NSMenuItem).
+            let tag: isize = unsafe { msg_send![sender, tag] };
+            let Some(name) = ui_value(|u| u.goto_names.get(tag as usize).cloned()).flatten() else { return };
+            MAC_PRIMARY.with(|p| {
+                if let Ok(mut g) = p.try_borrow_mut() {
+                    if let Some(s) = g.as_mut() {
+                        s.core.switch_to(&mut s.host, None, SwitchTo::Client(name));
                     }
                 }
             });
@@ -1780,11 +1884,45 @@ fn ui_tick(mtm: MainThreadMarker) {
             (true, None) => {}
         }
         ui.access_item.setHidden(ui.permissions_ok);
+        let ready = crate::update::ready_version();
+        if ready != ui.update_ready {
+            if let Some(v) = &ready {
+                ui.update_item.setTitle(&NSString::from_str(&i18n::tf("menu.updateReady", &[("version", v)])));
+            }
+            ui.update_item.setHidden(ready.is_none());
+            ui.update_ready = ready;
+        }
         ui.login_item.setState(if login_item_enabled() { NSControlStateValueOn } else { NSControlStateValueOff });
         if let (Some(item), Some(l)) = (&ui.lock_item, locked) {
             item.setState(if l { NSControlStateValueOn } else { NSControlStateValueOff });
         }
+        update_goto_items(ui, mtm);
     });
+}
+
+/// Entrées « Aller sur… » : une par pilotée connectée, cochée pour celle où
+/// agissent le clavier et la souris.
+fn update_goto_items(ui: &mut MacUi, mtm: MainThreadMarker) {
+    let Some(anchor) = &ui.return_item else { return };
+    let snap = status::snapshot();
+    let names: Vec<String> = snap.peers.iter().map(|p| p.name.clone()).collect();
+    if names != ui.goto_names {
+        for item in ui.goto_items.drain(..) {
+            ui.menu.removeItem(&item);
+        }
+        let at = ui.menu.indexOfItem(anchor) + 1;
+        for (i, name) in names.iter().enumerate() {
+            let item = menu_item(mtm, &i18n::tf("menu.goTo", &[("name", name)]), Some(sel!(goTo:)), &ui._controller);
+            item.setTag(i as isize);
+            ui.menu.insertItem_atIndex(&item, at + i as isize);
+            ui.goto_items.push(item);
+        }
+        ui.goto_names = names;
+    }
+    for (item, name) in ui.goto_items.iter().zip(&ui.goto_names) {
+        let on = snap.active_peer.as_deref() == Some(name.as_str());
+        item.setState(if on { NSControlStateValueOn } else { NSControlStateValueOff });
+    }
 }
 
 fn ensure_tap() {
@@ -1818,6 +1956,162 @@ fn shutdown() {
         }
     });
     std::thread::sleep(Duration::from_millis(150));
+}
+
+// ---------------------------------------------------------------------------
+// Bulle d'arrivée
+// ---------------------------------------------------------------------------
+
+/// Nom affiché par la bulle (absent : bulle désactivée).
+static BUBBLE_NAME: OnceLock<String> = OnceLock::new();
+/// Durée d'affichage avant le fondu, puis durée du fondu.
+const BUBBLE_SHOW: f64 = 0.9;
+const BUBBLE_FADE: f64 = 0.35;
+
+struct Bubble {
+    panel: Retained<NSPanel>,
+    background: Retained<NSBox>,
+    label: Retained<NSTextField>,
+    shown_at: Instant,
+}
+
+thread_local! {
+    static BUBBLE: RefCell<Option<Bubble>> = const { RefCell::new(None) };
+    static BUBBLE_FADING: Cell<bool> = const { Cell::new(false) };
+}
+
+unsafe extern "C" {
+    static _dispatch_main_q: c_void;
+    fn dispatch_async_f(queue: *const c_void, context: *mut c_void, work: unsafe extern "C" fn(*mut c_void));
+}
+
+/// Le clavier et la souris arrivent sur cette machine : son nom s'affiche un
+/// instant près du curseur. Utilisable depuis n'importe quel thread.
+fn request_bubble() {
+    if BUBBLE_NAME.get().is_none() {
+        return;
+    }
+    unsafe extern "C" fn show(_: *mut c_void) {
+        if let Some(mtm) = MainThreadMarker::new() {
+            autoreleasepool(|_| show_bubble(mtm));
+        }
+    }
+    // SAFETY: file d'attente principale de libdispatch, fonction sans contexte.
+    unsafe { dispatch_async_f(&raw const _dispatch_main_q, null_mut(), show) };
+}
+
+/// Fenêtre de la bulle : sans bordure, ne prend pas le focus, laisse passer
+/// les clics, visible sur tous les bureaux et par-dessus le plein écran.
+fn make_bubble(mtm: MainThreadMarker) -> Bubble {
+    let rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(120.0, 36.0));
+    let panel = NSPanel::initWithContentRect_styleMask_backing_defer(
+        NSPanel::alloc(mtm),
+        rect,
+        NSWindowStyleMask::Borderless | NSWindowStyleMask::NonactivatingPanel,
+        NSBackingStoreType::Buffered,
+        false,
+    );
+    panel.setOpaque(false);
+    panel.setBackgroundColor(Some(&NSColor::clearColor()));
+    panel.setHasShadow(true);
+    panel.setIgnoresMouseEvents(true);
+    panel.setHidesOnDeactivate(false);
+    panel.setFloatingPanel(true);
+    panel.setLevel(NSPopUpMenuWindowLevel);
+    panel.setCollectionBehavior(
+        NSWindowCollectionBehavior::CanJoinAllSpaces
+            | NSWindowCollectionBehavior::Stationary
+            | NSWindowCollectionBehavior::FullScreenAuxiliary
+            | NSWindowCollectionBehavior::IgnoresCycle,
+    );
+    let content = NSView::initWithFrame(NSView::alloc(mtm), rect);
+    let background = NSBox::initWithFrame(NSBox::alloc(mtm), rect);
+    background.setBoxType(NSBoxType::Custom);
+    background.setTitlePosition(NSTitlePosition::NoTitle);
+    background.setBorderWidth(0.0);
+    background.setFillColor(&NSColor::colorWithWhite_alpha(0.12, 0.85));
+    let label = NSTextField::labelWithString(&NSString::from_str(""), mtm);
+    label.setFont(Some(&NSFont::boldSystemFontOfSize(15.0)));
+    label.setTextColor(Some(&NSColor::whiteColor()));
+    content.addSubview(&background);
+    content.addSubview(&label);
+    panel.setContentView(Some(&content));
+    Bubble { panel, background, label, shown_at: Instant::now() }
+}
+
+fn show_bubble(mtm: MainThreadMarker) {
+    let Some(name) = BUBBLE_NAME.get() else { return };
+    let Some(controller) = ui_value(|u| u._controller.clone()) else { return };
+    BUBBLE.with(|b| {
+        let mut b = b.borrow_mut();
+        let bubble = b.get_or_insert_with(|| make_bubble(mtm));
+        // Logo Apple (caractère réservé, dessiné par les polices du système).
+        bubble.label.setStringValue(&NSString::from_str(&format!("\u{F8FF}  {name}")));
+        bubble.label.sizeToFit();
+        let text = bubble.label.frame().size;
+        let (pad_x, pad_y) = (16.0, 7.0);
+        let size = NSSize::new(text.width + 2.0 * pad_x, text.height + 2.0 * pad_y);
+        // En bas à droite du curseur, sans sortir de l'écran.
+        let m = NSEvent::mouseLocation();
+        let mut origin = NSPoint::new(m.x + 18.0, m.y - 22.0 - size.height);
+        for screen in NSScreen::screens(mtm).iter() {
+            let f = screen.frame();
+            let inside = m.x >= f.origin.x
+                && m.x <= f.origin.x + f.size.width
+                && m.y >= f.origin.y
+                && m.y <= f.origin.y + f.size.height;
+            if inside {
+                let v = screen.visibleFrame();
+                origin.x = origin.x.min(v.origin.x + v.size.width - size.width - 6.0).max(v.origin.x + 6.0);
+                origin.y = origin.y.max(v.origin.y + 6.0).min(v.origin.y + v.size.height - size.height - 6.0);
+            }
+        }
+        let full = NSRect::new(NSPoint::new(0.0, 0.0), size);
+        bubble.panel.setFrame_display(NSRect::new(origin, size), false);
+        bubble.background.setFrame(full);
+        bubble.background.setCornerRadius(size.height / 2.0);
+        bubble.label.setFrameOrigin(NSPoint::new(pad_x, pad_y));
+        // Une arrivée pendant le fondu l'interrompt.
+        NSAnimationContext::beginGrouping();
+        NSAnimationContext::currentContext().setDuration(0.0);
+        bubble.panel.animator().setAlphaValue(1.0);
+        NSAnimationContext::endGrouping();
+        bubble.panel.setAlphaValue(1.0);
+        bubble.panel.orderFrontRegardless();
+        bubble.shown_at = Instant::now();
+    });
+    BUBBLE_FADING.set(false);
+    for delay in [BUBBLE_SHOW, BUBBLE_SHOW + BUBBLE_FADE + 0.05] {
+        // SAFETY: minuterie unique ciblant `bubbleTick:` sur notre contrôleur.
+        unsafe {
+            NSTimer::scheduledTimerWithTimeInterval_target_selector_userInfo_repeats(
+                delay,
+                &controller,
+                sel!(bubbleTick:),
+                None,
+                false,
+            );
+        }
+    }
+}
+
+/// Fondu, puis fenêtre retirée (une nouvelle arrivée entre-temps repousse
+/// l'échéance).
+fn bubble_tick() {
+    BUBBLE.with(|b| {
+        let b = b.borrow();
+        let Some(bubble) = b.as_ref() else { return };
+        let elapsed = bubble.shown_at.elapsed().as_secs_f64();
+        if elapsed >= BUBBLE_SHOW + BUBBLE_FADE {
+            bubble.panel.orderOut(None);
+        } else if elapsed >= BUBBLE_SHOW - 0.05 && !BUBBLE_FADING.get() {
+            BUBBLE_FADING.set(true);
+            NSAnimationContext::beginGrouping();
+            NSAnimationContext::currentContext().setDuration(BUBBLE_FADE);
+            bubble.panel.animator().setAlphaValue(0.0);
+            NSAnimationContext::endGrouping();
+        }
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -1928,6 +2222,9 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
     std::mem::forget(activity);
 
     crate::api::set_restart_handler(super::request_restart);
+    if settings.ui.arrival_bubble {
+        let _ = BUBBLE_NAME.set(settings.name.clone());
+    }
     let controller = Controller::new(mtm);
     app.setDelegate(Some(ProtocolObject::from_ref(&*controller)));
     let item = NSStatusBar::systemStatusBar().statusItemWithLength(-1.0);
@@ -1941,15 +2238,20 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
     let access_item = menu_item(mtm, &i18n::t("menu.allowAccessibility"), Some(sel!(openAccessibility:)), &controller);
     access_item.setHidden(true);
     menu.addItem(&access_item);
+    let update_item = menu_item(mtm, "", Some(sel!(installUpdate:)), &controller);
+    update_item.setHidden(true);
+    menu.addItem(&update_item);
     menu.addItem(&NSMenuItem::separatorItem(mtm));
-    let lock_item = if settings.role == Role::Primary {
-        menu.addItem(&menu_item(mtm, &i18n::t("menu.returnHereMac"), Some(sel!(returnHere:)), &controller));
-        let l = menu_item(mtm, &i18n::t("menu.lockMac"), Some(sel!(toggleLock:)), &controller);
+    let (return_item, lock_item) = if settings.role == Role::Primary {
+        let r = menu_item(mtm, &i18n::t("menu.returnHere"), Some(sel!(returnHere:)), &controller);
+        menu.addItem(&r);
+        // Les entrées « Aller sur… » des pilotées connectées s'insèrent ici.
+        let l = menu_item(mtm, &i18n::t("menu.lock"), Some(sel!(toggleLock:)), &controller);
         menu.addItem(&l);
         menu.addItem(&NSMenuItem::separatorItem(mtm));
-        Some(l)
+        (Some(r), Some(l))
     } else {
-        None
+        (None, None)
     };
     menu.addItem(&menu_item(mtm, &i18n::t("menu.settings"), Some(sel!(openSettings:)), &controller));
     menu.addItem(&menu_item(mtm, &i18n::t("menu.openLog"), Some(sel!(openLog:)), &controller));
@@ -1965,8 +2267,8 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
     let hooks = ClipboardHooks {
         sequence: clip_sequence,
         sensitive: clip_sensitive,
-        image: clip_image,
-        image_file: clip_image_file,
+        read_images: clip_read_images,
+        write: clip_write,
         formats: clip_formats,
     };
     let permissions_ok;
@@ -2014,10 +2316,12 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
             };
             let opts = PrimaryOptions {
                 edge_switching: settings.edge_switching,
-                position: settings.secondary_position,
+                new_client_side: settings.secondary_position,
                 corner: settings.corner_size,
+                layout: settings.layout.clone(),
                 switch_hotkey: settings.switch_hotkey.clone(),
                 return_hotkey: settings.return_hotkey.clone(),
+                next_hotkey: settings.next_hotkey.clone(),
                 lock_hotkey: settings.lock_hotkey.clone(),
                 media_keys: settings.media_keys,
                 mirror_activity: settings.mirror_activity,
@@ -2032,6 +2336,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
                         layout_at: Instant::now(),
                         link: services.link.clone(),
                         hidden: false,
+                        config_path: config_path.clone(),
                     },
                     peer_rx: rx,
                     last_loc: current_cursor().unwrap_or_default(),
@@ -2062,7 +2367,12 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
             item,
             status_line,
             access_item,
+            update_item,
+            update_ready: None,
+            return_item,
             lock_item,
+            goto_items: Vec::new(),
+            goto_names: Vec::new(),
             login_item,
             _controller: controller.clone(),
             last: None,

@@ -92,11 +92,17 @@ media_keys = "cursor"
 
 [clipboard]
 enabled = true
+# Images, dans leur format d'origine (PNG, JPEG, GIF, WebP, HEIC…).
 images = true
 # Conserver la mise en forme (HTML) quand elle est disponible.
 html = true
-# Taille maximale transférée (Mo).
+# Fichiers et dossiers copiés (Finder, Explorateur…) : coller sur une autre
+# machine les y copie.
+files = true
+# Taille maximale du texte et des images (Mo).
 max_size_mb = 32
+# Taille maximale des fichiers copiés (Mo).
+max_files_mb = 256
 # Ne pas transférer les contenus marqués « sensibles » (gestionnaires de mots
 # de passe…).
 skip_sensitive = true

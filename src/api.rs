@@ -52,6 +52,13 @@ pub fn set_restart_handler(f: fn()) {
     let _ = RESTART.set(f);
 }
 
+/// Redémarre Baskul (après l'installation d'une mise à jour…).
+pub fn request_restart() {
+    if let Some(restart) = RESTART.get() {
+        restart();
+    }
+}
+
 /// Démarre l'API et écrit son fichier de découverte.
 pub fn start(config_path: &Path) -> Result<(), String> {
     let server = spawn(config_path.to_path_buf())?;
@@ -279,6 +286,16 @@ fn route(req: &Request, server: &Server) -> Response {
             Response { restart: can_restart, ..Response::json(200, json!({ "restart": can_restart })) }
         }
         ("POST", "/api/switch") => switch(&req.body),
+        ("GET", "/api/network") => Response::json(200, network_info()),
+        ("GET", "/api/update") => Response::json(200, crate::update::info()),
+        ("POST", "/api/update/check") => {
+            crate::update::check_in_background();
+            Response::json(200, crate::update::info())
+        }
+        ("POST", "/api/update/install") => match crate::update::install() {
+            Ok(()) => Response::json(200, crate::update::info()),
+            Err(e) => Response::error(409, &e),
+        },
         ("POST", "/api/open-file") => {
             crate::platform::open_in_editor(&server.path);
             Response::json(200, json!({}))
@@ -313,16 +330,25 @@ fn route(req: &Request, server: &Server) -> Response {
         }
         (
             _,
-            "/api/status" | "/api/config" | "/api/restart" | "/api/switch" | "/api/open-file" | "/api/log"
-            | "/api/open-log" | CAPTURE,
+            "/api/status"
+            | "/api/config"
+            | "/api/restart"
+            | "/api/switch"
+            | "/api/network"
+            | "/api/open-file"
+            | "/api/log"
+            | "/api/open-log"
+            | "/api/update"
+            | "/api/update/check"
+            | "/api/update/install"
+            | CAPTURE,
         ) => Response::error(405, "méthode non autorisée"),
         _ => Response::error(404, "introuvable"),
     }
 }
 
 /// Commande `baskul switch` : `{"to": "primary" | "secondary" | "toggle" |
-/// "here" | "other"}`. Renvoie la machine où agissent désormais le clavier et
-/// la souris.
+/// "here" | "other" | "next" | nom d'une pilotée}`.
 fn switch(body: &[u8]) -> Response {
     let guard = SWITCH.lock().unwrap_or_else(|e| e.into_inner());
     let Some((role, handler)) = guard.as_ref() else {
@@ -330,37 +356,47 @@ fn switch(body: &[u8]) -> Response {
     };
     let to = serde_json::from_slice::<Value>(body).ok().and_then(|v| v["to"].as_str().map(str::to_owned));
     let s = status::snapshot();
-    let Some(target) = switch_target(to.as_deref().unwrap_or_default(), *role, s.remote_active) else {
-        return Response::error(400, "cible inconnue (primary, secondary, toggle, here ou other)");
+    let Some(target) = switch_target(to.as_deref().unwrap_or_default().trim(), *role, s.remote_active) else {
+        return Response::error(400, "cible manquante (primary, secondary, toggle, here, other, next ou un nom)");
     };
-    // La machine pilotée transmet la demande à la machine principale.
-    if !s.is_connected() && (target == SwitchTo::Secondary || *role == Role::Secondary) {
-        return Response::error(409, "pas de connexion avec l'autre machine");
+    if !s.is_connected() {
+        return Response::error(409, "pas de connexion avec une autre machine");
+    }
+    if let (SwitchTo::Client(name), Role::Primary) = (&target, role) {
+        if !s.peers.iter().any(|p| &p.name == name) {
+            return Response::error(409, &format!("« {name} » n'est pas connectée"));
+        }
     }
     match handler(target) {
-        Ok(()) => Response::json(200, json!({ "to": side_name(target) })),
+        Ok(()) => Response::json(200, json!({})),
         Err(e) => Response::error(409, &e),
     }
 }
 
 /// Machine visée par `baskul switch`, lancée sur une machine de rôle `role`.
-/// `remote_active` : le clavier et la souris agissent en ce moment sur la
-/// machine pilotée (même sens des deux côtés).
+/// `remote_active` : le clavier et la souris agissent en ce moment sur une
+/// pilotée (machine principale) ou sur cette machine (machine pilotée).
 fn switch_target(to: &str, role: Role, remote_active: bool) -> Option<SwitchTo> {
     Some(match (to, role) {
+        ("", _) => return None,
         ("primary", _) | ("here", Role::Primary) | ("other", Role::Secondary) => SwitchTo::Primary,
-        ("secondary", _) | ("here", Role::Secondary) | ("other", Role::Primary) => SwitchTo::Secondary,
+        ("secondary", _) | ("other", Role::Primary) => SwitchTo::LastClient,
+        ("here", Role::Secondary) => SwitchTo::Sender,
+        ("next", _) => SwitchTo::Next,
         ("toggle", _) if remote_active => SwitchTo::Primary,
-        ("toggle", _) => SwitchTo::Secondary,
-        _ => return None,
+        ("toggle", Role::Primary) => SwitchTo::LastClient,
+        ("toggle", Role::Secondary) => SwitchTo::Sender,
+        (name, _) => SwitchTo::Client(name.to_string()),
     })
 }
 
-fn side_name(side: SwitchTo) -> &'static str {
-    match side {
-        SwitchTo::Primary => "primary",
-        SwitchTo::Secondary => "secondary",
-    }
+/// Cartes réseau de la machine et machines principales trouvées sur le
+/// réseau, pour l'app de réglages.
+fn network_info() -> Value {
+    json!({
+        "interfaces": crate::iface::list(),
+        "primaries": crate::discovery::primaries(),
+    })
 }
 
 /// Requête à l'API du Baskul en cours d'exécution (commandes `baskul …`).
@@ -411,13 +447,15 @@ fn status_info(server: &Server) -> Value {
         "remote_active": s.remote_active,
         "locked": s.locked,
         "warning": s.warning,
-        "peer": s.peer.map(|p| json!({ "os": p.os, "since": p.since })),
+        "peers": s.peers.iter().map(|p| json!({ "name": p.name, "os": p.os, "since": p.since })).collect::<Vec<_>>(),
+        "active_peer": s.active_peer,
         "role": SWITCH.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|(r, _)| match r {
             Role::Primary => "primary",
             Role::Secondary => "secondary",
         }),
         "version": crate::VERSION,
         "started": server.started,
+        "update": crate::update::info(),
     })
 }
 
@@ -620,15 +658,18 @@ mod tests {
     #[test]
     fn switch_targets() {
         use Role::{Primary as P, Secondary as S};
-        use SwitchTo::{Primary, Secondary};
-        assert_eq!(switch_target("secondary", P, false), Some(Secondary));
+        use SwitchTo::*;
+        assert_eq!(switch_target("secondary", P, false), Some(LastClient));
         assert_eq!(switch_target("primary", S, true), Some(Primary));
-        assert_eq!(switch_target("here", S, false), Some(Secondary));
+        assert_eq!(switch_target("here", S, false), Some(Sender));
         assert_eq!(switch_target("here", P, true), Some(Primary));
-        assert_eq!(switch_target("other", P, false), Some(Secondary));
+        assert_eq!(switch_target("other", P, false), Some(LastClient));
         assert_eq!(switch_target("other", S, true), Some(Primary));
-        assert_eq!(switch_target("toggle", P, false), Some(Secondary));
+        assert_eq!(switch_target("toggle", P, false), Some(LastClient));
+        assert_eq!(switch_target("toggle", S, false), Some(Sender));
         assert_eq!(switch_target("toggle", S, true), Some(Primary));
-        assert_eq!(switch_target("mac", P, false), None);
+        assert_eq!(switch_target("next", S, true), Some(Next));
+        assert_eq!(switch_target("Atelier", P, false), Some(Client("Atelier".into())));
+        assert_eq!(switch_target("", P, false), None);
     }
 }

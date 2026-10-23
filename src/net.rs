@@ -1,25 +1,27 @@
-//! Connexion réseau entre les deux machines.
+//! Connexions réseau.
 //!
-//! - TCP (`TCP_NODELAY`), une seule connexion à la fois.
+//! - La machine principale écoute et accepte plusieurs pilotées à la fois ;
+//!   chaque pilotée se connecte à la principale (adresse donnée, ou trouvée
+//!   par la découverte automatique) et s'y reconnecte d'elle-même.
+//! - TCP (`TCP_NODELAY`), éventuellement par une carte réseau imposée.
 //! - Poignée de main Noise (voir `crypto.rs`), puis échange de `Hello`.
 //! - Trames : longueur sur 2 octets (big-endian) + message chiffré.
-//! - Un thread lit, un thread écrit. Les messages d'entrée (souris, clavier)
-//!   sont prioritaires sur le presse-papiers ; les déplacements en attente
-//!   sont fusionnés.
+//! - Par connexion, un thread lit, un thread écrit. Les messages d'entrée
+//!   (souris, clavier) passent avant le presse-papiers ; les déplacements en
+//!   attente sont fusionnés.
 //! - Maintien de connexion : `Ping` toutes les secondes en l'absence de
 //!   trafic ; connexion considérée perdue après 5 s de silence.
-//! - Reconnexion automatique.
 
-use crate::config::Endpoint;
 use crate::crypto::{self, Sealer};
+use crate::discovery;
 use crate::i18n;
 use crate::protocol::{Message, PROTOCOL_VERSION, Role};
 use crate::status::{self, Conn};
 use crossbeam_channel::{Receiver, Sender, bounded, select, unbounded};
 use std::io::{self, BufReader, Read, Write};
-use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::net::{IpAddr, Shutdown, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 const PING_INTERVAL: Duration = Duration::from_millis(1000);
@@ -27,57 +29,132 @@ const READ_TIMEOUT: Duration = Duration::from_secs(5);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 
-/// Événements remontés par la connexion.
+/// Identifiant d'une connexion (une par pilotée, pour la durée de la
+/// connexion).
+pub type PeerId = u32;
+
+/// Événements remontés par les connexions.
 #[derive(Debug)]
 pub enum LinkEvent {
-    Connected { name: String, os: String },
-    Disconnected,
-    Message(Message),
+    Connected { peer: PeerId, name: String, os: String },
+    Disconnected { peer: PeerId },
+    Message { peer: PeerId, msg: Message },
 }
 
 pub struct NetSettings {
-    pub endpoint: Endpoint,
-    pub psk: [u8; 32],
     pub role: Role,
     pub name: String,
+    /// Identifiant propre à la machine (deux pilotées ne peuvent pas porter
+    /// le même nom).
+    pub machine_id: String,
+    pub psk: [u8; 32],
+    /// Machine principale : adresse d'écoute.
+    pub listen: String,
+    /// Machine pilotée : adresse de la principale (`None` : découverte).
+    pub connect: Option<String>,
+    /// Découverte automatique active.
+    pub discovery: bool,
+    /// Adresse locale imposée (carte réseau choisie).
+    pub bind: Option<IpAddr>,
 }
 
-/// Poignée pour envoyer des messages à l'autre machine.
-#[derive(Clone)]
-pub struct LinkHandle {
+/// Autre machine connectée.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PeerInfo {
+    pub id: PeerId,
+    pub name: String,
+    pub os: String,
+}
+
+struct Peer {
+    info: PeerInfo,
+    machine_id: String,
     input_tx: Sender<Message>,
     bulk_tx: Sender<Message>,
-    connected: Arc<AtomicBool>,
+    /// Pour couper la connexion (remplacée par une plus récente).
+    stream: Option<TcpStream>,
+}
+
+/// Poignée pour envoyer des messages aux autres machines (machine pilotée :
+/// une seule, la principale).
+#[derive(Clone, Default)]
+pub struct LinkHandle {
+    peers: Arc<Mutex<Vec<Peer>>>,
 }
 
 impl LinkHandle {
+    fn with_peer<T>(&self, peer: PeerId, f: impl FnOnce(&Peer) -> T) -> Option<T> {
+        let peers = self.peers.lock().unwrap_or_else(|e| e.into_inner());
+        peers.iter().find(|p| p.info.id == peer).map(f)
+    }
+
     /// Envoie un message d'entrée (non bloquant). Ignoré hors connexion.
-    pub fn send_input(&self, m: Message) {
-        if self.connected.load(Ordering::Acquire) {
-            let _ = self.input_tx.send(m);
+    pub fn send_input(&self, peer: PeerId, m: Message) {
+        self.with_peer(peer, |p| {
+            let _ = p.input_tx.send(m);
+        });
+    }
+
+    /// Envoie un message d'entrée à toutes les machines, sauf `except`.
+    pub fn broadcast_input(&self, m: Message, except: Option<PeerId>) {
+        let peers = self.peers.lock().unwrap_or_else(|e| e.into_inner());
+        for p in peers.iter().filter(|p| Some(p.info.id) != except) {
+            let _ = p.input_tx.send(m.clone());
         }
     }
 
     /// Envoie un message volumineux (presse-papiers). Bloque si le réseau est
     /// saturé ; renvoie `false` si la connexion est perdue.
-    pub fn send_bulk(&self, m: Message) -> bool {
-        if !self.connected.load(Ordering::Acquire) {
-            return false;
+    pub fn send_bulk(&self, peer: PeerId, m: Message) -> bool {
+        let Some(tx) = self.with_peer(peer, |p| p.bulk_tx.clone()) else { return false };
+        tx.send_timeout(m, Duration::from_secs(10)).is_ok()
+    }
+
+    /// Autres machines connectées, dans l'ordre de connexion.
+    pub fn peers(&self) -> Vec<PeerInfo> {
+        self.peers.lock().unwrap_or_else(|e| e.into_inner()).iter().map(|p| p.info.clone()).collect()
+    }
+
+    pub fn is_connected(&self, peer: PeerId) -> bool {
+        self.with_peer(peer, |_| ()).is_some()
+    }
+
+    /// Machine pilotée : la connexion à la machine principale.
+    pub fn primary(&self) -> Option<PeerId> {
+        self.peers.lock().unwrap_or_else(|e| e.into_inner()).first().map(|p| p.info.id)
+    }
+
+    /// Enregistre une connexion établie. Une connexion plus ancienne de la
+    /// même machine (reconnexion avant la fin du délai de détection) est
+    /// coupée ; une autre machine du même nom est refusée.
+    fn register(&self, peer: Peer) -> Result<(), String> {
+        let mut peers = self.peers.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(old) = peers.iter().find(|p| p.info.name == peer.info.name) {
+            if old.machine_id != peer.machine_id {
+                return Err(i18n::tf("status.nameTaken", &[("name", &peer.info.name)]));
+            }
+            log::info!("« {} » s'est reconnectée : l'ancienne connexion est fermée", peer.info.name);
+            if let Some(s) = &old.stream {
+                let _ = s.shutdown(Shutdown::Both);
+            }
         }
-        self.bulk_tx.send_timeout(m, Duration::from_secs(10)).is_ok()
+        peers.push(peer);
+        Ok(())
     }
 
-    pub fn is_connected(&self) -> bool {
-        self.connected.load(Ordering::Acquire)
+    fn unregister(&self, peer: PeerId) {
+        self.peers.lock().unwrap_or_else(|e| e.into_inner()).retain(|p| p.info.id != peer);
     }
 
-    /// Poignée « connectée » sans réseau : renvoie le récepteur des messages
-    /// volumineux (tests).
+    /// Poignée avec une machine fictive (`id` 1) : renvoie le récepteur de ses
+    /// messages volumineux (tests).
     #[cfg(test)]
     pub fn detached_bulk() -> (LinkHandle, Receiver<Message>) {
         let (input_tx, _input_rx) = unbounded();
         let (bulk_tx, bulk_rx) = unbounded();
-        let h = LinkHandle { input_tx, bulk_tx, connected: Arc::new(AtomicBool::new(true)) };
+        let h = LinkHandle::default();
+        let info = PeerInfo { id: 1, name: "test".into(), os: "test".into() };
+        h.peers.lock().unwrap().push(Peer { info, machine_id: String::new(), input_tx, bulk_tx, stream: None });
         (h, bulk_rx)
     }
 }
@@ -97,135 +174,175 @@ impl From<io::Error> for SessionError {
     }
 }
 
-/// Démarre la gestion de connexion en arrière-plan.
+static NEXT_ID: AtomicU32 = AtomicU32::new(1);
+
+/// Démarre les connexions en arrière-plan : écoute (machine principale) ou
+/// connexion à la principale (machine pilotée).
 pub fn start(settings: NetSettings, on_event: impl Fn(LinkEvent) + Send + Sync + 'static) -> LinkHandle {
-    let (input_tx, input_rx) = unbounded::<Message>();
-    let (bulk_tx, bulk_rx) = bounded::<Message>(8);
-    let connected = Arc::new(AtomicBool::new(false));
-    let handle = LinkHandle { input_tx, bulk_tx, connected: connected.clone() };
+    let handle = LinkHandle::default();
+    let links = handle.clone();
     let on_event: EventFn = Arc::new(on_event);
+    let s = Arc::new(settings);
     std::thread::Builder::new()
         .name("baskul-net".into())
-        .spawn(move || manager(settings, input_rx, bulk_rx, connected, on_event))
+        .spawn(move || match s.role {
+            Role::Primary => server(s, links, on_event),
+            Role::Secondary => client(s, links, on_event),
+        })
         .expect("thread réseau");
     handle
 }
 
-fn manager(
-    s: NetSettings,
-    input_rx: Receiver<Message>,
-    bulk_rx: Receiver<Message>,
-    connected: Arc<AtomicBool>,
-    on_event: EventFn,
-) {
-    let mut listener: Option<TcpListener> = None;
+/// Adresse d'écoute, sur la carte réseau choisie s'il y en a une.
+fn listen_addr(s: &NetSettings) -> String {
+    match s.bind {
+        Some(ip) => {
+            let port = s
+                .listen
+                .rsplit_once(':')
+                .and_then(|(_, p)| p.parse::<u16>().ok())
+                .unwrap_or(crate::protocol::DEFAULT_PORT);
+            SocketAddr::new(ip, port).to_string()
+        }
+        None => s.listen.clone(),
+    }
+}
+
+/// Machine principale : accepte les pilotées, chacune dans son thread.
+fn server(s: Arc<NetSettings>, links: LinkHandle, on_event: EventFn) {
+    let addr = listen_addr(&s);
+    let listener = loop {
+        match TcpListener::bind(addr.as_str()) {
+            Ok(l) => break l,
+            Err(e) => {
+                log::error!("impossible d'écouter sur {addr} : {e}");
+                status::set_conn(Conn::Error(i18n::tf(
+                    "status.listenFailed",
+                    &[("address", &addr), ("error", &e.to_string())],
+                )));
+                std::thread::sleep(Duration::from_secs(5));
+            }
+        }
+    };
+    log::info!("en écoute sur {addr}");
+    status::set_conn(Conn::Waiting(i18n::tf("status.waitingClients", &[("address", &addr)])));
+    for stream in listener.incoming() {
+        let stream = match stream {
+            Ok(st) => st,
+            Err(e) => {
+                log::warn!("accept : {e}");
+                std::thread::sleep(Duration::from_millis(200));
+                continue;
+            }
+        };
+        let peer_addr = stream.peer_addr().map(|a| a.to_string()).unwrap_or_default();
+        log::info!("connexion entrante de {peer_addr}");
+        let (s, links, on_event) = (s.clone(), links.clone(), on_event.clone());
+        let _ = std::thread::Builder::new().name("baskul-net-peer".into()).spawn(move || {
+            match session(&s, stream, false, &links, &on_event) {
+                Ok(()) => log::info!("connexion de {peer_addr} terminée"),
+                Err(SessionError::Io(e)) => log::warn!("connexion de {peer_addr} : {e}"),
+                // Mauvais secret, version ou nom : seule la pilotée l'affiche.
+                Err(SessionError::Auth) => log::warn!("{peer_addr} : {}", i18n::t("status.wrongSecret")),
+                Err(SessionError::Refused(msg)) => log::warn!("{peer_addr} : {msg}"),
+            }
+        });
+    }
+}
+
+/// Machine pilotée : se connecte à la principale et s'y reconnecte.
+fn client(s: Arc<NetSettings>, links: LinkHandle, on_event: EventFn) {
     let mut backoff = Duration::from_millis(500);
-    // Dernière erreur, gardée visible dans l'état tant qu'aucune connexion ne réussit.
+    // Dernière erreur, gardée visible tant qu'aucune connexion ne réussit.
     let mut last_error: Option<String> = None;
     let waiting = |base: String, last_error: &Option<String>| match last_error {
         Some(e) => Conn::Error(format!("{e} — {base}")),
         None => Conn::Waiting(base),
     };
     loop {
-        let (stream, initiator) = match &s.endpoint {
-            Endpoint::Listen(addr) => {
-                if listener.is_none() {
-                    match TcpListener::bind(addr.as_str()) {
-                        Ok(l) => {
-                            log::info!("en écoute sur {addr}");
-                            listener = Some(l);
-                        }
-                        Err(e) => {
-                            log::error!("impossible d'écouter sur {addr} : {e}");
-                            status::set_conn(Conn::Error(i18n::tf(
-                                "status.listenFailed",
-                                &[("address", addr), ("error", &e.to_string())],
-                            )));
-                            std::thread::sleep(Duration::from_secs(5));
-                            continue;
-                        }
-                    }
-                }
-                status::set_conn(waiting(i18n::tf("status.waiting", &[("address", addr)]), &last_error));
-                match listener.as_ref().unwrap().accept() {
-                    Ok((stream, peer)) => {
-                        log::info!("connexion entrante de {peer}");
-                        (stream, false)
-                    }
-                    Err(e) => {
-                        log::warn!("accept : {e}");
-                        std::thread::sleep(Duration::from_millis(500));
-                        continue;
-                    }
-                }
-            }
-            Endpoint::Connect(addr) => {
+        // Adresses à essayer : celle de la configuration, ou les machines
+        // principales trouvées sur le réseau.
+        let targets: Vec<(String, Vec<SocketAddr>)> = match &s.connect {
+            Some(addr) => {
                 status::set_conn(waiting(i18n::tf("status.connecting", &[("address", addr)]), &last_error));
-                match connect(addr) {
-                    Ok(stream) => (stream, true),
-                    Err(e) => {
-                        log::debug!("connexion à {addr} impossible : {e}");
-                        std::thread::sleep(backoff);
-                        backoff = (backoff * 2).min(Duration::from_secs(4));
-                        continue;
-                    }
+                vec![(addr.clone(), addr.to_socket_addrs().map(|a| a.collect()).unwrap_or_default())]
+            }
+            None if !s.discovery => {
+                status::set_conn(Conn::Error(i18n::t("status.noAddress")));
+                std::thread::sleep(Duration::from_secs(5));
+                continue;
+            }
+            None => {
+                let found: Vec<_> =
+                    discovery::primaries().into_iter().filter(|f| f.protocol == PROTOCOL_VERSION).collect();
+                if found.is_empty() {
+                    status::set_conn(waiting(i18n::t("status.searching"), &last_error));
+                    std::thread::sleep(Duration::from_secs(1));
+                    continue;
                 }
+                found.into_iter().map(|f| (f.name, f.addresses)).collect()
             }
         };
-        backoff = Duration::from_millis(500);
-        let result = session(&s, stream, initiator, &input_rx, &bulk_rx, &connected, &on_event);
-        let was_connected = connected.swap(false, Ordering::AcqRel);
-        if was_connected {
-            on_event(LinkEvent::Disconnected);
-        }
-        if was_connected {
-            last_error = None;
-        }
-        // Côté « écoute », on ne patiente jamais : une connexion parasite ne
-        // doit pas retarder la vraie. Côté « connexion », on espace les essais.
-        let mut pause = Duration::from_millis(500);
-        match result {
-            Ok(()) => log::info!("connexion terminée"),
-            Err(SessionError::Io(e)) => {
-                if was_connected {
-                    log::warn!("connexion perdue : {e}");
-                } else {
-                    log::warn!("échec de la poignée de main : {e}");
+        let mut session_ran = false;
+        'targets: for (label, addrs) in targets {
+            for a in addrs {
+                let stream = match connect(a, s.bind) {
+                    Ok(st) => st,
+                    Err(e) => {
+                        log::debug!("connexion à {label} ({a}) impossible : {e}");
+                        continue;
+                    }
+                };
+                log::info!("connecté à {label} ({a})");
+                session_ran = true;
+                let result = session(&s, stream, true, &links, &on_event);
+                match result {
+                    Ok(()) => log::info!("connexion terminée"),
+                    Err(SessionError::Io(e)) => log::warn!("connexion perdue : {e}"),
+                    Err(SessionError::Auth) => {
+                        let msg = i18n::t("status.wrongSecret");
+                        log::error!("{label} : {msg}");
+                        last_error = Some(msg);
+                        continue 'targets;
+                    }
+                    Err(SessionError::Refused(msg)) => {
+                        log::error!("{label} : {msg}");
+                        last_error = Some(msg);
+                        continue 'targets;
+                    }
                 }
-            }
-            Err(SessionError::Auth) => {
-                let msg = i18n::t("status.wrongSecret");
-                log::error!("{msg}");
-                status::set_conn(Conn::Error(msg.clone()));
-                last_error = Some(msg);
-                pause = Duration::from_secs(5);
-            }
-            Err(SessionError::Refused(msg)) => {
-                log::error!("{msg}");
-                status::set_conn(Conn::Error(msg.clone()));
-                last_error = Some(msg);
-                pause = Duration::from_secs(5);
+                last_error = None;
+                backoff = Duration::from_millis(500);
+                break 'targets;
             }
         }
-        if initiator {
-            std::thread::sleep(pause);
+        if let Some(e) = &last_error {
+            status::set_conn(Conn::Error(e.clone()));
+        }
+        // Espacement des essais (plus long après un refus).
+        let pause = if last_error.is_some() { Duration::from_secs(5) } else { backoff };
+        std::thread::sleep(pause);
+        if !session_ran {
+            backoff = (backoff * 2).min(Duration::from_secs(4));
         }
     }
 }
 
-fn connect(addr: &str) -> io::Result<TcpStream> {
-    let addrs: Vec<SocketAddr> = addr.to_socket_addrs()?.collect();
-    let mut last = io::Error::new(io::ErrorKind::NotFound, "adresse introuvable");
-    for a in addrs {
-        match TcpStream::connect_timeout(&a, CONNECT_TIMEOUT) {
-            Ok(s) => {
-                log::info!("connecté à {a}");
-                return Ok(s);
-            }
-            Err(e) => last = e,
+/// Connexion TCP, depuis l'adresse locale `bind` si une carte est imposée.
+fn connect(addr: SocketAddr, bind: Option<IpAddr>) -> io::Result<TcpStream> {
+    use socket2::{Domain, Protocol, Socket, Type};
+    let sock = Socket::new(Domain::for_address(addr), Type::STREAM, Some(Protocol::TCP))?;
+    if let Some(ip) = bind {
+        if ip.is_ipv4() != addr.is_ipv4() {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "famille d'adresses différente de la carte choisie",
+            ));
         }
+        sock.bind(&SocketAddr::new(ip, 0).into())?;
     }
-    Err(last)
+    sock.connect_timeout(&addr.into(), CONNECT_TIMEOUT)?;
+    Ok(sock.into())
 }
 
 fn write_frame(stream: &mut impl Write, frame: &mut Vec<u8>, data: &[u8]) -> io::Result<()> {
@@ -247,9 +364,7 @@ fn session(
     s: &NetSettings,
     stream: TcpStream,
     initiator: bool,
-    input_rx: &Receiver<Message>,
-    bulk_rx: &Receiver<Message>,
-    connected: &Arc<AtomicBool>,
+    links: &LinkHandle,
     on_event: &EventFn,
 ) -> Result<(), SessionError> {
     stream.set_nodelay(true)?;
@@ -278,68 +393,104 @@ fn session(
     let (mut sealer, mut opener) = crypto::split(transport);
 
     // --- Présentation ---
+    // La pilotée se présente ; la principale vérifie (version, rôle, nom) puis
+    // répond par sa propre présentation, ou par un refus motivé.
     let hello = Message::Hello {
         version: PROTOCOL_VERSION,
         role: s.role,
         name: s.name.clone(),
         os: std::env::consts::OS.to_string(),
+        id: s.machine_id.clone(),
     };
-    let c = sealer.seal(&hello.encode()).map_err(|_| SessionError::Auth)?;
-    write_frame(&mut write_half, &mut frame, c)?;
+    let mut send = |m: &Message, sealer: &mut Sealer| -> Result<(), SessionError> {
+        let c = sealer.seal(&m.encode()).map_err(|_| SessionError::Auth)?;
+        write_frame(&mut write_half, &mut frame, c)?;
+        Ok(())
+    };
+    if initiator {
+        send(&hello, &mut sealer)?;
+    }
     let n = read_frame(&mut reader, &mut buf)?;
     let plain = opener.open(&buf[..n]).map_err(|_| SessionError::Auth)?;
-    let (peer_name, peer_os) = match Message::decode(plain) {
-        Ok(Message::Hello { version, role, name, os }) => {
+    let checked = match Message::decode(plain) {
+        Ok(Message::Hello { version, role, name, os, id }) => {
             if version != PROTOCOL_VERSION {
-                return Err(SessionError::Refused(i18n::tf(
+                Err(i18n::tf(
                     "status.versionMismatch",
                     &[("here", &PROTOCOL_VERSION.to_string()), ("name", &name), ("there", &version.to_string())],
-                )));
-            }
-            if role == s.role {
+                ))
+            } else if role == s.role {
                 let role = i18n::t(if role == Role::Primary { "status.rolePrimary" } else { "status.roleSecondary" });
-                return Err(SessionError::Refused(i18n::tf("status.sameRole", &[("role", &role)])));
+                Err(i18n::tf("status.sameRole", &[("role", &role)]))
+            } else {
+                Ok((name, os, id))
             }
-            (name, os)
         }
-        _ => return Err(SessionError::Refused(i18n::t("status.unexpectedReply"))),
+        Ok(Message::Refused { reason }) => return Err(SessionError::Refused(reason)),
+        // Ancienne version : le message ne se décode pas.
+        _ => Err(i18n::t("status.unexpectedReply")),
     };
-
-    // Messages restés en file d'une connexion précédente : obsolètes.
-    while input_rx.try_recv().is_ok() {}
-    while bulk_rx.try_recv().is_ok() {}
-
+    let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+    let (input_tx, input_rx) = unbounded::<Message>();
+    let (bulk_tx, bulk_rx) = bounded::<Message>(8);
+    let registered = checked.and_then(|(name, os, machine)| {
+        let info = PeerInfo { id, name: name.clone(), os: os.clone() };
+        let peer = Peer { info, machine_id: machine, input_tx, bulk_tx, stream: stream.try_clone().ok() };
+        links.register(peer).map(|()| (name, os))
+    });
+    let (peer_name, peer_os) = match registered {
+        Ok(p) => p,
+        Err(reason) => {
+            if !initiator {
+                let _ = send(&Message::Refused { reason: reason.clone() }, &mut sealer);
+            }
+            return Err(SessionError::Refused(reason));
+        }
+    };
+    if !initiator {
+        if let Err(e) = send(&hello, &mut sealer) {
+            links.unregister(id);
+            return Err(e);
+        }
+    }
     log::info!("connecté à « {peer_name} » ({peer_os})");
-    connected.store(true, Ordering::Release);
-    status::set_connected(&peer_name, &peer_os);
-    on_event(LinkEvent::Connected { name: peer_name, os: peer_os });
+    status::add_peer(&peer_name, &peer_os);
+    on_event(LinkEvent::Connected { peer: id, name: peer_name.clone(), os: peer_os });
 
     // --- Échanges ---
     let (stop_tx, stop_rx) = bounded::<()>(0);
-    let in_rx = input_rx.clone();
-    let b_rx = bulk_rx.clone();
     let writer = std::thread::Builder::new()
         .name("baskul-net-tx".into())
-        .spawn(move || writer_loop(write_half, frame, sealer, in_rx, b_rx, stop_rx))
-        .map_err(SessionError::Io)?;
+        .spawn(move || writer_loop(write_half, frame, sealer, input_rx, bulk_rx, stop_rx))
+        .map_err(SessionError::Io);
 
-    let result = (|| -> Result<(), SessionError> {
-        loop {
-            let n = read_frame(&mut reader, &mut buf)?;
-            let plain = opener.open(&buf[..n]).map_err(|_| SessionError::Auth)?;
-            match Message::decode(plain) {
-                Ok(Message::Ping) => {}
-                Ok(Message::Hello { .. }) => log::warn!("Hello inattendu ignoré"),
-                Ok(m) => on_event(LinkEvent::Message(m)),
-                Err(e) => log::warn!("message illisible ignoré : {e}"),
+    let result = writer.and_then(|writer| {
+        let r = (|| -> Result<(), SessionError> {
+            loop {
+                let n = read_frame(&mut reader, &mut buf)?;
+                let plain = opener.open(&buf[..n]).map_err(|_| SessionError::Auth)?;
+                match Message::decode(plain) {
+                    Ok(Message::Ping) => {}
+                    Ok(Message::Hello { .. }) => log::warn!("Hello inattendu ignoré"),
+                    Ok(Message::Refused { reason }) => return Err(SessionError::Refused(reason)),
+                    Ok(msg) => on_event(LinkEvent::Message { peer: id, msg }),
+                    Err(e) => log::warn!("message illisible ignoré : {e}"),
+                }
             }
-        }
-    })();
+        })();
+        let _ = stream.shutdown(Shutdown::Both);
+        drop(stop_tx);
+        let _ = writer.join();
+        r
+    });
 
-    connected.store(false, Ordering::Release);
-    let _ = stream.shutdown(Shutdown::Both);
-    drop(stop_tx);
-    let _ = writer.join();
+    links.unregister(id);
+    // Pas de retrait si une connexion plus récente de la même machine a pris
+    // la place.
+    if !links.peers().iter().any(|p| p.name == peer_name) {
+        status::remove_peer(&peer_name);
+    }
+    on_event(LinkEvent::Disconnected { peer: id });
     result
 }
 
@@ -413,80 +564,77 @@ mod tests {
         TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
     }
 
+    fn settings(role: Role, name: &str, id: &str, secret: &str, port: u16) -> NetSettings {
+        NetSettings {
+            role,
+            name: name.into(),
+            machine_id: id.into(),
+            psk: crypto::derive_psk(secret),
+            listen: format!("127.0.0.1:{port}"),
+            connect: Some(format!("127.0.0.1:{port}")),
+            discovery: false,
+            bind: None,
+        }
+    }
+
+    fn start_with(s: NetSettings) -> (LinkHandle, Receiver<LinkEvent>) {
+        let (tx, rx) = unbounded();
+        let h = start(s, move |e| {
+            let _ = tx.send(e);
+        });
+        (h, rx)
+    }
+
+    /// Principale « A » en écoute, pilotée « B » qui s'y connecte.
     fn start_pair(
         secret_a: &str,
         secret_b: &str,
         role_b: Role,
     ) -> (LinkHandle, Receiver<LinkEvent>, LinkHandle, Receiver<LinkEvent>) {
         let port = free_port();
-        let (a_tx, a_rx) = unbounded();
-        let (b_tx, b_rx) = unbounded();
-        let a = start(
-            NetSettings {
-                endpoint: Endpoint::Listen(format!("127.0.0.1:{port}")),
-                psk: crypto::derive_psk(secret_a),
-                role: Role::Primary,
-                name: "A".into(),
-            },
-            move |e| {
-                let _ = a_tx.send(e);
-            },
-        );
-        let b = start(
-            NetSettings {
-                endpoint: Endpoint::Connect(format!("127.0.0.1:{port}")),
-                psk: crypto::derive_psk(secret_b),
-                role: role_b,
-                name: "B".into(),
-            },
-            move |e| {
-                let _ = b_tx.send(e);
-            },
-        );
+        let (a, a_rx) = start_with(settings(Role::Primary, "A", "id-a", secret_a, port));
+        let (b, b_rx) = start_with(settings(role_b, "B", "id-b", secret_b, port));
         (a, a_rx, b, b_rx)
     }
 
-    fn wait_connected(rx: &Receiver<LinkEvent>) -> String {
+    fn wait_connected(rx: &Receiver<LinkEvent>) -> (PeerId, String) {
         match rx.recv_timeout(Duration::from_secs(10)).expect("connexion") {
-            LinkEvent::Connected { name, .. } => name,
+            LinkEvent::Connected { peer, name, .. } => (peer, name),
             e => panic!("événement inattendu {e:?}"),
+        }
+    }
+
+    fn next_message(rx: &Receiver<LinkEvent>) -> (PeerId, Message) {
+        match rx.recv_timeout(Duration::from_secs(5)).unwrap() {
+            LinkEvent::Message { peer, msg } => (peer, msg),
+            e => panic!("{e:?}"),
         }
     }
 
     #[test]
     fn end_to_end_exchange() {
         let (a, a_rx, b, b_rx) = start_pair("le-meme-secret", "le-meme-secret", Role::Secondary);
-        assert_eq!(wait_connected(&a_rx), "B");
-        assert_eq!(wait_connected(&b_rx), "A");
+        let (to_b, name) = wait_connected(&a_rx);
+        assert_eq!(name, "B");
+        let (to_a, name) = wait_connected(&b_rx);
+        assert_eq!(name, "A");
+        assert_eq!(b.primary(), Some(to_a));
 
-        a.send_input(Message::Enter { edge: Edge::Left, ratio: 0.5 });
-        a.send_input(Message::Button { button: MouseButton::Left, down: true });
-        a.send_input(Message::Key { code: 0x070004, down: true, repeat: false });
-        let mut got = vec![];
-        while got.len() < 3 {
-            match b_rx.recv_timeout(Duration::from_secs(5)).unwrap() {
-                LinkEvent::Message(m) => got.push(m),
-                e => panic!("{e:?}"),
-            }
-        }
-        assert_eq!(got[0], Message::Enter { edge: Edge::Left, ratio: 0.5 });
+        a.send_input(to_b, Message::Enter { edge: Edge::Left, ratio: 0.5, exits: vec![Edge::Left] });
+        a.send_input(to_b, Message::Button { button: MouseButton::Left, down: true });
+        a.send_input(to_b, Message::Key { code: 0x070004, down: true, repeat: false });
+        let got: Vec<Message> = (0..3).map(|_| next_message(&b_rx).1).collect();
+        assert_eq!(got[0], Message::Enter { edge: Edge::Left, ratio: 0.5, exits: vec![Edge::Left] });
         assert_eq!(got[2], Message::Key { code: 0x070004, down: true, repeat: false });
 
         // Sens inverse + gros message.
-        b.send_input(Message::Leave { ratio: 0.25 });
-        assert!(b.send_bulk(Message::ClipChunk { id: 1, data: vec![7; crate::protocol::CLIP_CHUNK] }));
-        let mut n = 0;
-        while n < 2 {
-            match a_rx.recv_timeout(Duration::from_secs(5)).unwrap() {
-                LinkEvent::Message(Message::Leave { ratio }) => {
-                    assert_eq!(ratio, 0.25);
-                    n += 1;
-                }
-                LinkEvent::Message(Message::ClipChunk { data, .. }) => {
-                    assert_eq!(data.len(), crate::protocol::CLIP_CHUNK);
-                    n += 1;
-                }
-                e => panic!("{e:?}"),
+        b.send_input(to_a, Message::Leave { edge: Edge::Left, ratio: 0.25 });
+        assert!(b.send_bulk(to_a, Message::ClipChunk { id: 1, data: vec![7; crate::protocol::CLIP_CHUNK] }));
+        for _ in 0..2 {
+            match next_message(&a_rx) {
+                (p, Message::Leave { ratio, .. }) => assert_eq!((p, ratio), (to_b, 0.25)),
+                (_, Message::ClipChunk { data, .. }) => assert_eq!(data.len(), crate::protocol::CLIP_CHUNK),
+                m => panic!("{m:?}"),
             }
         }
     }
@@ -494,21 +642,21 @@ mod tests {
     #[test]
     fn motions_are_preserved_in_total() {
         let (a, a_rx, _b, b_rx) = start_pair("secret-de-test", "secret-de-test", Role::Secondary);
-        wait_connected(&a_rx);
+        let (to_b, _) = wait_connected(&a_rx);
         wait_connected(&b_rx);
         for _ in 0..1000 {
-            a.send_input(Message::Motion { dx: 1, dy: -2 });
+            a.send_input(to_b, Message::Motion { dx: 1, dy: -2 });
         }
-        a.send_input(Message::ReleaseAll);
+        a.send_input(to_b, Message::ReleaseAll);
         let (mut sx, mut sy) = (0, 0);
         loop {
-            match b_rx.recv_timeout(Duration::from_secs(5)).unwrap() {
-                LinkEvent::Message(Message::Motion { dx, dy }) => {
+            match next_message(&b_rx).1 {
+                Message::Motion { dx, dy } => {
                     sx += dx;
                     sy += dy;
                 }
-                LinkEvent::Message(Message::ReleaseAll) => break,
-                e => panic!("{e:?}"),
+                Message::ReleaseAll => break,
+                m => panic!("{m:?}"),
             }
         }
         assert_eq!((sx, sy), (1000, -2000));
@@ -529,42 +677,70 @@ mod tests {
     }
 
     #[test]
-    fn reconnects_after_peer_drop() {
-        // Le serveur écoute ; on simule un client brut qui se connecte puis coupe :
-        // le serveur doit revenir en écoute et accepter un vrai client ensuite.
+    fn several_piloted_machines_at_once() {
         let port = free_port();
-        let (a_tx, a_rx) = unbounded();
-        let _a = start(
-            NetSettings {
-                endpoint: Endpoint::Listen(format!("127.0.0.1:{port}")),
-                psk: crypto::derive_psk("secret-de-test"),
-                role: Role::Primary,
-                name: "A".into(),
-            },
-            move |e| {
-                let _ = a_tx.send(e);
-            },
-        );
+        let (a, a_rx) = start_with(settings(Role::Primary, "A", "id-a", "secret-de-test", port));
+        let (_b, b_rx) = start_with(settings(Role::Secondary, "B", "id-b", "secret-de-test", port));
+        let (_c, c_rx) = start_with(settings(Role::Secondary, "C", "id-c", "secret-de-test", port));
+        let mut names: Vec<String> = (0..2).map(|_| wait_connected(&a_rx).1).collect();
+        names.sort();
+        assert_eq!(names, ["B", "C"]);
+        wait_connected(&b_rx);
+        wait_connected(&c_rx);
+        a.broadcast_input(Message::ReleaseAll, None);
+        assert_eq!(next_message(&b_rx).1, Message::ReleaseAll);
+        assert_eq!(next_message(&c_rx).1, Message::ReleaseAll);
+    }
+
+    #[test]
+    fn a_second_machine_with_the_same_name_is_refused() {
+        let port = free_port();
+        let (a, a_rx) = start_with(settings(Role::Primary, "A", "id-a", "secret-de-test", port));
+        let (_b, b_rx) = start_with(settings(Role::Secondary, "B", "id-b", "secret-de-test", port));
+        wait_connected(&a_rx);
+        wait_connected(&b_rx);
+        // Autre machine, même nom : refusée.
+        let (_other, other_rx) = start_with(settings(Role::Secondary, "B", "id-autre", "secret-de-test", port));
+        assert!(other_rx.recv_timeout(Duration::from_secs(2)).is_err());
+        assert_eq!(a.peers().len(), 1);
+    }
+
+    #[test]
+    fn the_same_machine_reconnecting_replaces_its_connection() {
+        let port = free_port();
+        let (a, a_rx) = start_with(settings(Role::Primary, "A", "id-a", "secret-de-test", port));
+        let (b1, b1_rx) = start_with(settings(Role::Secondary, "B", "id-b", "secret-de-test", port));
+        let (first, _) = wait_connected(&a_rx);
+        wait_connected(&b1_rx);
+        // Même machine (redémarrage de Baskul) : l'ancienne connexion est fermée.
+        let (_b2, b2_rx) = start_with(settings(Role::Secondary, "B", "id-b", "secret-de-test", port));
+        let (second, _) = wait_connected(&a_rx);
+        wait_connected(&b2_rx);
+        assert_ne!(first, second);
+        drop(b1);
+        let t = Instant::now();
+        while a.peers().iter().any(|p| p.id == first) {
+            assert!(t.elapsed() < Duration::from_secs(5));
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(a.peers().iter().map(|p| p.id).collect::<Vec<_>>(), [second]);
+    }
+
+    #[test]
+    fn accepts_a_real_client_after_garbage() {
+        // Un client brut se connecte puis coupe : le serveur continue
+        // d'accepter les vraies pilotées.
+        let port = free_port();
+        let (_a, a_rx) = start_with(settings(Role::Primary, "A", "id-a", "secret-de-test", port));
         std::thread::sleep(Duration::from_millis(200));
         {
             let mut raw = TcpStream::connect(("127.0.0.1", port)).unwrap();
             raw.write_all(&[0, 3, 1, 2, 3]).unwrap();
         }
-        let (b_tx, b_rx) = unbounded();
-        let _b = start(
-            NetSettings {
-                endpoint: Endpoint::Connect(format!("127.0.0.1:{port}")),
-                psk: crypto::derive_psk("secret-de-test"),
-                role: Role::Secondary,
-                name: "B".into(),
-            },
-            move |e| {
-                let _ = b_tx.send(e);
-            },
-        );
+        let (_b, b_rx) = start_with(settings(Role::Secondary, "B", "id-b", "secret-de-test", port));
         let t = Instant::now();
-        assert_eq!(wait_connected(&b_rx), "A");
-        assert_eq!(wait_connected(&a_rx), "B");
+        assert_eq!(wait_connected(&b_rx).1, "A");
+        assert_eq!(wait_connected(&a_rx).1, "B");
         assert!(t.elapsed() < Duration::from_secs(10));
     }
 }

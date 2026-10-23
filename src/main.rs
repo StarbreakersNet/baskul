@@ -18,10 +18,12 @@ mod cli;
 mod clipboard;
 mod config;
 mod crypto;
+mod discovery;
 mod geometry;
 mod hotkey;
 mod i18n;
 mod icon;
+mod iface;
 mod keymap;
 mod logging;
 mod net;
@@ -32,6 +34,7 @@ mod secondary;
 #[cfg(any(target_os = "macos", test, feature = "xcheck"))]
 mod smooth;
 mod status;
+mod update;
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -65,7 +68,9 @@ impl Args {
                 "--console" => a.console = true,
                 "--settings" => a.settings = true,
                 "switch" => {
-                    let to = it.next().ok_or("switch attend une cible : primary, secondary, toggle, here ou other")?;
+                    let to = it
+                        .next()
+                        .ok_or("switch attend une cible : primary, secondary, toggle, here, other, next ou un nom")?;
                     a.command = Some(cli::Command::Switch(to));
                 }
                 "status" => a.command = Some(cli::Command::Status),
@@ -81,16 +86,17 @@ impl Args {
                 "--help" | "-h" => {
                     println!(
                         "baskul {VERSION}\n\nUsage : baskul [--config FICHIER] [--console] [--settings]\n       \
-                         baskul [--config FICHIER] switch primary|secondary|toggle|here|other\n       \
+                         baskul [--config FICHIER] switch CIBLE\n       \
                          baskul [--config FICHIER] status\n\n  \
                          --config FICHIER  fichier de configuration (défaut : {})\n  \
                          --console         affiche aussi le journal dans le terminal\n  \
                          --settings        ouvre l'app de réglages\n  \
                          --print-config    affiche une configuration par défaut\n  \
                          switch CIBLE      le clavier et la souris passent sur la machine principale\n                    \
-                         (primary), la machine pilotée (secondary), l'autre que maintenant\n                    \
-                         (toggle), celle-ci (here) ou l'autre (other)\n  \
-                         status            état de Baskul (rôle, connexion, machine active)",
+                         (primary), la dernière pilotée (secondary), celle-ci (here),\n                    \
+                         une autre (other), celle où ils ne sont pas (toggle), la\n                    \
+                         suivante (next) ou une pilotée donnée par son nom\n  \
+                         status            état de Baskul (rôle, machines connectées, machine active)",
                         config::default_config_path().display()
                     );
                     std::process::exit(0);
@@ -210,7 +216,20 @@ fn main() {
         Err(e) => config_error(&path, &args, &e),
     };
     i18n::init(settings.ui.language);
-    log::info!("rôle : machine {} ; réseau : {:?} ; nom : {}", settings.role.label(), settings.endpoint, settings.name);
+    update::cleanup();
+    if settings.check_updates {
+        update::start_auto_check();
+    }
+    log::info!(
+        "rôle : machine {} ; nom : {} ; réseau : {}",
+        settings.role.label(),
+        settings.name,
+        match (settings.role, &settings.connect) {
+            (protocol::Role::Primary, _) => format!("écoute sur {}", settings.listen),
+            (_, Some(addr)) => format!("connexion à {addr}"),
+            (_, None) => "recherche de la machine principale".into(),
+        }
+    );
 
     if created {
         log::info!("configuration créée : {}", path.display());

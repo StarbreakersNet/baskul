@@ -86,8 +86,8 @@ pub struct Layout {
 pub enum Step {
     /// Nouvelle position (déjà ramenée sur un écran).
     Move(Point),
-    /// Le curseur sort par le bord demandé, à cette position relative.
-    Exit(f32),
+    /// Le curseur sort par ce bord, à cette position relative.
+    Exit(Edge, f32),
 }
 
 impl Layout {
@@ -226,10 +226,10 @@ impl Layout {
         }
     }
 
-    /// Applique un déplacement sur la machine secondaire. Si le curseur
-    /// franchit le bord `exit_edge` là où aucun écran ne continue, renvoie
+    /// Applique un déplacement sur une machine pilotée. Si le curseur franchit
+    /// l'un des bords `exits` là où aucun écran ne continue, renvoie
     /// `Step::Exit` ; sinon renvoie la nouvelle position ramenée sur un écran.
-    pub fn step(&self, cur: Point, dx: i32, dy: i32, exit_edge: Option<Edge>) -> Step {
+    pub fn step(&self, cur: Point, dx: i32, dy: i32, exits: &[Edge]) -> Step {
         let next = Point::new(cur.x.saturating_add(dx), cur.y.saturating_add(dy));
         if self.display_at(next).is_some() {
             return Step::Move(next);
@@ -241,7 +241,7 @@ impl Layout {
             Some(d) => *d,
             None => self.nearest_display(cur),
         };
-        if let Some(edge) = exit_edge {
+        for &edge in exits {
             let crossed = match edge {
                 Edge::Left => next.x < d.left,
                 Edge::Right => next.x >= d.right,
@@ -259,7 +259,7 @@ impl Layout {
                     Edge::Bottom => Point::new(c.x, d.bottom),
                 };
                 if self.display_at(beyond).is_none() {
-                    return Step::Exit(self.ratio_on_edge(c, edge));
+                    return Step::Exit(edge, self.ratio_on_edge(c, edge));
                 }
             }
         }
@@ -332,23 +332,25 @@ mod tests {
     #[test]
     fn step_exit_left() {
         let l = Layout::new(vec![Rect::new(0, 0, 1440, 900)]);
-        assert_eq!(l.step(Point::new(5, 100), -3, 0, Some(Edge::Left)), Step::Move(Point::new(2, 100)));
-        match l.step(Point::new(2, 450), -5, 0, Some(Edge::Left)) {
-            Step::Exit(r) => assert!((r - 0.5).abs() < 0.01),
+        assert_eq!(l.step(Point::new(5, 100), -3, 0, &[Edge::Left]), Step::Move(Point::new(2, 100)));
+        match l.step(Point::new(2, 450), -5, 0, &[Edge::Left]) {
+            Step::Exit(Edge::Left, r) => assert!((r - 0.5).abs() < 0.01),
             s => panic!("{s:?}"),
         }
         // Le bord droit n'est pas une sortie : on reste collé.
-        assert_eq!(l.step(Point::new(1438, 100), 10, 0, Some(Edge::Left)), Step::Move(Point::new(1439, 100)));
+        assert_eq!(l.step(Point::new(1438, 100), 10, 0, &[Edge::Left]), Step::Move(Point::new(1439, 100)));
         // Sans bord de sortie (bouton enfoncé), on reste collé à gauche.
-        assert_eq!(l.step(Point::new(2, 450), -5, 0, None), Step::Move(Point::new(0, 450)));
+        assert_eq!(l.step(Point::new(2, 450), -5, 0, &[]), Step::Move(Point::new(0, 450)));
+        // Plusieurs sorties : celle qui est franchie.
+        assert!(matches!(l.step(Point::new(700, 898), 0, 5, &[Edge::Left, Edge::Bottom]), Step::Exit(Edge::Bottom, _)));
     }
 
     #[test]
     fn step_across_monitors() {
         // Deux écrans Mac : l'externe à gauche du MacBook.
         let l = Layout::new(vec![Rect::new(0, 0, 1512, 982), Rect::new(-2560, -200, 0, 1240)]);
-        assert_eq!(l.step(Point::new(3, 500), -10, 0, Some(Edge::Left)), Step::Move(Point::new(-7, 500)));
-        assert!(matches!(l.step(Point::new(-2558, 500), -10, 0, Some(Edge::Left)), Step::Exit(_)));
+        assert_eq!(l.step(Point::new(3, 500), -10, 0, &[Edge::Left]), Step::Move(Point::new(-7, 500)));
+        assert!(matches!(l.step(Point::new(-2558, 500), -10, 0, &[Edge::Left]), Step::Exit(Edge::Left, _)));
     }
 
     #[test]

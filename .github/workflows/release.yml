@@ -41,6 +41,10 @@ jobs:
             artifacts/Baskul-macOS/Baskul-macOS.zip
             artifacts/Baskul-Linux/Baskul-Linux.tar.gz
           )
+          # Empreintes vérifiées par la mise à jour intégrée de Baskul.
+          (cd artifacts && sha256sum */Baskul-* | sed 's#  [^/]*/#  #') > artifacts/SHA256SUMS
+          cat artifacts/SHA256SUMS
+          files+=(artifacts/SHA256SUMS)
           if gh release view "$tag" > /dev/null 2>&1; then
             gh release upload "$tag" "${files[@]}" --clobber
           else

@@ -112,15 +112,51 @@ pub enum MediaKeys {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct NetworkCfg {
-    pub listen: String,
+    /// (Machine pilotée) Adresse de la machine principale ; vide : découverte
+    /// automatique.
     pub connect: String,
+    /// (Machine principale) Adresse et port d'écoute.
+    pub listen: String,
+    /// Carte réseau à utiliser (nom donné par le système) ; vide : automatique.
+    pub interface: String,
+    /// Découverte automatique (Bonjour) : la principale s'annonce, les
+    /// pilotées la trouvent.
+    pub discovery: bool,
     pub secret: String,
 }
 
 impl Default for NetworkCfg {
     fn default() -> Self {
-        NetworkCfg { listen: format!("0.0.0.0:{DEFAULT_PORT}"), connect: String::new(), secret: String::new() }
+        NetworkCfg {
+            connect: String::new(),
+            listen: format!("0.0.0.0:{DEFAULT_PORT}"),
+            interface: String::new(),
+            discovery: true,
+            secret: String::new(),
+        }
     }
+}
+
+/// (Machine principale) Grille des machines.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct LayoutCfg {
+    /// Pilotées placées sur la grille ; la principale est en (0, 0).
+    pub machines: Vec<MachineCfg>,
+}
+
+/// Une pilotée sur la grille.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MachineCfg {
+    /// Nom de la pilotée (son « Nom affiché »).
+    pub name: String,
+    /// Case : `x` vers la droite, `y` vers le bas.
+    pub x: i32,
+    pub y: i32,
+    /// Raccourci pour aller directement sur cette pilotée (facultatif).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub hotkey: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -150,6 +186,20 @@ pub struct ActivityCfg {
 impl Default for ActivityCfg {
     fn default() -> Self {
         ActivityCfg { mirror: true }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct UpdatesCfg {
+    /// Recherche les nouvelles versions (au démarrage puis toutes les six
+    /// heures) et les télécharge ; un redémarrage les installe.
+    pub check: bool,
+}
+
+impl Default for UpdatesCfg {
+    fn default() -> Self {
+        UpdatesCfg { check: true }
     }
 }
 
@@ -235,13 +285,26 @@ pub struct ClipboardCfg {
     pub enabled: bool,
     pub images: bool,
     pub html: bool,
+    /// Fichiers et dossiers copiés (Finder, Explorateur…).
+    pub files: bool,
+    /// Taille maximale du texte et des images (Mo).
     pub max_size_mb: u32,
+    /// Taille maximale des fichiers copiés (Mo).
+    pub max_files_mb: u32,
     pub skip_sensitive: bool,
 }
 
 impl Default for ClipboardCfg {
     fn default() -> Self {
-        ClipboardCfg { enabled: true, images: true, html: true, max_size_mb: 32, skip_sensitive: true }
+        ClipboardCfg {
+            enabled: true,
+            images: true,
+            html: true,
+            files: true,
+            max_size_mb: 32,
+            max_files_mb: 256,
+            skip_sensitive: true,
+        }
     }
 }
 
@@ -250,6 +313,7 @@ impl Default for ClipboardCfg {
 pub struct HotkeysCfg {
     pub switch_to_secondary: String,
     pub return_to_primary: String,
+    pub next_machine: String,
     pub toggle_lock: String,
 }
 
@@ -258,6 +322,7 @@ impl Default for HotkeysCfg {
         HotkeysCfg {
             switch_to_secondary: "Shift+F12".into(),
             return_to_primary: "Shift+F11".into(),
+            next_machine: String::new(),
             toggle_lock: String::new(),
         }
     }
@@ -294,12 +359,26 @@ pub enum TrayIcon {
     Mono,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct UiCfg {
     pub theme: Theme,
     pub language: Language,
     pub tray_icon: TrayIcon,
+    /// Bulle d'arrivée : le nom de la machine s'affiche un instant près du
+    /// curseur quand le clavier et la souris arrivent sur elle.
+    pub arrival_bubble: bool,
+}
+
+impl Default for UiCfg {
+    fn default() -> Self {
+        UiCfg {
+            theme: Theme::default(),
+            language: Language::default(),
+            tray_icon: TrayIcon::default(),
+            arrival_bubble: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -325,6 +404,8 @@ pub struct Config {
     #[serde(default)]
     pub screen: ScreenCfg,
     #[serde(default)]
+    pub layout: LayoutCfg,
+    #[serde(default)]
     pub mouse: MouseCfg,
     #[serde(default)]
     pub scroll: ScrollCfg,
@@ -341,14 +422,17 @@ pub struct Config {
     #[serde(default)]
     pub ui: UiCfg,
     #[serde(default)]
+    pub updates: UpdatesCfg,
+    #[serde(default)]
     pub log: LogCfg,
 }
 
-/// Point de connexion réseau.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Endpoint {
-    Listen(String),
-    Connect(String),
+/// Une pilotée placée sur la grille (réglages validés).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Placement {
+    pub name: String,
+    pub cell: (i32, i32),
+    pub hotkey: Option<Hotkey>,
 }
 
 /// Réglages validés et prêts à l'emploi.
@@ -356,8 +440,15 @@ pub enum Endpoint {
 pub struct Settings {
     pub role: Role,
     pub name: String,
-    pub endpoint: Endpoint,
+    /// (Machine principale) Adresse d'écoute.
+    pub listen: String,
+    /// (Machine pilotée) Adresse de la principale (`None` : découverte).
+    pub connect: Option<String>,
+    /// Carte réseau imposée.
+    pub interface: Option<String>,
+    pub discovery: bool,
     pub secret: String,
+    pub layout: Vec<Placement>,
     pub edge_switching: bool,
     pub secondary_position: Edge,
     pub corner_size: i32,
@@ -371,8 +462,10 @@ pub struct Settings {
     pub clipboard: ClipboardCfg,
     /// Cette machine reste active tant que l'utilisateur l'est sur l'autre.
     pub mirror_activity: bool,
+    pub check_updates: bool,
     pub switch_hotkey: Option<Hotkey>,
     pub return_hotkey: Option<Hotkey>,
+    pub next_hotkey: Option<Hotkey>,
     pub lock_hotkey: Option<Hotkey>,
     pub ui: UiCfg,
     pub log_level: log::LevelFilter,
@@ -391,13 +484,13 @@ impl Config {
                     .into(),
             );
         }
-        let endpoint = if !self.network.connect.trim().is_empty() {
-            Endpoint::Connect(with_default_port(self.network.connect.trim()))
-        } else {
-            let l = self.network.listen.trim();
-            let l = if l.is_empty() { format!("0.0.0.0:{DEFAULT_PORT}") } else { l.to_string() };
-            Endpoint::Listen(l)
+        let connect = Some(self.network.connect.trim()).filter(|c| !c.is_empty()).map(with_default_port);
+        let listen = match self.network.listen.trim() {
+            "" => format!("0.0.0.0:{DEFAULT_PORT}"),
+            l => l.to_string(),
         };
+        let interface = Some(self.network.interface.trim().to_string()).filter(|i| !i.is_empty());
+        let layout = self.layout.validate()?;
         if !(0.05..=20.0).contains(&self.mouse.speed) {
             return Err("[mouse] speed doit être compris entre 0.05 et 20".into());
         }
@@ -421,6 +514,8 @@ impl Config {
             Hotkey::parse(&self.hotkeys.return_to_primary).map_err(|e| format!("[hotkeys] return_to_primary : {e}"))?;
         let lock_hotkey =
             Hotkey::parse(&self.hotkeys.toggle_lock).map_err(|e| format!("[hotkeys] toggle_lock : {e}"))?;
+        let next_hotkey =
+            Hotkey::parse(&self.hotkeys.next_machine).map_err(|e| format!("[hotkeys] next_machine : {e}"))?;
         if self.role == RoleCfg::Primary
             && !self.screen.edge_switching
             && (switch_hotkey.is_none() || return_hotkey.is_none())
@@ -442,8 +537,12 @@ impl Config {
         Ok(Settings {
             role: self.role.into(),
             name,
-            endpoint,
+            listen,
+            connect,
+            interface,
+            discovery: self.network.discovery,
             secret,
+            layout,
             edge_switching: self.screen.edge_switching,
             secondary_position: self.screen.secondary_position.into(),
             corner_size: self.screen.corner_size.max(0),
@@ -455,13 +554,108 @@ impl Config {
             remap,
             clipboard: self.clipboard.clone(),
             mirror_activity: self.activity.mirror,
+            check_updates: self.updates.check,
             switch_hotkey,
             return_hotkey,
+            next_hotkey,
             lock_hotkey,
             ui: self.ui.clone(),
             log_level,
         })
     }
+}
+
+impl LayoutCfg {
+    fn validate(&self) -> Result<Vec<Placement>, String> {
+        let mut out: Vec<Placement> = Vec::new();
+        for m in &self.machines {
+            let name = m.name.trim();
+            if name.is_empty() {
+                return Err("[layout] une machine n'a pas de nom".into());
+            }
+            if (m.x, m.y) == (0, 0) {
+                return Err(format!("[layout] « {name} » : la case (0, 0) est celle de la machine principale"));
+            }
+            if out.iter().any(|p| p.name == name) {
+                return Err(format!("[layout] « {name} » est placée deux fois"));
+            }
+            if let Some(p) = out.iter().find(|p| p.cell == (m.x, m.y)) {
+                return Err(format!("[layout] « {name} » et « {} » sont sur la même case", p.name));
+            }
+            let hotkey = Hotkey::parse(&m.hotkey).map_err(|e| format!("[layout] « {name} », hotkey : {e}"))?;
+            out.push(Placement { name: name.to_string(), cell: (m.x, m.y), hotkey });
+        }
+        Ok(out)
+    }
+}
+
+/// Première case libre à côté de la principale pour une nouvelle pilotée :
+/// du côté `preferred`, puis les autres côtés, puis de plus en plus loin.
+pub fn free_cell(layout: &[MachineCfg], preferred: Edge) -> (i32, i32) {
+    let dir = |e: Edge| match e {
+        Edge::Right => (1, 0),
+        Edge::Left => (-1, 0),
+        Edge::Top => (0, -1),
+        Edge::Bottom => (0, 1),
+    };
+    let order = [preferred, preferred.opposite(), Edge::Right, Edge::Left, Edge::Bottom, Edge::Top];
+    let taken = |c: (i32, i32)| c == (0, 0) || layout.iter().any(|m| (m.x, m.y) == c);
+    for dist in 1.. {
+        for e in order {
+            let (dx, dy) = dir(e);
+            let c = (dx * dist, dy * dist);
+            if !taken(c) {
+                return c;
+            }
+        }
+    }
+    unreachable!()
+}
+
+/// Enregistre `cfg` dans le fichier `path` en gardant ses commentaires.
+pub fn write_config(path: &Path, cfg: &Config) -> Result<(), String> {
+    cfg.validate()?;
+    let old = match std::fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(format!("impossible de lire {} : {e}", path.display())),
+    };
+    let text = update_text(&old, cfg)?;
+    // Le fichier écrit doit redonner exactement la configuration voulue.
+    let written = serde_json::to_value(Config::parse(&text)?).map_err(|e| e.to_string())?;
+    if written != serde_json::to_value(cfg).map_err(|e| e.to_string())? {
+        return Err("erreur interne : le fichier produit ne correspond pas aux réglages".into());
+    }
+    let tmp = path.with_extension("toml.tmp");
+    std::fs::write(&tmp, text).map_err(|e| format!("impossible d'écrire {} : {e}", tmp.display()))?;
+    std::fs::rename(&tmp, path).map_err(|e| format!("impossible d'écrire {} : {e}", path.display()))
+}
+
+/// Identifiant de cette machine, créé au premier lancement (tests : un
+/// nouvel identifiant à chaque appel, sans rien écrire).
+#[cfg(test)]
+pub fn machine_id() -> String {
+    let mut b = [0u8; 16];
+    let _ = getrandom::fill(&mut b);
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+/// Identifiant de cette machine, créé au premier lancement.
+#[cfg(not(test))]
+pub fn machine_id() -> String {
+    let path = config_dir().join("machine-id");
+    if let Ok(id) = std::fs::read_to_string(&path) {
+        let id = id.trim();
+        if !id.is_empty() {
+            return id.to_string();
+        }
+    }
+    let mut b = [0u8; 16];
+    let _ = getrandom::fill(&mut b);
+    let id: String = b.iter().map(|x| format!("{x:02x}")).collect();
+    let _ = std::fs::create_dir_all(config_dir());
+    let _ = std::fs::write(&path, &id);
+    id
 }
 
 /// TextEdit (macOS) remplace par défaut les guillemets droits par des
@@ -500,6 +694,13 @@ fn merge_table(old: &mut toml_edit::Table, new: &toml_edit::Table, template: Opt
         let tmpl = template.and_then(|t| t.get(key));
         match (old.get_mut(key), new_item) {
             (Some(Item::Table(o)), Item::Table(n)) => merge_table(o, n, tmpl.and_then(Item::as_table)),
+            // Liste de tables (grille des machines) : écrite en tableau en ligne,
+            // une table par ligne, pour garder le commentaire au-dessus.
+            (Some(Item::Value(o)), Item::ArrayOfTables(n)) => {
+                let decor = o.decor().clone();
+                *o = inline_array(n);
+                *o.decor_mut() = decor;
+            }
             (Some(Item::Value(o)), Item::Value(n)) => {
                 // Valeur inchangée : on garde son écriture d'origine.
                 if bare(o) != bare(n) {
@@ -510,7 +711,10 @@ fn merge_table(old: &mut toml_edit::Table, new: &toml_edit::Table, template: Opt
             }
             (Some(slot), _) => *slot = new_item.clone(),
             (None, _) => {
-                let mut item = new_item.clone();
+                let mut item = match new_item {
+                    Item::ArrayOfTables(n) => Item::Value(inline_array(n)),
+                    other => other.clone(),
+                };
                 match (&mut item, tmpl) {
                     (Item::Value(v), Some(Item::Value(t))) => *v.decor_mut() = t.decor().clone(),
                     (Item::Table(v), Some(Item::Table(t))) => *v.decor_mut() = t.decor().clone(),
@@ -530,6 +734,18 @@ fn merge_table(old: &mut toml_edit::Table, new: &toml_edit::Table, template: Opt
     for k in stale {
         old.remove(&k);
     }
+}
+
+fn inline_array(tables: &toml_edit::ArrayOfTables) -> toml_edit::Value {
+    let mut arr = toml_edit::Array::new();
+    for t in tables.iter() {
+        let mut v = toml_edit::Value::InlineTable(t.clone().into_inline_table());
+        v.decor_mut().set_prefix("\n  ");
+        arr.push_formatted(v);
+    }
+    arr.set_trailing("\n");
+    arr.set_trailing_comma(true);
+    toml_edit::Value::Array(arr)
 }
 
 /// Écriture d'une valeur, sans espaces ni commentaire autour.
@@ -671,16 +887,24 @@ role = "@@ROLE@@"
 name = ""
 
 [network]
-# Une machine ÉCOUTE, l'autre SE CONNECTE.
-#  - Machine qui écoute : laisser `connect` vide.
-#  - Machine qui se connecte : mettre l'adresse IP (ou le nom .local) de l'autre.
-# Conseillé : le Mac écoute (connect vide) et le PC se connecte au Mac.
-# Exemple sur le PC :  connect = "192.168.1.30"   (adresse IP du Mac)
-listen = "0.0.0.0:@@PORT@@"
+# La machine principale attend les connexions ; chaque machine pilotée se
+# connecte à elle.
+#
+# (Machine pilotée) Adresse de la machine principale : adresse IP ou nom
+# .local, port @@PORT@@ par défaut. Exemple : connect = "192.168.1.20".
+# Vide : la principale est trouvée automatiquement sur le réseau local.
 connect = ""
+# (Machine principale) Adresse et port d'écoute.
+listen = "0.0.0.0:@@PORT@@"
+# Carte réseau à utiliser : nom donné par le système ("en0", "Ethernet",
+# "Wi-Fi"…). Vide : automatique.
+interface = ""
+# Découverte automatique (Bonjour) : la principale s'annonce sur le réseau
+# local, les pilotées la trouvent sans adresse à saisir.
+discovery = true
 
-# Secret partagé : DOIT être identique sur les deux machines.
-# Copiez cette valeur dans la configuration de l'autre machine.
+# Secret partagé : DOIT être identique sur toutes les machines.
+# Copiez cette valeur dans la configuration des autres machines.
 secret = "@@SECRET@@"
 
 [screen]
@@ -688,14 +912,23 @@ secret = "@@SECRET@@"
 # contre le bord de l'écran. false = uniquement avec les raccourcis
 # clavier (section [hotkeys]).
 edge_switching = true
-# (Machine principale) Où se trouve l'écran de la machine secondaire,
-# par rapport à la machine principale : "right", "left", "top" ou "bottom".
+# (Machine principale) Côté où se place une nouvelle pilotée sur la grille
+# (section [layout]) : "right", "left", "top" ou "bottom".
 secondary_position = "right"
 # Taille en pixels des coins où le passage d'un écran à l'autre est
 # désactivé : on peut ainsi « lancer » la souris dans un coin (bouton ✕
 # d'une fenêtre agrandie, « Afficher le bureau »…) sans changer d'écran.
 # 0 = aucun.
 corner_size = 10
+
+[layout]
+# (Machine principale) Grille des machines. La principale est en (0, 0) ;
+# x augmente vers la droite, y vers le bas. On passe d'une machine à sa
+# voisine par le bord commun de leurs écrans. Une pilotée qui se connecte
+# pour la première fois est placée d'elle-même à côté de la principale.
+# « hotkey » (facultatif) : raccourci pour aller directement sur elle.
+# Exemple : machines = [{ name = "Atelier", x = 1, y = 0, hotkey = "Ctrl+Alt+1" }]
+machines = []
 
 [mouse]
 # (Machine pilotée) Multiplicateur des déplacements reçus.
@@ -751,11 +984,17 @@ media_keys = "cursor"
 
 [clipboard]
 enabled = true
+# Images, dans leur format d'origine (PNG, JPEG, GIF, WebP, HEIC…).
 images = true
 # Conserver la mise en forme (HTML) quand elle est disponible.
 html = true
-# Taille maximale transférée (Mo).
+# Fichiers et dossiers copiés (Finder, Explorateur…) : coller sur une autre
+# machine les y copie.
+files = true
+# Taille maximale du texte et des images (Mo).
 max_size_mb = 32
+# Taille maximale des fichiers copiés (Mo).
+max_files_mb = 256
 # Ne pas transférer les contenus marqués « sensibles » (gestionnaires de mots
 # de passe…).
 skip_sensitive = true
@@ -771,12 +1010,15 @@ mirror = true
 # Format : modificateurs (Ctrl, Shift, Alt, Win / Cmd) puis une touche,
 # séparés par « + ». Exemples : "Shift+F12", "Ctrl+Alt+B". Vide = désactivé.
 #
-# (Machine principale) Envoie le curseur sur la machine secondaire, là où
-# il était la dernière fois.
+# (Machine principale) Envoie le curseur sur la dernière pilotée utilisée,
+# là où il était.
 switch_to_secondary = "Shift+F12"
 # (Machine principale) Ramène le curseur sur la machine principale.
 # Astuce : le même raccourci que ci-dessus permet d'aller et venir.
 return_to_primary = "Shift+F11"
+# (Machine principale) Passe à la machine suivante : la principale, puis les
+# pilotées connectées, dans l'ordre de la grille. Vide = désactivé.
+next_machine = ""
 # (Machine principale) Verrouille / déverrouille le curseur sur l'écran courant.
 # Exemple : "ScrollLock". Vide = désactivé.
 toggle_lock = ""
@@ -789,6 +1031,15 @@ language = "system"
 # Icône de la barre des menus / de la zone de notification : "color" ou
 # "mono" (monochrome, assortie aux autres icônes du système).
 tray_icon = "color"
+# Bulle d'arrivée : le nom de la machine s'affiche un instant près du curseur
+# quand le clavier et la souris arrivent sur elle.
+arrival_bubble = true
+
+[updates]
+# Recherche les nouvelles versions de Baskul (au démarrage puis toutes les six
+# heures) et les télécharge en arrière-plan ; « Redémarrer pour mettre à
+# jour » (menu de l'icône ou app de réglages) les installe.
+check = true
 
 [log]
 # "error", "warn", "info", "debug" ou "trace".
@@ -823,7 +1074,8 @@ mod tests {
             let text = default_config_text(role, &generate_secret());
             let cfg = Config::parse(&text).unwrap();
             let s = cfg.validate().unwrap();
-            assert_eq!(s.endpoint, Endpoint::Listen(format!("0.0.0.0:{DEFAULT_PORT}")));
+            assert_eq!((s.listen.as_str(), s.connect.as_deref()), (format!("0.0.0.0:{DEFAULT_PORT}").as_str(), None));
+            assert!(s.discovery && s.interface.is_none() && s.layout.is_empty() && s.next_hotkey.is_none());
             assert_eq!(s.secondary_position, Edge::Right);
             assert!(s.edge_switching);
             assert_eq!(s.switch_hotkey, Hotkey::parse("Shift+F12").unwrap());
@@ -862,11 +1114,11 @@ mod tests {
         let text = default_config_text("secondary", "abcd-efgh-jkmn-pqrs")
             .replace("connect = \"\"", "connect = \"192.168.1.20\"");
         let s = Config::parse(&text).unwrap().validate().unwrap();
-        assert_eq!(s.endpoint, Endpoint::Connect(format!("192.168.1.20:{DEFAULT_PORT}")));
+        assert_eq!(s.connect, Some(format!("192.168.1.20:{DEFAULT_PORT}")));
         let text = default_config_text("secondary", "abcd-efgh-jkmn-pqrs")
             .replace("connect = \"\"", "connect = \"pc.local:4000\"");
         let s = Config::parse(&text).unwrap().validate().unwrap();
-        assert_eq!(s.endpoint, Endpoint::Connect("pc.local:4000".into()));
+        assert_eq!(s.connect.as_deref(), Some("pc.local:4000"));
     }
 
     #[test]
@@ -887,7 +1139,7 @@ mod tests {
         let text = default_config_text("primary", "abcd-efgh-jkmn-pqrs")
             .replace("connect = \"\"", "connect = \u{201C}192.168.1.30\u{201D}");
         let s = Config::parse(&text).unwrap().validate().unwrap();
-        assert_eq!(s.endpoint, Endpoint::Connect(format!("192.168.1.30:{DEFAULT_PORT}")));
+        assert_eq!(s.connect, Some(format!("192.168.1.30:{DEFAULT_PORT}")));
     }
 
     fn edited(text: &str, f: impl FnOnce(&mut Config)) -> String {
@@ -913,7 +1165,7 @@ mod tests {
         assert!(out.contains("connect = \"192.168.1.30\"\n"));
         assert!(out.contains("edge_switching = false\n"));
         assert!(out.contains("speed = 1.5\n"));
-        assert!(out.contains("# Secret partagé : DOIT être identique sur les deux machines."));
+        assert!(out.contains("# Secret partagé : DOIT être identique sur toutes les machines."));
         assert_eq!(out.lines().count(), text.lines().count());
     }
 
@@ -991,5 +1243,50 @@ mod tests {
         assert!(migrate_dir(&old, &new).is_err());
         drop(lock);
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    fn machine(name: &str, x: i32, y: i32) -> MachineCfg {
+        MachineCfg { name: name.into(), x, y, hotkey: String::new() }
+    }
+
+    #[test]
+    fn layout_is_checked() {
+        let ok = LayoutCfg { machines: vec![machine("Atelier", 1, 0), machine("Salon", 2, 0)] };
+        let p = ok.validate().unwrap();
+        assert_eq!((p[1].name.as_str(), p[1].cell), ("Salon", (2, 0)));
+        for bad in [
+            vec![machine("Atelier", 0, 0)],
+            vec![machine("Atelier", 1, 0), machine("Atelier", 2, 0)],
+            vec![machine("Atelier", 1, 0), machine("Salon", 1, 0)],
+            vec![machine(" ", 1, 0)],
+        ] {
+            assert!(LayoutCfg { machines: bad }.validate().is_err());
+        }
+        let mut hk = machine("Atelier", 1, 0);
+        hk.hotkey = "Ctrl+Alt+1".into();
+        assert!(LayoutCfg { machines: vec![hk] }.validate().unwrap()[0].hotkey.is_some());
+    }
+
+    #[test]
+    fn new_machines_go_next_to_the_primary() {
+        assert_eq!(free_cell(&[], Edge::Right), (1, 0));
+        assert_eq!(free_cell(&[machine("A", 1, 0)], Edge::Right), (-1, 0));
+        let around = [machine("A", 1, 0), machine("B", -1, 0), machine("C", 0, 1), machine("D", 0, -1)];
+        assert_eq!(free_cell(&around, Edge::Right), (2, 0));
+        assert_eq!(free_cell(&[], Edge::Top), (0, -1));
+    }
+
+    #[test]
+    fn layout_is_written_one_machine_per_line() {
+        let text = default_config_text("primary", "abcd-efgh-jkmn-pqrs");
+        let out = edited(&text, |c| {
+            c.layout.machines =
+                vec![machine("Atelier", 1, 0), MachineCfg { hotkey: "Ctrl+Alt+2".into(), ..machine("Salon", 2, 0) }]
+        });
+        assert!(out.contains("machines = [\n  { name = \"Atelier\", x = 1, y = 0 },\n  { name = \"Salon\", x = 2, y = 0, hotkey = \"Ctrl+Alt+2\" },\n]"), "{out}");
+        assert!(out.contains("# (Machine principale) Grille des machines."));
+        // Et de nouveau vide.
+        let empty = edited(&out, |c| c.layout.machines.clear());
+        assert!(empty.contains("machines = []"), "{empty}");
     }
 }

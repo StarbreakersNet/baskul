@@ -26,6 +26,8 @@ pub trait Emulator {
     fn release_all(&mut self);
     /// Le curseur arrive sur cette machine (réveil de l'écran…).
     fn entered(&mut self) {}
+    /// Le curseur est placé à son point d'arrivée (bulle d'arrivée).
+    fn arrived(&mut self) {}
     /// Position réelle du curseur, si disponible.
     fn cursor(&mut self) -> Option<Point> {
         None
@@ -54,9 +56,9 @@ const RESYNC_DELAY: Duration = Duration::from_millis(250);
 
 pub struct SecondaryCore {
     active: bool,
-    /// Bord par lequel le curseur repart (`None` : il ne repart que par
-    /// raccourci clavier).
-    exit: Option<Edge>,
+    /// Bords par lesquels le curseur peut repartir vers une machine voisine
+    /// (vide : il ne repart que par raccourci ou commande).
+    exits: Vec<Edge>,
     pos: Point,
     speed: f64,
     acc_x: f64,
@@ -72,7 +74,7 @@ impl SecondaryCore {
     pub fn new(speed: f64, remap: BTreeMap<u32, u32>) -> SecondaryCore {
         SecondaryCore {
             active: false,
-            exit: None,
+            exits: Vec::new(),
             pos: Point::default(),
             speed,
             acc_x: 0.0,
@@ -120,20 +122,24 @@ impl SecondaryCore {
     /// message à lui renvoyer.
     pub fn handle<E: Emulator>(&mut self, emu: &mut E, msg: Message) -> Option<Message> {
         match msg {
-            Message::Enter { edge, ratio } => {
+            Message::Enter { edge, ratio, exits } => {
                 self.refresh_layout(emu, true);
                 let p = self.layout.point_on_edge(edge, ratio, 0);
                 log::debug!("le curseur arrive par {edge:?} en {p:?}");
-                self.activate(emu, p, Some(edge));
+                self.activate(emu, p, exits);
                 None
             }
-            Message::Jump { exit } => {
+            Message::Exits { exits } => {
+                self.exits = exits;
+                None
+            }
+            Message::Jump { exits } => {
                 self.refresh_layout(emu, true);
                 // Le curseur reprend sa position réelle (ou la dernière connue).
                 let p = emu.cursor().unwrap_or(self.pos);
                 let p = if self.layout.display_at(p).is_some() { p } else { self.layout.nearest_display(p).center() };
                 log::debug!("le curseur arrive par raccourci en {p:?}");
-                self.activate(emu, p, exit);
+                self.activate(emu, p, exits);
                 None
             }
             Message::Motion { dx, dy } => {
@@ -153,8 +159,8 @@ impl SecondaryCore {
                     return None;
                 }
                 // Pas de sortie pendant un glisser (bouton enfoncé).
-                let exit = if self.buttons.iter().any(|b| *b) { None } else { self.exit };
-                match self.layout.step(self.pos, ix, iy, exit) {
+                let exits: &[Edge] = if self.buttons.iter().any(|b| *b) { &[] } else { &self.exits };
+                match self.layout.step(self.pos, ix, iy, exits) {
                     Step::Move(p) => {
                         let (mdx, mdy) = (p.x - self.pos.x, p.y - self.pos.y);
                         self.pos = p;
@@ -164,11 +170,11 @@ impl SecondaryCore {
                         emu.move_to(p, if mdx == 0 { ix } else { mdx }, if mdy == 0 { iy } else { mdy });
                         None
                     }
-                    Step::Exit(ratio) => {
+                    Step::Exit(edge, ratio) => {
                         self.active = false;
-                        log::debug!("le curseur repart (ratio {ratio:.3})");
+                        log::debug!("le curseur repart par {edge:?} (ratio {ratio:.3})");
                         status::set_remote_active(false);
-                        Some(Message::Leave { ratio })
+                        Some(Message::Leave { edge, ratio })
                     }
                 }
             }
@@ -201,8 +207,8 @@ impl SecondaryCore {
         }
     }
 
-    fn activate<E: Emulator>(&mut self, emu: &mut E, p: Point, exit: Option<Edge>) {
-        self.exit = exit;
+    fn activate<E: Emulator>(&mut self, emu: &mut E, p: Point, exits: Vec<Edge>) {
+        self.exits = exits;
         self.pos = p;
         self.acc_x = 0.0;
         self.acc_y = 0.0;
@@ -210,6 +216,7 @@ impl SecondaryCore {
         self.last_move = Some(Instant::now());
         emu.entered();
         emu.move_to(p, 0, 0);
+        emu.arrived();
         status::set_remote_active(true);
     }
 
@@ -262,7 +269,10 @@ mod tests {
     fn enter_move_and_leave() {
         let mut emu = FakeEmu::default();
         let mut core = SecondaryCore::new(1.0, BTreeMap::new());
-        assert_eq!(core.handle(&mut emu, Message::Enter { edge: Edge::Left, ratio: 0.5 }), None);
+        assert_eq!(
+            core.handle(&mut emu, Message::Enter { edge: Edge::Left, ratio: 0.5, exits: vec![Edge::Left] }),
+            None
+        );
         assert_eq!(emu.moves.last().unwrap().0, Point::new(0, 450));
         core.handle(&mut emu, Message::Motion { dx: 10, dy: 0 });
         assert_eq!(emu.moves.last().unwrap().0, Point::new(10, 450));
@@ -280,7 +290,7 @@ mod tests {
     fn jump_resumes_at_cursor_position() {
         let mut emu = FakeEmu { cursor: Some(Point::new(800, 200)), ..Default::default() };
         let mut core = SecondaryCore::new(1.0, BTreeMap::new());
-        core.handle(&mut emu, Message::Jump { exit: Some(Edge::Left) });
+        core.handle(&mut emu, Message::Jump { exits: vec![Edge::Left] });
         assert!(core.is_active());
         assert_eq!(emu.moves.last().unwrap().0, Point::new(800, 200));
         core.handle(&mut emu, Message::Motion { dx: -10, dy: 5 });
@@ -293,10 +303,10 @@ mod tests {
     fn jump_without_exit_never_leaves() {
         let mut emu = FakeEmu::default();
         let mut core = SecondaryCore::new(1.0, BTreeMap::new());
-        core.handle(&mut emu, Message::Enter { edge: Edge::Left, ratio: 0.5 });
+        core.handle(&mut emu, Message::Enter { edge: Edge::Left, ratio: 0.5, exits: vec![Edge::Left] });
         core.handle(&mut emu, Message::Motion { dx: 100, dy: 0 });
         // Position réelle inconnue : dernière position connue.
-        core.handle(&mut emu, Message::Jump { exit: None });
+        core.handle(&mut emu, Message::Jump { exits: vec![] });
         assert_eq!(emu.moves.last().unwrap().0, Point::new(100, 450));
         for _ in 0..3 {
             assert_eq!(core.handle(&mut emu, Message::Motion { dx: -1000, dy: 0 }), None);
@@ -309,7 +319,7 @@ mod tests {
     fn no_leave_while_dragging() {
         let mut emu = FakeEmu::default();
         let mut core = SecondaryCore::new(1.0, BTreeMap::new());
-        core.handle(&mut emu, Message::Enter { edge: Edge::Left, ratio: 0.5 });
+        core.handle(&mut emu, Message::Enter { edge: Edge::Left, ratio: 0.5, exits: vec![Edge::Left] });
         core.handle(&mut emu, Message::Button { button: MouseButton::Left, down: true });
         assert_eq!(core.handle(&mut emu, Message::Motion { dx: -50, dy: 0 }), None);
         assert_eq!(emu.moves.last().unwrap().0, Point::new(0, 450));
@@ -321,7 +331,7 @@ mod tests {
     fn speed_accumulates_fractions() {
         let mut emu = FakeEmu::default();
         let mut core = SecondaryCore::new(0.5, BTreeMap::new());
-        core.handle(&mut emu, Message::Enter { edge: Edge::Left, ratio: 0.5 });
+        core.handle(&mut emu, Message::Enter { edge: Edge::Left, ratio: 0.5, exits: vec![Edge::Left] });
         for _ in 0..10 {
             core.handle(&mut emu, Message::Motion { dx: 1, dy: 0 });
         }
@@ -343,7 +353,7 @@ mod tests {
     fn release_all_ends_remote_control() {
         let mut emu = FakeEmu::default();
         let mut core = SecondaryCore::new(1.0, BTreeMap::new());
-        core.handle(&mut emu, Message::Jump { exit: None });
+        core.handle(&mut emu, Message::Jump { exits: vec![] });
         assert!(core.is_active());
         core.handle(&mut emu, Message::ReleaseAll);
         assert!(!core.is_active());
@@ -357,7 +367,7 @@ mod tests {
     fn disconnect_releases() {
         let mut emu = FakeEmu::default();
         let mut core = SecondaryCore::new(1.0, BTreeMap::new());
-        core.handle(&mut emu, Message::Enter { edge: Edge::Left, ratio: 0.5 });
+        core.handle(&mut emu, Message::Enter { edge: Edge::Left, ratio: 0.5, exits: vec![Edge::Left] });
         core.disconnected(&mut emu);
         assert_eq!(emu.released, 1);
         assert!(!core.is_active());

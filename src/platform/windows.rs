@@ -14,14 +14,14 @@
 
 use crate::Args;
 use crate::app::{self, ClipboardHooks, Services};
-use crate::config::{ScrollCfg, Settings, TrayIcon};
+use crate::config::{MachineCfg, ScrollCfg, Settings, TrayIcon};
 use crate::geometry::{Layout, Point, Rect};
 use crate::i18n;
 use crate::icon::{self, Style, Tone};
 use crate::keymap::{self, *};
-use crate::net::LinkHandle;
+use crate::net::{LinkHandle, PeerId};
 use crate::primary::{Decision, Host, PeerEvent, PrimaryCore, PrimaryOptions};
-use crate::protocol::{Message, MouseButton, Role};
+use crate::protocol::{ClipHeader, ClipImage, ImageFormat, Message, MouseButton, Role, SwitchTo};
 use crate::secondary::Emulator;
 use crate::status::{self, Conn};
 use crossbeam_channel::Receiver;
@@ -31,20 +31,27 @@ use std::ffi::c_void;
 use std::mem::{size_of, zeroed};
 use std::path::{Path, PathBuf};
 use std::ptr::{null, null_mut};
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
-use windows_sys::Win32::Foundation::{ERROR_SUCCESS, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
+use windows_sys::Win32::Foundation::{
+    ERROR_SUCCESS, GlobalFree, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, SIZE, WPARAM,
+};
 use windows_sys::Win32::Graphics::Gdi::{
-    BI_BITFIELDS, BITMAPINFO, BITMAPV5HEADER, CreateBitmap, CreateDIBSection, DIB_RGB_COLORS, DeleteObject,
-    EnumDisplayMonitors, GetDC, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO, ReleaseDC,
+    AC_SRC_ALPHA, AC_SRC_OVER, ANTIALIASED_QUALITY, BI_BITFIELDS, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BITMAPV5HEADER,
+    BLENDFUNCTION, CLIP_DEFAULT_PRECIS, CreateBitmap, CreateCompatibleDC, CreateDIBSection, CreateFontW,
+    DEFAULT_CHARSET, DEFAULT_PITCH, DIB_RGB_COLORS, DeleteDC, DeleteObject, EnumDisplayMonitors, FW_SEMIBOLD, GdiFlush,
+    GetDC, GetMonitorInfoW, GetTextExtentPoint32W, HDC, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO,
+    MonitorFromPoint, OUT_DEFAULT_PRECIS, ReleaseDC, SelectObject, SetBkMode, SetTextColor, TRANSPARENT, TextOutW,
 };
 use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 use windows_sys::Win32::System::DataExchange::{
-    CloseClipboard, EnumClipboardFormats, GetClipboardFormatNameW, GetClipboardSequenceNumber,
-    IsClipboardFormatAvailable, OpenClipboard, RegisterClipboardFormatW,
+    CloseClipboard, EmptyClipboard, EnumClipboardFormats, GetClipboardData, GetClipboardFormatNameW,
+    GetClipboardSequenceNumber, IsClipboardFormatAvailable, OpenClipboard, RegisterClipboardFormatW, SetClipboardData,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows_sys::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock};
 use windows_sys::Win32::System::Power::{ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED, SetThreadExecutionState};
 use windows_sys::Win32::System::Registry::{
     HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_DWORD, RRF_RT_REG_SZ, RegDeleteKeyValueW, RegGetValueW, RegSetKeyValueW,
@@ -56,7 +63,9 @@ use windows_sys::Win32::System::Threading::{
     PROCESS_POWER_THROTTLING_CURRENT_VERSION, PROCESS_POWER_THROTTLING_EXECUTION_SPEED, PROCESS_POWER_THROTTLING_STATE,
     ProcessPowerThrottling, SetPriorityClass, SetProcessInformation, SetThreadPriority, THREAD_PRIORITY_HIGHEST,
 };
-use windows_sys::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext};
+use windows_sys::Win32::UI::HiDpi::{
+    DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, GetDpiForMonitor, MDT_EFFECTIVE_DPI, SetProcessDpiAwarenessContext,
+};
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     GetLastInputInfo, INPUT, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP,
     KEYEVENTF_SCANCODE, LASTINPUTINFO, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN,
@@ -67,7 +76,8 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     VK_VOLUME_UP,
 };
 use windows_sys::Win32::UI::Shell::{
-    NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY, NOTIFYICONDATAW, Shell_NotifyIconW, ShellExecuteW,
+    DROPFILES, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY, NOTIFYICONDATAW, Shell_NotifyIconW,
+    ShellExecuteW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
@@ -82,6 +92,7 @@ const WM_APP_HIDE: u32 = WM_APP + 4;
 const WM_APP_SHOW: u32 = WM_APP + 5;
 const WM_APP_RESTART: u32 = WM_APP + 6;
 const WM_APP_ACTIVE: u32 = WM_APP + 7;
+const WM_APP_BUBBLE: u32 = WM_APP + 8;
 
 /// Marque des entrées injectées par Baskul pour l'activité partagée : son
 /// propre crochet les laisse passer sans les traiter.
@@ -90,6 +101,7 @@ const BASKUL_INPUT: usize = 0x4241_5343; // "BASC"
 const TIMER_WATCHDOG: usize = 1;
 const TIMER_REHOOK: usize = 2;
 const TIMER_TRAY: usize = 3;
+const TIMER_BUBBLE: usize = 4;
 
 const ID_RETURN: usize = 10;
 const ID_LOCK: usize = 11;
@@ -99,6 +111,9 @@ const ID_FOLDER: usize = 14;
 const ID_AUTOSTART: usize = 15;
 const ID_RESTART: usize = 16;
 const ID_QUIT: usize = 17;
+const ID_UPDATE: usize = 18;
+/// Entrées « Aller sur… » : une par pilotée connectée.
+const ID_GOTO: usize = 100;
 
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const RUN_VALUE: &str = "Baskul";
@@ -280,6 +295,218 @@ fn clip_formats() -> Vec<String> {
     out
 }
 
+const CF_UNICODETEXT: u32 = 13;
+const CF_HDROP: u32 = 15;
+const CF_DIBV5: u32 = 17;
+
+/// Formats d'image enregistrés par les applications (navigateurs, Office,
+/// Paint.NET, GIMP…) : l'image d'origine, sans conversion.
+const IMAGE_FORMATS: [(&str, ImageFormat); 7] = [
+    ("PNG", ImageFormat::Png),
+    ("image/png", ImageFormat::Png),
+    ("JFIF", ImageFormat::Jpeg),
+    ("image/jpeg", ImageFormat::Jpeg),
+    ("GIF", ImageFormat::Gif),
+    ("image/gif", ImageFormat::Gif),
+    ("image/webp", ImageFormat::Webp),
+];
+
+fn clip_format_id(name: &str) -> u32 {
+    let w = wide(name);
+    // SAFETY: chaîne terminée par un zéro.
+    unsafe { RegisterClipboardFormatW(w.as_ptr()) }
+}
+
+/// Presse-papiers ouvert, refermé à la fin. Un autre programme peut le garder
+/// ouvert un instant : quelques essais.
+struct OpenClip;
+
+impl OpenClip {
+    fn open() -> Option<OpenClip> {
+        // Fenêtre de Baskul comme propriétaire (sans elle, l'écriture échoue).
+        let owner = MAIN_HWND.load(Ordering::Acquire);
+        for _ in 0..10 {
+            // SAFETY: fenêtre de Baskul (ou aucune).
+            if unsafe { OpenClipboard(owner) } != 0 {
+                return Some(OpenClip);
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        log::warn!("presse-papiers occupé par un autre programme");
+        None
+    }
+
+    fn get(&self, format: u32) -> Option<Vec<u8>> {
+        // SAFETY: presse-papiers ouvert ; mémoire verrouillée le temps de la
+        // copie, de la taille annoncée par le système.
+        unsafe {
+            let h = GetClipboardData(format);
+            if h.is_null() {
+                return None;
+            }
+            let size = GlobalSize(h);
+            let p = GlobalLock(h) as *const u8;
+            if p.is_null() {
+                return None;
+            }
+            let v = std::slice::from_raw_parts(p, size).to_vec();
+            GlobalUnlock(h);
+            Some(v)
+        }
+    }
+
+    fn set(&self, format: u32, data: &[u8]) -> bool {
+        if format == 0 {
+            return false;
+        }
+        // SAFETY: mémoire allouée et remplie ici ; elle appartient au système
+        // si SetClipboardData réussit, sinon on la libère.
+        unsafe {
+            let h = GlobalAlloc(GMEM_MOVEABLE, data.len().max(1));
+            if h.is_null() {
+                return false;
+            }
+            let p = GlobalLock(h) as *mut u8;
+            if p.is_null() {
+                GlobalFree(h);
+                return false;
+            }
+            std::ptr::copy_nonoverlapping(data.as_ptr(), p, data.len());
+            GlobalUnlock(h);
+            if SetClipboardData(format, h).is_null() {
+                GlobalFree(h);
+                return false;
+            }
+            true
+        }
+    }
+}
+
+impl Drop for OpenClip {
+    fn drop(&mut self) {
+        // SAFETY: presse-papiers ouvert par `open`.
+        unsafe { CloseClipboard() };
+    }
+}
+
+/// Image du presse-papiers dans son format d'origine (PNG, JPEG, GIF, WebP).
+/// Sinon (bitmap seul) : arboard la lit et l'envoie en PNG.
+fn clip_read_images() -> Vec<ClipImage> {
+    let Some(clip) = OpenClip::open() else { return vec![] };
+    for (name, format) in IMAGE_FORMATS {
+        let id = clip_format_id(name);
+        // SAFETY: presse-papiers ouvert.
+        if id == 0 || unsafe { IsClipboardFormatAvailable(id) } == 0 {
+            continue;
+        }
+        let Some(mut data) = clip.get(id) else { continue };
+        if format == ImageFormat::Png {
+            trim_png(&mut data);
+        }
+        if ImageFormat::sniff(&data) == Some(format) {
+            return vec![ClipImage { format, data }];
+        }
+    }
+    Vec::new()
+}
+
+/// La mémoire du presse-papiers est arrondie : le PNG s'arrête après son
+/// bloc IEND.
+fn trim_png(data: &mut Vec<u8>) {
+    if let Some(i) = data.windows(4).rposition(|w| w == b"IEND") {
+        data.truncate((i + 8).min(data.len()));
+    }
+}
+
+/// Écrit le contenu reçu quand il comporte des images ou des fichiers (le
+/// texte seul passe par arboard) : les fichiers, chaque image dans son format
+/// d'origine, et un bitmap pour les applications qui ne lisent que lui.
+fn clip_write(h: &ClipHeader, roots: &[PathBuf]) -> Option<bool> {
+    if h.images.is_empty() && roots.is_empty() {
+        return None;
+    }
+    let clip = OpenClip::open()?;
+    // SAFETY: presse-papiers ouvert.
+    unsafe { EmptyClipboard() };
+    let mut ok = false;
+    if !roots.is_empty() {
+        ok |= clip.set(CF_HDROP, &drop_files(roots));
+        // L'Explorateur colle une copie (et non un déplacement).
+        const DROPEFFECT_COPY: u32 = 1;
+        clip.set(clip_format_id("Preferred DropEffect"), &DROPEFFECT_COPY.to_le_bytes());
+    }
+    for img in &h.images {
+        let name = match img.format {
+            ImageFormat::Png => "PNG",
+            ImageFormat::Jpeg => "JFIF",
+            ImageFormat::Gif => "GIF",
+            ImageFormat::Webp => "image/webp",
+            _ => continue,
+        };
+        ok |= clip.set(clip_format_id(name), &img.data);
+    }
+    if let Some(dib) = h.images.iter().find_map(|i| dib_v5(&i.data)) {
+        ok |= clip.set(CF_DIBV5, &dib);
+    }
+    if let Some(t) = &h.text {
+        let w: Vec<u8> = t.encode_utf16().chain(Some(0)).flat_map(u16::to_le_bytes).collect();
+        ok |= clip.set(CF_UNICODETEXT, &w);
+    }
+    if !ok {
+        log::warn!("écriture du presse-papiers refusée par Windows");
+    }
+    Some(ok)
+}
+
+/// Liste de fichiers (CF_HDROP) : en-tête DROPFILES puis les chemins en
+/// UTF-16, chacun terminé par un zéro, et un zéro final.
+fn drop_files(paths: &[PathBuf]) -> Vec<u8> {
+    let header = DROPFILES { pFiles: size_of::<DROPFILES>() as u32, pt: POINT { x: 0, y: 0 }, fNC: 0, fWide: 1 };
+    // SAFETY: structure simple, lue octet par octet.
+    let mut out = unsafe {
+        std::slice::from_raw_parts(&header as *const DROPFILES as *const u8, size_of::<DROPFILES>()).to_vec()
+    };
+    for p in paths {
+        out.extend(wide(&p.display().to_string()).into_iter().flat_map(u16::to_le_bytes));
+    }
+    out.extend([0, 0]);
+    out
+}
+
+/// Bitmap (CF_DIBV5, 32 bits avec transparence, lignes de bas en haut comme
+/// l'attendent Word et WordPad) ; Windows en déduit CF_DIB et CF_BITMAP.
+fn dib_v5(data: &[u8]) -> Option<Vec<u8>> {
+    const LCS_SRGB: u32 = 0x7352_4742;
+    const LCS_GM_IMAGES: u32 = 4;
+    let (w, h, rgba) = crate::clipboard::decode_image(data)?;
+    // SAFETY: structure de nombres, initialisée à zéro puis remplie.
+    let mut hdr: BITMAPV5HEADER = unsafe { zeroed() };
+    hdr.bV5Size = size_of::<BITMAPV5HEADER>() as u32;
+    hdr.bV5Width = w as i32;
+    hdr.bV5Height = h as i32;
+    hdr.bV5Planes = 1;
+    hdr.bV5BitCount = 32;
+    hdr.bV5Compression = BI_BITFIELDS;
+    hdr.bV5SizeImage = w * h * 4;
+    hdr.bV5RedMask = 0x00ff_0000;
+    hdr.bV5GreenMask = 0x0000_ff00;
+    hdr.bV5BlueMask = 0x0000_00ff;
+    hdr.bV5AlphaMask = 0xff00_0000;
+    hdr.bV5CSType = LCS_SRGB;
+    hdr.bV5Intent = LCS_GM_IMAGES;
+    // SAFETY: structure simple, lue octet par octet.
+    let mut out = unsafe {
+        std::slice::from_raw_parts(&hdr as *const BITMAPV5HEADER as *const u8, size_of::<BITMAPV5HEADER>()).to_vec()
+    };
+    out.reserve(rgba.len());
+    for row in rgba.chunks_exact(w as usize * 4).rev() {
+        for &[r, g, b, a] in row.as_chunks::<4>().0 {
+            out.extend([b, g, r, a]);
+        }
+    }
+    Some(out)
+}
+
 // ---------------------------------------------------------------------------
 // Machine principale : capture
 // ---------------------------------------------------------------------------
@@ -288,6 +515,7 @@ struct WinHost {
     layout: Layout,
     layout_dirty: bool,
     link: LinkHandle,
+    config_path: PathBuf,
 }
 
 impl Host for WinHost {
@@ -308,13 +536,21 @@ impl Host for WinHost {
         post(WM_APP_SHOW, pos.x as isize as usize, pos.y as isize);
     }
 
-    fn send(&mut self, msg: Message) {
-        self.link.send_input(msg);
+    fn send(&mut self, to: PeerId, msg: Message) {
+        self.link.send_input(to, msg);
     }
 
     fn keep_active(&mut self) {
         // Traité juste après le retour du hook (pas d'injection depuis un hook).
         post(WM_APP_ACTIVE, 0, 0);
+    }
+
+    fn save_layout(&mut self, machines: Vec<MachineCfg>) {
+        app::save_layout(&self.config_path, machines);
+    }
+
+    fn arrived(&mut self, _pos: Point) {
+        request_bubble();
     }
 }
 
@@ -860,6 +1096,10 @@ impl Emulator for WinEmulator {
         }
     }
 
+    fn arrived(&mut self) {
+        request_bubble();
+    }
+
     fn cursor(&mut self) -> Option<Point> {
         cursor_pos()
     }
@@ -1084,16 +1324,24 @@ fn append(menu: HMENU, flags: MENU_ITEM_FLAGS, id: usize, text: &str) {
 }
 
 fn show_menu(hwnd: HWND) {
-    let Some((role, summary)) = with_ui(|ui| (ui.role, status::snapshot().summary())) else { return };
+    let Some((role, snap)) = with_ui(|ui| (ui.role, status::snapshot())) else { return };
     let locked = with_primary(|s| s.core.is_locked()).unwrap_or(false);
+    let names: Vec<String> = snap.peers.iter().map(|p| p.name.clone()).collect();
     // SAFETY: création et destruction d'un menu local.
     unsafe {
         let menu = CreatePopupMenu();
-        append(menu, MF_STRING | MF_GRAYED, 0, &summary);
+        append(menu, MF_STRING | MF_GRAYED, 0, &snap.summary());
+        if let Some(v) = crate::update::ready_version() {
+            append(menu, MF_STRING, ID_UPDATE, &i18n::tf("menu.updateReady", &[("version", &v)]));
+        }
         append(menu, MF_SEPARATOR, 0, "");
         if role == Role::Primary {
-            append(menu, MF_STRING, ID_RETURN, &i18n::t("menu.returnHerePc"));
-            append(menu, MF_STRING | if locked { MF_CHECKED } else { 0 }, ID_LOCK, &i18n::t("menu.lockPc"));
+            append(menu, MF_STRING, ID_RETURN, &i18n::t("menu.returnHere"));
+            for (i, name) in names.iter().enumerate() {
+                let on = if snap.active_peer.as_deref() == Some(name.as_str()) { MF_CHECKED } else { 0 };
+                append(menu, MF_STRING | on, ID_GOTO + i, &i18n::tf("menu.goTo", &[("name", name)]));
+            }
+            append(menu, MF_STRING | if locked { MF_CHECKED } else { 0 }, ID_LOCK, &i18n::t("menu.lock"));
             append(menu, MF_SEPARATOR, 0, "");
         }
         append(menu, MF_STRING, ID_SETTINGS, &i18n::t("menu.settings"));
@@ -1111,7 +1359,12 @@ fn show_menu(hwnd: HWND) {
         let cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, null());
         PostMessageW(hwnd, WM_NULL, 0, 0);
         DestroyMenu(menu);
-        handle_command(cmd as usize);
+        match (cmd as usize).checked_sub(ID_GOTO).and_then(|i| names.get(i)) {
+            Some(name) => {
+                with_primary(|s| s.core.switch_to(&mut s.host, None, SwitchTo::Client(name.clone())));
+            }
+            None => handle_command(cmd as usize),
+        }
     }
 }
 
@@ -1137,6 +1390,11 @@ fn handle_command(cmd: usize) {
             }
         }
         ID_AUTOSTART => set_autostart(!autostart_enabled(), &args),
+        ID_UPDATE => {
+            if let Err(e) = crate::update::install() {
+                log::warn!("{e}");
+            }
+        }
         ID_RESTART => {
             shutdown();
             super::relaunch(&args);
@@ -1198,6 +1456,10 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) ->
             keep_active();
             0
         }
+        WM_APP_BUBBLE => {
+            show_bubble();
+            0
+        }
         WM_APP_TRAY => {
             let ev = (l as u32) & 0xffff;
             if ev == WM_RBUTTONUP || ev == WM_LBUTTONUP || ev == WM_CONTEXTMENU {
@@ -1208,6 +1470,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) ->
         WM_TIMER => {
             match w {
                 TIMER_WATCHDOG => watchdog(),
+                TIMER_BUBBLE => bubble_tick(),
                 TIMER_REHOOK => {
                     // Windows peut retirer un hook sans prévenir : on le
                     // réinstalle régulièrement (jamais pendant le pilotage).
@@ -1275,6 +1538,234 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) ->
         }
         // SAFETY: traitement par défaut.
         _ => unsafe { DefWindowProcW(hwnd, msg, w, l) },
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Bulle d'arrivée
+// ---------------------------------------------------------------------------
+
+/// Nom affiché par la bulle (absent : bulle désactivée).
+static BUBBLE_NAME: OnceLock<String> = OnceLock::new();
+/// Durée d'affichage avant le fondu, puis durée du fondu.
+const BUBBLE_SHOW: Duration = Duration::from_millis(900);
+const BUBBLE_FADE: Duration = Duration::from_millis(350);
+
+thread_local! {
+    /// Fenêtre de la bulle (créée au premier affichage) et heure d'affichage.
+    static BUBBLE: RefCell<(HWND, Option<Instant>)> = const { RefCell::new((null_mut(), None)) };
+}
+
+/// Le clavier et la souris arrivent sur cette machine : son nom s'affiche un
+/// instant près du curseur. Utilisable depuis n'importe quel thread.
+fn request_bubble() {
+    if BUBBLE_NAME.get().is_some() {
+        post(WM_APP_BUBBLE, 0, 0);
+    }
+}
+
+unsafe extern "system" fn bubble_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    if msg == WM_NCHITTEST {
+        return HTTRANSPARENT as LRESULT;
+    }
+    // SAFETY: traitement par défaut.
+    unsafe { DefWindowProcW(hwnd, msg, w, l) }
+}
+
+/// Fenêtre de la bulle : transparente aux clics, sans focus, au premier plan,
+/// absente de la barre des tâches.
+fn bubble_window() -> HWND {
+    let existing = BUBBLE.with(|b| b.borrow().0);
+    if !existing.is_null() {
+        return existing;
+    }
+    let class = wide("BaskulBubble");
+    let empty = wide("");
+    // SAFETY: création d'une fenêtre sur le thread de l'interface.
+    let hwnd = unsafe {
+        let hinst: HINSTANCE = GetModuleHandleW(null());
+        register_class(&class, Some(bubble_proc), hinst, false);
+        CreateWindowExW(
+            WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+            class.as_ptr(),
+            empty.as_ptr(),
+            WS_POPUP,
+            0,
+            0,
+            1,
+            1,
+            null_mut(),
+            null_mut(),
+            hinst,
+            null(),
+        )
+    };
+    BUBBLE.with(|b| b.borrow_mut().0 = hwnd);
+    hwnd
+}
+
+/// Dessine la bulle (pastille sombre, logo Windows, nom de la machine) près
+/// du curseur, à l'échelle de l'écran où il se trouve.
+fn show_bubble() {
+    let Some(name) = BUBBLE_NAME.get() else { return };
+    let Some(cur) = cursor_pos() else { return };
+    let hwnd = bubble_window();
+    if hwnd.is_null() {
+        return;
+    }
+    let text: Vec<u16> = name.encode_utf16().collect();
+    // SAFETY: objets GDI créés, utilisés puis libérés dans ce bloc ; pixels de
+    // la section DIB de la taille demandée.
+    unsafe {
+        let pt = POINT { x: cur.x, y: cur.y };
+        let monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+        let (mut dpi, mut dpi_y) = (96u32, 96u32);
+        GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi, &mut dpi_y);
+        let px = |v: f32| (v * dpi as f32 / 96.0).round() as i32;
+        let mut info: MONITORINFO = zeroed();
+        info.cbSize = size_of::<MONITORINFO>() as u32;
+        GetMonitorInfoW(monitor, &mut info);
+        let work = info.rcWork;
+
+        let face = wide("Segoe UI Semibold");
+        let font = CreateFontW(
+            -px(15.0),
+            0,
+            0,
+            0,
+            FW_SEMIBOLD as i32,
+            0,
+            0,
+            0,
+            DEFAULT_CHARSET as u32,
+            OUT_DEFAULT_PRECIS as u32,
+            CLIP_DEFAULT_PRECIS as u32,
+            ANTIALIASED_QUALITY as u32,
+            DEFAULT_PITCH as u32,
+            face.as_ptr(),
+        );
+        let screen = GetDC(null_mut());
+        let mem = CreateCompatibleDC(screen);
+        let old_font = SelectObject(mem, font);
+        let mut extent = SIZE { cx: 0, cy: 0 };
+        GetTextExtentPoint32W(mem, text.as_ptr(), text.len() as i32, &mut extent);
+        let (pad, logo, gap) = (px(14.0), px(13.0), px(9.0));
+        let h = extent.cy + px(14.0);
+        let w = pad + logo + gap + extent.cx + pad;
+
+        let mut bi: BITMAPINFO = zeroed();
+        bi.bmiHeader.biSize = size_of::<BITMAPINFOHEADER>() as u32;
+        bi.bmiHeader.biWidth = w;
+        bi.bmiHeader.biHeight = -h;
+        bi.bmiHeader.biPlanes = 1;
+        bi.bmiHeader.biBitCount = 32;
+        bi.bmiHeader.biCompression = BI_RGB;
+        let mut bits: *mut c_void = null_mut();
+        let dib = CreateDIBSection(mem, &bi, DIB_RGB_COLORS, &mut bits, null_mut(), 0);
+        if dib.is_null() || bits.is_null() {
+            SelectObject(mem, old_font);
+            DeleteObject(font);
+            DeleteDC(mem);
+            ReleaseDC(null_mut(), screen);
+            return;
+        }
+        let old_bmp = SelectObject(mem, dib);
+        // Texte blanc sur fond noir : sa luminosité donne sa couverture.
+        SetBkMode(mem, TRANSPARENT as i32);
+        SetTextColor(mem, 0x00ff_ffff);
+        TextOutW(mem, pad + logo + gap, (h - extent.cy) / 2, text.as_ptr(), text.len() as i32);
+        GdiFlush();
+        let pixels = std::slice::from_raw_parts_mut(bits as *mut u8, (w * h * 4) as usize);
+        paint_bubble(pixels, w, h, pad, logo);
+
+        // En bas à droite du curseur, sans sortir de l'écran.
+        let x = (cur.x + px(18.0)).min(work.right - w - px(6.0)).max(work.left + px(6.0));
+        let y = (cur.y + px(22.0)).min(work.bottom - h - px(6.0)).max(work.top + px(6.0));
+        let blend = BLENDFUNCTION {
+            BlendOp: AC_SRC_OVER as u8,
+            BlendFlags: 0,
+            SourceConstantAlpha: 255,
+            AlphaFormat: AC_SRC_ALPHA as u8,
+        };
+        UpdateLayeredWindow(
+            hwnd,
+            screen,
+            &POINT { x, y },
+            &SIZE { cx: w, cy: h },
+            mem,
+            &POINT { x: 0, y: 0 },
+            0,
+            &blend,
+            ULW_ALPHA,
+        );
+        SelectObject(mem, old_bmp);
+        SelectObject(mem, old_font);
+        DeleteObject(dib);
+        DeleteObject(font);
+        DeleteDC(mem);
+        ReleaseDC(null_mut(), screen);
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        SetTimer(MAIN_HWND.load(Ordering::Acquire), TIMER_BUBBLE, 30, None);
+    }
+    BUBBLE.with(|b| b.borrow_mut().1 = Some(Instant::now()));
+}
+
+/// Compose la bulle (pixels BGRA prémultipliés) : pastille aux bords
+/// arrondis, logo Windows et texte déjà dessiné en blanc sur noir.
+fn paint_bubble(pixels: &mut [u8], w: i32, h: i32, pad: i32, logo: i32) {
+    const BG: [f32; 3] = [32.0, 32.0, 32.0];
+    const BG_ALPHA: f32 = 0.88;
+    const LOGO: [f32; 3] = [255.0, 180.0, 80.0]; // bleu (BGR)
+    let r = h as f32 / 2.0;
+    let logo_y = (h - logo) / 2;
+    let tile_gap = (logo / 12).max(1);
+    let tile = (logo - tile_gap) / 2;
+    let in_tile = |v: i32| (0..tile).contains(&v) || (tile + tile_gap..2 * tile + tile_gap).contains(&v);
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            // Pastille : rectangle aux extrémités en demi-cercle, bords lissés.
+            let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
+            let cx = fx.clamp(r, w as f32 - r);
+            let d = ((fx - cx).powi(2) + (fy - r).powi(2)).sqrt();
+            let shape = (r - d + 0.5).clamp(0.0, 1.0);
+            let text = pixels[i].max(pixels[i + 1]).max(pixels[i + 2]) as f32 / 255.0;
+            let on_logo = in_tile(x - pad) && in_tile(y - logo_y);
+            let (fg, cover) = if on_logo { (LOGO, 1.0) } else { ([255.0; 3], text) };
+            let alpha = shape * (BG_ALPHA + (1.0 - BG_ALPHA) * cover);
+            for c in 0..3 {
+                // Premier plan opaque sur le fond translucide, prémultiplié.
+                let color = fg[c] * cover + BG[c] * BG_ALPHA * (1.0 - cover);
+                pixels[i + c] = (shape * color).round().clamp(0.0, 255.0) as u8;
+            }
+            pixels[i + 3] = (alpha * 255.0).round() as u8;
+        }
+    }
+}
+
+/// Fondu, puis fenêtre masquée (une nouvelle arrivée repousse l'échéance).
+fn bubble_tick() {
+    let (hwnd, shown_at) = BUBBLE.with(|b| *b.borrow());
+    let Some(elapsed) = shown_at.map(|t| t.elapsed()) else { return };
+    if elapsed < BUBBLE_SHOW {
+        return;
+    }
+    // SAFETY: fenêtre de la bulle et minuterie créées par ce thread.
+    unsafe {
+        if elapsed >= BUBBLE_SHOW + BUBBLE_FADE {
+            ShowWindow(hwnd, SW_HIDE);
+            KillTimer(MAIN_HWND.load(Ordering::Acquire), TIMER_BUBBLE);
+            BUBBLE.with(|b| b.borrow_mut().1 = None);
+            return;
+        }
+        let left = 1.0 - (elapsed - BUBBLE_SHOW).as_secs_f32() / BUBBLE_FADE.as_secs_f32();
+        let blend = BLENDFUNCTION {
+            BlendOp: AC_SRC_OVER as u8,
+            BlendFlags: 0,
+            SourceConstantAlpha: (left * 255.0) as u8,
+            AlphaFormat: AC_SRC_ALPHA as u8,
+        };
+        UpdateLayeredWindow(hwnd, null_mut(), null(), null(), null_mut(), null(), 0, &blend, ULW_ALPHA);
     }
 }
 
@@ -1357,6 +1848,9 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
     };
     MAIN_HWND.store(hwnd, Ordering::Release);
     CURSOR.with(|c| c.borrow_mut().hider = hider);
+    if settings.ui.arrival_bubble {
+        let _ = BUBBLE_NAME.set(settings.name.clone());
+    }
     status::on_change(|| post(WM_APP_STATUS, 0, 0));
     crate::api::set_restart_handler(|| post(WM_APP_RESTART, 0, 0));
     UI.with(|u| {
@@ -1365,7 +1859,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
             tray_added: false,
             icons: HashMap::new(),
             tray_icon: settings.ui.tray_icon,
-            config_path,
+            config_path: config_path.clone(),
             args,
             role: settings.role,
         })
@@ -1374,8 +1868,9 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
     let hooks = ClipboardHooks {
         sequence: clip_sequence,
         sensitive: clip_sensitive,
+        read_images: clip_read_images,
+        write: clip_write,
         formats: clip_formats,
-        ..ClipboardHooks::NONE
     };
     let _services: Services = match settings.role {
         Role::Primary => {
@@ -1384,10 +1879,12 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
             log::info!("écrans : {:?}", layout.displays);
             let opts = PrimaryOptions {
                 edge_switching: settings.edge_switching,
-                position: settings.secondary_position,
+                new_client_side: settings.secondary_position,
                 corner: settings.corner_size,
+                layout: settings.layout.clone(),
                 switch_hotkey: settings.switch_hotkey.clone(),
                 return_hotkey: settings.return_hotkey.clone(),
+                next_hotkey: settings.next_hotkey.clone(),
                 lock_hotkey: settings.lock_hotkey.clone(),
                 media_keys: settings.media_keys,
                 mirror_activity: settings.mirror_activity,
@@ -1397,7 +1894,12 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
             PRIMARY.with(|p| {
                 *p.borrow_mut() = Some(PrimaryState {
                     core: PrimaryCore::new(opts),
-                    host: WinHost { layout, layout_dirty: false, link: services.link.clone() },
+                    host: WinHost {
+                        layout,
+                        layout_dirty: false,
+                        link: services.link.clone(),
+                        config_path: config_path.clone(),
+                    },
                     peer_rx: rx,
                     fake_ctrl_local: None,
                     lctrl_down_time: None,

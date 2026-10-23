@@ -2,10 +2,11 @@
 //! AutoHotkey, scripts…). Elles s'adressent au Baskul en cours d'exécution
 //! par son API locale :
 //!
-//! - `baskul switch primary|secondary|toggle|here|other` : le clavier et la
-//!   souris passent sur la machine principale, sur la machine pilotée, sur
-//!   l'autre que maintenant, sur celle où la commande est lancée, ou sur
-//!   l'autre ;
+//! - `baskul switch CIBLE` : le clavier et la souris passent sur la machine
+//!   principale (`primary`), sur la dernière pilotée utilisée (`secondary`),
+//!   sur la machine où la commande est lancée (`here`), sur une autre
+//!   (`other`), sur celle où ils ne sont pas (`toggle`), sur la suivante
+//!   (`next`), ou sur une pilotée donnée par son nom ;
 //! - `baskul status` : état de Baskul, une information par ligne.
 //!
 //! Code de sortie : 0 si tout va bien, 1 sinon (message sur la sortie
@@ -50,16 +51,30 @@ pub fn fail(msg: &str) -> i32 {
 }
 
 /// `baskul status` : clés et valeurs en anglais, faciles à lire dans un
-/// script (`baskul status | grep active`).
+/// script (`baskul status | grep active`). `active` : machine où agissent le
+/// clavier et la souris (`primary`, ou le nom d'une pilotée ; sur une
+/// pilotée : `here` ou `elsewhere`).
 fn status_text(v: &Value) -> String {
-    let connected = v["state"] == "connected";
-    let active = if v["remote_active"].as_bool().unwrap_or(false) { "secondary" } else { "primary" };
-    let mut out = format!("role: {}\nconnected: {}\n", v["role"].as_str().unwrap_or("unknown"), yes(connected));
-    if connected {
-        out.push_str(&format!("peer: {}\n", v["detail"].as_str().unwrap_or_default()));
-    }
-    out.push_str(&format!("active: {active}\nlocked: {}\n", yes(v["locked"].as_bool().unwrap_or(false))));
-    out
+    let role = v["role"].as_str().unwrap_or("unknown");
+    let peers: Vec<&str> = v["peers"].as_array().into_iter().flatten().filter_map(|p| p["name"].as_str()).collect();
+    let remote = v["remote_active"].as_bool().unwrap_or(false);
+    let active = match (role, v["active_peer"].as_str()) {
+        ("secondary", _) => {
+            if remote {
+                "here"
+            } else {
+                "elsewhere"
+            }
+        }
+        (_, Some(name)) => name,
+        _ => "primary",
+    };
+    format!(
+        "role: {role}\nconnected: {}\npeers: {}\nactive: {active}\nlocked: {}\n",
+        yes(!peers.is_empty()),
+        peers.join(", "),
+        yes(v["locked"].as_bool().unwrap_or(false))
+    )
 }
 
 fn yes(b: bool) -> &'static str {
@@ -72,9 +87,18 @@ mod tests {
 
     #[test]
     fn status_is_easy_to_parse() {
-        let v = json!({ "state": "connected", "detail": "Mac mini", "role": "primary", "remote_active": true, "locked": false });
-        assert_eq!(status_text(&v), "role: primary\nconnected: yes\npeer: Mac mini\nactive: secondary\nlocked: no\n");
-        let v = json!({ "state": "waiting", "detail": "attente", "role": "secondary", "remote_active": false });
-        assert_eq!(status_text(&v), "role: secondary\nconnected: no\nactive: primary\nlocked: no\n");
+        let v = json!({
+            "role": "primary",
+            "peers": [{ "name": "Atelier" }, { "name": "Salon" }],
+            "remote_active": true,
+            "active_peer": "Salon",
+            "locked": false
+        });
+        assert_eq!(
+            status_text(&v),
+            "role: primary\nconnected: yes\npeers: Atelier, Salon\nactive: Salon\nlocked: no\n"
+        );
+        let v = json!({ "role": "secondary", "peers": [], "remote_active": false });
+        assert_eq!(status_text(&v), "role: secondary\nconnected: no\npeers: \nactive: elsewhere\nlocked: no\n");
     }
 }

@@ -9,17 +9,17 @@
       "restart": "Redémarrer Baskul",
       "quit": "Quitter Baskul",
       "allowAccessibility": "Autoriser Baskul (Accessibilité)…",
-      "returnHereMac": "Ramener le curseur sur ce Mac",
-      "lockMac": "Verrouiller le curseur sur ce Mac",
-      "returnHerePc": "Ramener le curseur sur ce PC",
-      "lockPc": "Verrouiller le curseur sur ce PC"
+      "returnHere": "Ramener le curseur sur cette machine",
+      "lock": "Verrouiller le curseur sur cette machine",
+      "goTo": "Aller sur « {name} »",
+      "updateReady": "Redémarrer pour mettre à jour ({version})"
     },
     "status": {
       "waiting": "en attente de l'autre machine ({address})",
       "connecting": "connexion à {address}…",
       "listenFailed": "impossible d'écouter sur {address} ({error})",
-      "wrongSecret": "secret incorrect : vérifiez le secret partagé sur les deux machines",
-      "versionMismatch": "versions incompatibles (ici {here}, chez « {name} » {there}) : installez la même version sur les deux machines",
+      "wrongSecret": "secret incorrect : vérifiez que le secret partagé est le même sur toutes les machines",
+      "versionMismatch": "versions incompatibles (ici {here}, chez « {name} » {there}) : installez la même version sur toutes les machines",
       "sameRole": "les deux machines sont réglées en machine {role} : l'une doit être principale, l'autre pilotée",
       "unexpectedReply": "réponse inattendue de l'autre machine",
       "connected": "Connecté à {peer}",
@@ -29,7 +29,12 @@
       "needAccessibility": "autorisation « Accessibilité » requise",
       "captureFailed": "capture du clavier et de la souris impossible : vérifiez les autorisations",
       "rolePrimary": "principale",
-      "roleSecondary": "pilotée"
+      "roleSecondary": "pilotée",
+      "waitingClients": "en attente des machines pilotées ({address})",
+      "searching": "recherche de la machine principale sur le réseau…",
+      "noAddress": "adresse de la machine principale manquante (découverte automatique désactivée)",
+      "noPrimary": "pas de connexion avec la machine principale",
+      "nameTaken": "une autre machine pilotée porte déjà le nom « {name} » : changez son « Nom affiché »"
     }
   },
   "app": {
