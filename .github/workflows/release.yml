@@ -49,7 +49,7 @@ jobs:
             gh release upload "$tag" "${files[@]}" --clobber
           else
             gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" \
-              --title "Baskul $tag" --generate-notes
+              --title "v$tag" --generate-notes
           fi
         env:
           GH_TOKEN: ${{ github.token }}
