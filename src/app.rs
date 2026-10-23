@@ -4,10 +4,11 @@ use crate::clipboard::{self, ClipEvent, ClipboardHandle, SystemBackend};
 use crate::config::Settings;
 use crate::crypto;
 use crate::net::{self, LinkEvent, LinkHandle, NetSettings};
-use crate::primary::PeerEvent;
+use crate::primary::{PeerEvent, RECONNECT_GRACE};
 use crate::protocol::Message;
 use crate::secondary::{Emulator, SecondaryCore};
 use crossbeam_channel::{Receiver, unbounded};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 /// Fonctions du presse-papiers propres à la plateforme.
@@ -87,10 +88,22 @@ pub fn start_primary(
     wake: impl Fn() + Send + Sync + 'static,
 ) -> (Services, Receiver<PeerEvent>) {
     let (tx, rx) = unbounded::<PeerEvent>();
+    let wake = Arc::new(wake);
+    let disconnects = AtomicU64::new(0);
     let services = start_services(settings, hooks, move |ev| {
         let pe = match ev {
             LinkEvent::Connected { .. } => PeerEvent::Connected,
-            LinkEvent::Disconnected => PeerEvent::Disconnected,
+            LinkEvent::Disconnected => {
+                // Fin du délai de grâce de cette coupure, signalée plus tard.
+                let n = disconnects.fetch_add(1, Ordering::Relaxed) + 1;
+                let (tx, wake) = (tx.clone(), wake.clone());
+                let _ = std::thread::Builder::new().name("bascule-grace".into()).spawn(move || {
+                    std::thread::sleep(RECONNECT_GRACE);
+                    let _ = tx.send(PeerEvent::GraceOver(n));
+                    wake();
+                });
+                PeerEvent::Disconnected
+            }
             LinkEvent::Message(Message::Leave { ratio }) => PeerEvent::Leave { ratio },
             LinkEvent::Message(m) => {
                 log::debug!("message ignoré par la machine principale : {m:?}");

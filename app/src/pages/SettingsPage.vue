@@ -9,6 +9,7 @@ import { useSettings } from "../composables/useSettings";
 import AdvancedSection from "../sections/AdvancedSection.vue";
 import ClipboardSection from "../sections/ClipboardSection.vue";
 import ConnectionSection from "../sections/ConnectionSection.vue";
+import InterfaceSection from "../sections/InterfaceSection.vue";
 import KeyboardSection from "../sections/KeyboardSection.vue";
 import MachineSection from "../sections/MachineSection.vue";
 import MouseSection from "../sections/MouseSection.vue";
@@ -35,29 +36,23 @@ watch(role, (r) => {
 </script>
 
 <template>
-  <n-spin v-if="info" :show="restarting" description="Redémarrage de Bascule…">
+  <n-spin v-if="info" :show="restarting" :description="$t('settings.restarting')">
     <n-flex vertical :size="16">
-      <n-alert v-if="welcome" type="info" title="Bienvenue dans Bascule !" closable>
-        Pour relier vos deux machines :
+      <n-alert v-if="welcome" type="info" :title="$t('settings.welcomeTitle')" closable>
+        {{ $t("settings.welcomeIntro") }}
         <ol style="margin: 6px 0; padding-left: 20px">
-          <li>Choisissez le rôle de cette machine. La <em>principale</em> est celle qui a le clavier et la souris.</li>
-          <li>
-            Le secret doit être identique sur les deux machines : copiez celui-ci dans les réglages de l'autre machine,
-            ou collez ici le sien.
-          </li>
-          <li>
-            Sur la machine principale, indiquez l'adresse de l'autre dans « Se connecter à ». L'autre machine laisse ce
-            champ vide.
-          </li>
+          <li>{{ $t("settings.welcomeStep1") }}</li>
+          <li>{{ $t("settings.welcomeStep2") }}</li>
+          <li>{{ $t("settings.welcomeStep3") }}</li>
         </ol>
-        Enregistrez : Bascule redémarre avec ces réglages.
+        {{ $t("settings.welcomeEnd") }}
       </n-alert>
 
-      <n-alert v-if="!config" type="error" title="Le fichier de configuration ne peut pas être lu">
+      <n-alert v-if="!config" type="error" :title="$t('settings.configUnreadable')">
         <p class="mono">{{ info.error }}</p>
         <n-flex :size="8">
-          <n-button size="small" @click="actions.openConfigFile">Ouvrir le fichier</n-button>
-          <n-button size="small" @click="actions.restart">Redémarrer Bascule</n-button>
+          <n-button size="small" @click="actions.openConfigFile">{{ $t("common.openFile") }}</n-button>
+          <n-button size="small" @click="actions.restart">{{ $t("common.restart") }}</n-button>
         </n-flex>
       </n-alert>
       <n-alert v-else-if="status?.state === 'error'" type="error">{{ status.detail }}</n-alert>
@@ -66,22 +61,25 @@ watch(role, (r) => {
         <machine-section :config="config" :info="info" />
         <n-card size="small">
           <n-tabs v-model:value="tab" type="segment" animated>
-            <n-tab-pane name="connexion" tab="Connexion">
+            <n-tab-pane name="connexion" :tab="$t('settings.tabs.connection')">
               <connection-section :config="config" :info="info" />
             </n-tab-pane>
-            <n-tab-pane v-if="role === 'primary'" name="bascule" tab="Changer de machine">
+            <n-tab-pane v-if="role === 'primary'" name="bascule" :tab="$t('settings.tabs.switching')">
               <switching-section :config="config" :info="info" />
             </n-tab-pane>
-            <n-tab-pane v-if="role === 'secondary'" name="souris" tab="Souris">
+            <n-tab-pane v-if="role === 'secondary'" name="souris" :tab="$t('settings.tabs.mouse')">
               <mouse-section :config="config" />
             </n-tab-pane>
-            <n-tab-pane name="clavier" tab="Clavier">
+            <n-tab-pane name="clavier" :tab="$t('settings.tabs.keyboard')">
               <keyboard-section :config="config" @open-file="actions.openConfigFile" />
             </n-tab-pane>
-            <n-tab-pane name="presse-papiers" tab="Presse-papiers">
+            <n-tab-pane name="presse-papiers" :tab="$t('settings.tabs.clipboard')">
               <clipboard-section :config="config" />
             </n-tab-pane>
-            <n-tab-pane name="avance" tab="Avancé">
+            <n-tab-pane name="interface" :tab="$t('settings.tabs.interface')">
+              <interface-section :config="config" />
+            </n-tab-pane>
+            <n-tab-pane name="avance" :tab="$t('settings.tabs.advanced')">
               <advanced-section
                 :config="config"
                 :info="info"

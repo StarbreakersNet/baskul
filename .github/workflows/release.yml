@@ -1,0 +1,52 @@
+name: release
+
+# Publie une Release avec les programmes des trois systèmes :
+# - quand un tag est poussé (par exemple `0.5.0`) ;
+# - ou à la main (onglet Actions → release → Run workflow) : le tag est alors
+#   la version de Cargo.toml, créé sur le commit choisi.
+on:
+  push:
+    tags: ["*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Tests et compilation : le workflow « build », partagé.
+  build:
+    uses: ./.github/workflows/build.yml
+
+  release:
+    name: Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      # Si la Release existe déjà (créée depuis l'interface de GitHub, par
+      # exemple), on y ajoute seulement les fichiers.
+      - run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            tag=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
+          fi
+          files=(
+            artifacts/Bascule-Windows/Bascule-Windows.zip
+            artifacts/Bascule-macOS/Bascule-macOS.zip
+            artifacts/Bascule-Linux/Bascule-Linux.tar.gz
+          )
+          if gh release view "$tag" > /dev/null 2>&1; then
+            gh release upload "$tag" "${files[@]}" --clobber
+          else
+            gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" \
+              --title "Bascule $tag" --generate-notes
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}

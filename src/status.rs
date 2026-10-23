@@ -34,13 +34,15 @@ pub struct Peer {
 impl Snapshot {
     /// Résumé d'une ligne pour l'info-bulle / le menu.
     pub fn summary(&self) -> String {
+        use crate::i18n::{t, tf};
         let mut s = match &self.conn {
             Conn::Waiting(w) => w.clone(),
-            Conn::Connected(peer) => format!("Connecté à {peer}"),
-            Conn::Error(e) => format!("Erreur : {e}"),
+            Conn::Connected(peer) => tf("status.connected", &[("peer", peer)]),
+            Conn::Error(e) => tf("status.error", &[("error", e)]),
         };
         if self.locked {
-            s.push_str(" — curseur verrouillé");
+            s.push_str(" — ");
+            s.push_str(&t("status.locked"));
         }
         if let Some(w) = &self.warning {
             s.push_str(" — ");

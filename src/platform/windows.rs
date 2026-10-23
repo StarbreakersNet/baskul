@@ -14,9 +14,10 @@
 
 use crate::Args;
 use crate::app::{self, ClipboardHooks, Services};
-use crate::config::{ScrollCfg, Settings};
+use crate::config::{ScrollCfg, Settings, TrayIcon};
 use crate::geometry::{Layout, Point, Rect};
-use crate::icon::{self, Tone};
+use crate::i18n;
+use crate::icon::{self, Style, Tone};
 use crate::keymap::{self, *};
 use crate::net::LinkHandle;
 use crate::primary::{Decision, Host, PeerEvent, PrimaryCore, PrimaryOptions};
@@ -44,7 +45,7 @@ use windows_sys::Win32::System::DataExchange::{
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::System::Registry::{
-    HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_SZ, RegDeleteKeyValueW, RegGetValueW, RegSetKeyValueW,
+    HKEY_CURRENT_USER, REG_SZ, RRF_RT_REG_DWORD, RRF_RT_REG_SZ, RegDeleteKeyValueW, RegGetValueW, RegSetKeyValueW,
 };
 use windows_sys::Win32::System::RemoteDesktop::{NOTIFY_FOR_THIS_SESSION, WTSRegisterSessionNotification};
 use windows_sys::Win32::System::Threading::{
@@ -464,7 +465,7 @@ fn install_hooks() {
         }
         if c.mouse_hook.is_null() || c.kbd_hook.is_null() {
             log::error!("installation des hooks clavier/souris impossible");
-            status::set_warning(Some("capture du clavier/souris impossible".into()));
+            status::set_warning(Some(i18n::t("status.captureFailed")));
         }
     });
 }
@@ -787,7 +788,8 @@ impl Emulator for WinEmulator {
 struct Ui {
     hwnd: HWND,
     tray_added: bool,
-    icons: HashMap<(u8, bool), HICON>,
+    icons: HashMap<(u8, bool, Style), HICON>,
+    tray_icon: TrayIcon,
     config_path: PathBuf,
     args: Args,
     role: Role,
@@ -839,15 +841,42 @@ fn make_icon(size: i32, rgba: &[u8]) -> HICON {
     }
 }
 
+/// La barre des tâches est claire (thème Windows).
+fn light_taskbar() -> bool {
+    let k = wide(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+    let v = wide("SystemUsesLightTheme");
+    let mut value = 0u32;
+    let mut len = size_of::<u32>() as u32;
+    // SAFETY: chaînes terminées par un zéro, tampon de la taille indiquée.
+    let r = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            k.as_ptr(),
+            v.as_ptr(),
+            RRF_RT_REG_DWORD,
+            null_mut(),
+            &mut value as *mut u32 as *mut c_void,
+            &mut len,
+        )
+    };
+    r == ERROR_SUCCESS && value != 0
+}
+
 impl Ui {
     fn icon(&mut self, tone: Tone, remote: bool) -> HICON {
-        let key = (tone as u8, remote);
+        let style = match self.tray_icon {
+            TrayIcon::Color => Style::Color,
+            // Monochrome : noir sur une barre des tâches claire, blanc sinon.
+            TrayIcon::Mono if light_taskbar() => Style::Mono([0, 0, 0]),
+            TrayIcon::Mono => Style::Mono([255, 255, 255]),
+        };
+        let key = (tone as u8, remote, style);
         if let Some(i) = self.icons.get(&key) {
             return *i;
         }
         // SAFETY: lecture de métrique système.
         let size = unsafe { GetSystemMetrics(SM_CXSMICON) }.clamp(16, 64);
-        let h = make_icon(size, &icon::render(size as u32, tone, remote));
+        let h = make_icon(size, &icon::render(size as u32, tone, remote, style));
         self.icons.insert(key, h);
         h
     }
@@ -964,19 +993,19 @@ fn show_menu(hwnd: HWND) {
         append(menu, MF_STRING | MF_GRAYED, 0, &summary);
         append(menu, MF_SEPARATOR, 0, "");
         if role == Role::Primary {
-            append(menu, MF_STRING, ID_RETURN, "Ramener le curseur sur ce PC");
-            append(menu, MF_STRING | if locked { MF_CHECKED } else { 0 }, ID_LOCK, "Verrouiller le curseur sur ce PC");
+            append(menu, MF_STRING, ID_RETURN, &i18n::t("menu.returnHerePc"));
+            append(menu, MF_STRING | if locked { MF_CHECKED } else { 0 }, ID_LOCK, &i18n::t("menu.lockPc"));
             append(menu, MF_SEPARATOR, 0, "");
         }
-        append(menu, MF_STRING, ID_SETTINGS, "Réglages…");
-        append(menu, MF_STRING, ID_LOG, "Ouvrir le journal");
-        append(menu, MF_STRING, ID_FOLDER, "Ouvrir le dossier de Bascule");
+        append(menu, MF_STRING, ID_SETTINGS, &i18n::t("menu.settings"));
+        append(menu, MF_STRING, ID_LOG, &i18n::t("menu.openLog"));
+        append(menu, MF_STRING, ID_FOLDER, &i18n::t("menu.openFolder"));
         append(menu, MF_SEPARATOR, 0, "");
         let auto = if autostart_enabled() { MF_CHECKED } else { 0 };
-        append(menu, MF_STRING | auto, ID_AUTOSTART, "Lancer au démarrage de Windows");
+        append(menu, MF_STRING | auto, ID_AUTOSTART, &i18n::t("menu.startWithWindows"));
         append(menu, MF_SEPARATOR, 0, "");
-        append(menu, MF_STRING, ID_RESTART, "Redémarrer Bascule");
-        append(menu, MF_STRING, ID_QUIT, "Quitter");
+        append(menu, MF_STRING, ID_RESTART, &i18n::t("menu.restart"));
+        append(menu, MF_STRING, ID_QUIT, &i18n::t("menu.quit"));
         let mut pt = POINT { x: 0, y: 0 };
         GetCursorPos(&mut pt);
         SetForegroundWindow(hwnd);
@@ -1097,6 +1126,12 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) ->
                 _ => {}
             }
             0
+        }
+        // Thème de Windows changé : l'icône monochrome suit la barre des tâches.
+        WM_SETTINGCHANGE => {
+            with_ui(|ui| ui.update_tray());
+            // SAFETY: traitement par défaut.
+            unsafe { DefWindowProcW(hwnd, msg, w, l) }
         }
         WM_DISPLAYCHANGE => {
             with_primary(|s| s.host.layout_dirty = true);
@@ -1221,8 +1256,15 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
     status::on_change(|| post(WM_APP_STATUS, 0, 0));
     crate::api::set_restart_handler(|| post(WM_APP_RESTART, 0, 0));
     UI.with(|u| {
-        *u.borrow_mut() =
-            Some(Ui { hwnd, tray_added: false, icons: HashMap::new(), config_path, args, role: settings.role })
+        *u.borrow_mut() = Some(Ui {
+            hwnd,
+            tray_added: false,
+            icons: HashMap::new(),
+            tray_icon: settings.ui.tray_icon,
+            config_path,
+            args,
+            role: settings.role,
+        })
     });
 
     let hooks = ClipboardHooks { sequence: clip_sequence, sensitive: clip_sensitive };

@@ -6,7 +6,7 @@
 // la combinaison : elle ne déclenche alors aucun raccourci, et les touches que
 // la fenêtre ne reçoit pas (F11, F12…) fonctionnent aussi. Sinon, la fenêtre
 // la relève elle-même.
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, onBeforeUnmount, onDeactivated, ref } from "vue";
 import { NButton, NInput, NInputGroup } from "naive-ui";
 import { daemon } from "../daemon";
 
@@ -126,6 +126,8 @@ function stop() {
 }
 
 onBeforeUnmount(stop);
+// Page quittée (gardée en mémoire) : la saisie s'arrête.
+onDeactivated(stop);
 </script>
 
 <template>
@@ -135,16 +137,16 @@ onBeforeUnmount(stop);
         ref="input"
         :value="text"
         readonly
-        :placeholder="recording ? 'Appuyez sur la combinaison…' : 'Aucun'"
+        :placeholder="recording ? $t('settings.hotkey.press') : $t('common.none')"
         :input-props="{ 'aria-live': 'polite' }"
         class="mono"
       />
       <n-button :type="recording ? 'primary' : 'default'" @click="recording ? stop() : start()">
-        {{ recording ? "Annuler" : "Modifier" }}
+        {{ recording ? $t("common.cancel") : $t("common.edit") }}
       </n-button>
       <n-button
-        title="Désactiver ce raccourci"
-        aria-label="Désactiver ce raccourci"
+        :title="$t('settings.hotkey.disable')"
+        :aria-label="$t('settings.hotkey.disable')"
         :disabled="!model || recording"
         @click="model = ''"
       >

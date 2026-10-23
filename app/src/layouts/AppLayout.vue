@@ -23,6 +23,7 @@ import {
 } from "naive-ui";
 import { IconFileText, IconHome, IconInfoCircle, IconSettings } from "@tabler/icons-vue";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useI18n } from "vue-i18n";
 import logo from "../assets/logo.svg";
 import StatusBadge from "../components/StatusBadge.vue";
 import { useActions } from "../composables/useActions";
@@ -39,6 +40,7 @@ const actions = useActions();
 const route = useRoute();
 const router = useRouter();
 const dialog = useDialog();
+const { t } = useI18n();
 
 provide(
   roleKey,
@@ -60,15 +62,15 @@ watch(
 
 const icon = (c: Component) => () => h(NIcon, null, { default: () => h(c, { stroke: 1.75 }) });
 const menu = computed<MenuOption[]>(() => [
-  { key: "home", label: "Accueil", icon: icon(IconHome) },
+  { key: "home", label: t("nav.home"), icon: icon(IconHome) },
   {
     key: "settings",
     // Pastille : réglages modifiés, pas encore enregistrés.
-    label: () => h(NBadge, { dot: true, show: dirty.value, offset: [8, 2] }, { default: () => "Réglages" }),
+    label: () => h(NBadge, { dot: true, show: dirty.value, offset: [8, 2] }, { default: () => t("nav.settings") }),
     icon: icon(IconSettings),
   },
-  { key: "log", label: "Journal", icon: icon(IconFileText) },
-  { key: "about", label: "À propos", icon: icon(IconInfoCircle) },
+  { key: "log", label: t("nav.log"), icon: icon(IconFileText) },
+  { key: "about", label: t("nav.about"), icon: icon(IconInfoCircle) },
 ]);
 
 const restarting = computed(() => phase.value === "restarting");
@@ -81,8 +83,8 @@ const footer = computed(
   () => !!config.value && (phase.value === "ready" || restarting.value) && (route.name === "settings" || dirty.value),
 );
 const footerText = computed(() => {
-  if (restarting.value) return "Bascule redémarre avec les nouveaux réglages…";
-  return dirty.value ? "Modifications non enregistrées." : "";
+  if (restarting.value) return t("layout.restartingWith");
+  return dirty.value ? t("layout.unsaved") : "";
 });
 
 onMounted(async () => {
@@ -94,10 +96,10 @@ onMounted(async () => {
     if (!dirty.value) return;
     event.preventDefault();
     dialog.warning({
-      title: "Modifications non enregistrées",
-      content: "Fermer sans enregistrer ?",
-      positiveText: "Fermer",
-      negativeText: "Annuler",
+      title: t("layout.closeTitle"),
+      content: t("layout.closeText"),
+      positiveText: t("common.close"),
+      negativeText: t("common.cancel"),
       onPositiveClick: () => void win.destroy(),
     });
   });
@@ -135,7 +137,7 @@ onMounted(async () => {
       <n-layout-header bordered position="absolute" :style="{ height: `${HEADER}px`, padding: '0 24px' }">
         <n-flex align="center" justify="space-between" :wrap="false" style="height: 100%">
           <n-flex vertical :size="0">
-            <n-text strong style="font-size: 18px">{{ route.meta.title }}</n-text>
+            <n-text strong style="font-size: 18px">{{ route.meta.title ? $t(route.meta.title) : "" }}</n-text>
             <n-text depth="3" style="font-size: 13px">{{ subtitle }}</n-text>
           </n-flex>
           <status-badge v-if="phase !== 'loading'" :status="status" :restarting="restarting" />
@@ -156,21 +158,26 @@ onMounted(async () => {
           <n-result
             v-else-if="gated"
             status="info"
-            title="Bascule n'est pas lancé"
-            description="Cette page s'affiche dès que Bascule fonctionne."
+            :title="$t('layout.offlineTitle')"
+            :description="$t('layout.offlineText')"
             style="padding: 60px 0"
           >
             <template #footer>
               <n-button type="primary" :loading="phase === 'starting'" @click="actions.start">
-                Démarrer Bascule
+                {{ $t("layout.start") }}
               </n-button>
             </template>
           </n-result>
           <!-- Transition à la manière d'iOS : la nouvelle page apparaît en
-               fondu avec un léger zoom, l'ancienne disparaît aussitôt. -->
+               fondu avec un léger zoom, l'ancienne disparaît aussitôt (durée
+               de sortie nulle : sinon Vue attendrait la fin des transitions
+               CSS propres aux composants, celles des cartes par exemple).
+               Les pages restent en mémoire : y revenir est immédiat. -->
           <router-view v-else v-slot="{ Component }">
-            <transition name="page" mode="out-in">
-              <component :is="Component" :key="route.name" />
+            <transition name="page" mode="out-in" :duration="{ enter: 250, leave: 0 }">
+              <keep-alive>
+                <component :is="Component" :key="route.name" />
+              </keep-alive>
             </transition>
           </router-view>
         </div>
@@ -179,9 +186,9 @@ onMounted(async () => {
       <n-layout-footer v-if="footer" bordered position="absolute" :style="{ height: `${FOOTER}px`, padding: '0 24px' }">
         <n-flex align="center" :size="10" :wrap="false" style="height: 100%">
           <n-text depth="3" style="flex: 1">{{ footerText }}</n-text>
-          <n-button :disabled="!dirty || busy" @click="settings.reset()">Annuler</n-button>
+          <n-button :disabled="!dirty || busy" @click="settings.reset()">{{ $t("common.cancel") }}</n-button>
           <n-button type="primary" :disabled="!dirty || busy" :loading="busy" @click="actions.save">
-            Enregistrer et redémarrer
+            {{ $t("layout.saveRestart") }}
           </n-button>
         </n-flex>
       </n-layout-footer>
@@ -193,8 +200,8 @@ onMounted(async () => {
 /* Entrée : fondu et léger zoom ; sortie immédiate (aucune transition). */
 .page-enter-active {
   transition:
-    opacity 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
-    transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    opacity 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .page-enter-from {
   opacity: 0;

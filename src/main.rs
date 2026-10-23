@@ -19,6 +19,7 @@ mod config;
 mod crypto;
 mod geometry;
 mod hotkey;
+mod i18n;
 mod icon;
 mod keymap;
 mod logging;
@@ -180,6 +181,7 @@ fn main() {
         Ok(s) => s,
         Err(e) => config_error(&path, &args, &e),
     };
+    i18n::init(settings.ui.language);
     log::info!("rôle : machine {} ; réseau : {:?} ; nom : {}", settings.role.label(), settings.endpoint, settings.name);
 
     if created {
@@ -195,7 +197,8 @@ fn main() {
 /// l'éditeur de texte.
 fn config_error(path: &Path, args: &Args, e: &str) -> ! {
     log::error!("{e}");
-    status::set_conn(status::Conn::Error(format!("configuration invalide : {e}")));
+    i18n::init(config::Language::System);
+    status::set_conn(status::Conn::Error(i18n::tf("status.configInvalid", &[("error", e)])));
     api::set_restart_handler(platform::request_restart);
     match api::launch_settings_app(path, false) {
         Ok(mut child) => {

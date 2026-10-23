@@ -12,6 +12,7 @@
 
 use crate::config::Endpoint;
 use crate::crypto::{self, Sealer};
+use crate::i18n;
 use crate::protocol::{Message, PROTOCOL_VERSION, Role};
 use crate::status::{self, Conn};
 use crossbeam_channel::{Receiver, Sender, bounded, select, unbounded};
@@ -136,13 +137,16 @@ fn manager(
                         }
                         Err(e) => {
                             log::error!("impossible d'écouter sur {addr} : {e}");
-                            status::set_conn(Conn::Error(format!("impossible d'écouter sur {addr} ({e})")));
+                            status::set_conn(Conn::Error(i18n::tf(
+                                "status.listenFailed",
+                                &[("address", addr), ("error", &e.to_string())],
+                            )));
                             std::thread::sleep(Duration::from_secs(5));
                             continue;
                         }
                     }
                 }
-                status::set_conn(waiting(format!("en attente de l'autre machine ({addr})"), &last_error));
+                status::set_conn(waiting(i18n::tf("status.waiting", &[("address", addr)]), &last_error));
                 match listener.as_ref().unwrap().accept() {
                     Ok((stream, peer)) => {
                         log::info!("connexion entrante de {peer}");
@@ -156,7 +160,7 @@ fn manager(
                 }
             }
             Endpoint::Connect(addr) => {
-                status::set_conn(waiting(format!("connexion à {addr}…"), &last_error));
+                status::set_conn(waiting(i18n::tf("status.connecting", &[("address", addr)]), &last_error));
                 match connect(addr) {
                     Ok(stream) => (stream, true),
                     Err(e) => {
@@ -190,7 +194,7 @@ fn manager(
                 }
             }
             Err(SessionError::Auth) => {
-                let msg = "secret incorrect : vérifiez [network] secret sur les deux machines".to_string();
+                let msg = i18n::t("status.wrongSecret");
                 log::error!("{msg}");
                 status::set_conn(Conn::Error(msg.clone()));
                 last_error = Some(msg);
@@ -287,19 +291,18 @@ fn session(
     let (peer_name, peer_os) = match Message::decode(plain) {
         Ok(Message::Hello { version, role, name, os }) => {
             if version != PROTOCOL_VERSION {
-                return Err(SessionError::Refused(format!(
-                    "versions incompatibles (ici {PROTOCOL_VERSION}, chez « {name} » {version}) : installez la même version sur les deux machines"
+                return Err(SessionError::Refused(i18n::tf(
+                    "status.versionMismatch",
+                    &[("here", &PROTOCOL_VERSION.to_string()), ("name", &name), ("there", &version.to_string())],
                 )));
             }
             if role == s.role {
-                return Err(SessionError::Refused(format!(
-                    "les deux machines sont configurées en machine {} : mettez role = \"primary\" sur l'une et \"secondary\" sur l'autre",
-                    role.label()
-                )));
+                let role = i18n::t(if role == Role::Primary { "status.rolePrimary" } else { "status.roleSecondary" });
+                return Err(SessionError::Refused(i18n::tf("status.sameRole", &[("role", &role)])));
             }
             (name, os)
         }
-        _ => return Err(SessionError::Refused("réponse inattendue de l'autre machine".into())),
+        _ => return Err(SessionError::Refused(i18n::t("status.unexpectedReply"))),
     };
 
     // Messages restés en file d'une connexion précédente : obsolètes.

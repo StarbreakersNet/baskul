@@ -170,9 +170,15 @@ impl SecondaryCore {
                 emu.key(code, down, repeat);
                 None
             }
+            // La machine principale reprend la main (raccourci, menu,
+            // verrouillage de session…) : tout est relâché ici.
             Message::ReleaseAll => {
                 self.buttons = [false; 5];
                 emu.release_all();
+                if self.active {
+                    self.active = false;
+                    status::set_remote_active(false);
+                }
                 None
             }
             _ => None,
@@ -315,6 +321,20 @@ mod tests {
         core.handle(&mut emu, Message::Key { code: 0x070039, down: true, repeat: false });
         core.handle(&mut emu, Message::Key { code: 0x070004, down: true, repeat: false });
         assert_eq!(emu.keys, vec![(0x0700e0, true, false), (0x070004, true, false)]);
+    }
+
+    #[test]
+    fn release_all_ends_remote_control() {
+        let mut emu = FakeEmu::default();
+        let mut core = SecondaryCore::new(1.0, BTreeMap::new());
+        core.handle(&mut emu, Message::Jump { exit: None });
+        assert!(core.is_active());
+        core.handle(&mut emu, Message::ReleaseAll);
+        assert!(!core.is_active());
+        // Les déplacements arrivés trop tard sont ignorés.
+        let n = emu.moves.len();
+        core.handle(&mut emu, Message::Motion { dx: 5, dy: 5 });
+        assert_eq!(emu.moves.len(), n);
     }
 
     #[test]

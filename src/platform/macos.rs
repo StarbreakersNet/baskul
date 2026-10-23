@@ -9,8 +9,9 @@
 
 use crate::Args;
 use crate::app::{self, ClipboardHooks, Services};
-use crate::config::{IsoSwap, ScrollCfg, ScrollMode, Settings, SideButtonsMode};
+use crate::config::{IsoSwap, ScrollCfg, ScrollMode, Settings, SideButtonsMode, Smoothness, TrayIcon};
 use crate::geometry::{Layout, Point, Rect};
+use crate::i18n;
 use crate::icon::{self, Tone};
 use crate::keymap::{self, *};
 use crate::net::LinkHandle;
@@ -26,6 +27,7 @@ use objc2::{AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, define_cl
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationPolicy, NSApplicationDelegate, NSControlStateValueOff, NSControlStateValueOn,
     NSEvent, NSEventModifierFlags, NSEventType, NSImage, NSMenu, NSMenuItem, NSPasteboard, NSStatusBar, NSStatusItem,
+    NSWindowOcclusionState,
 };
 use objc2_foundation::{
     NSActivityOptions, NSData, NSObjectProtocol, NSPoint, NSProcessInfo, NSSize, NSString, NSTimer,
@@ -96,6 +98,7 @@ unsafe extern "C" {
     fn CGEventSetFlags(ev: CGEventRef, flags: u64);
     fn CGEventGetFlags(ev: CGEventRef) -> u64;
     fn CGEventSetIntegerValueField(ev: CGEventRef, field: u32, value: i64);
+    fn CGEventSetDoubleValueField(ev: CGEventRef, field: u32, value: f64);
     fn CGEventGetIntegerValueField(ev: CGEventRef, field: u32) -> i64;
     fn CGEventGetDoubleValueField(ev: CGEventRef, field: u32) -> f64;
     fn CGEventGetLocation(ev: CGEventRef) -> CGPoint;
@@ -521,11 +524,13 @@ struct SmoothScroller {
 impl SmoothScroller {
     fn start(cfg: &ScrollCfg) -> SmoothScroller {
         let (tx, rx) = crossbeam_channel::unbounded::<(Instant, smooth::Dir, f64, u64)>();
-        let mut scroller = smooth::Scroller::new(cfg.smooth_speed, cfg.smoothness);
+        let trackpad = cfg.trackpad_simulation && cfg.smoothness == Smoothness::High;
+        let mut scroller = smooth::Scroller::new(cfg.smooth_speed, cfg.smoothness, trackpad);
         let spawned = std::thread::Builder::new().name("bascule-scroll".into()).spawn(move || {
             // SAFETY: source d'événements propre à ce thread.
             let source = unsafe { CGEventSourceCreate(SOURCE_HID_STATE) };
             let mut flags = 0u64;
+            let mut lines = (0.0, 0.0);
             loop {
                 if scroller.is_idle() {
                     // Rien à animer : attente du prochain cran.
@@ -537,19 +542,8 @@ impl SmoothScroller {
                     scroller.tick(at, dir, weight);
                     flags = f;
                 }
-                let (v, h) = scroller.frame(Instant::now());
-                if v != 0 || h != 0 {
-                    // macOS : valeur positive = vers le haut (axe 1) / vers la
-                    // gauche (axe 2).
-                    // SAFETY: événement créé, envoyé puis libéré.
-                    unsafe {
-                        let ev = CGEventCreateScrollWheelEvent2(source, SCROLL_UNIT_PIXEL, 2, v, -h, 0);
-                        if !ev.is_null() {
-                            CGEventSetFlags(ev, flags);
-                            CGEventPost(TAP_HID, ev);
-                            CFRelease(ev);
-                        }
-                    }
+                for ev in scroller.frame(Instant::now()) {
+                    post_smooth_event(source, ev, flags, &mut lines);
                 }
                 std::thread::sleep(smooth::FRAME);
             }
@@ -567,6 +561,87 @@ impl SmoothScroller {
             if n != 0.0 {
                 let _ = self.tx.send((now, if n > 0.0 { pos } else { neg }, n.abs(), flags));
             }
+        }
+    }
+}
+
+// Champs non documentés des événements de défilement et de geste (voir Mac
+// Mouse Fix, GestureScrollSimulator.m).
+const F_EVENT_TYPE: u32 = 55;
+const F_SCROLL_PHASE: u32 = 99;
+const F_SCROLL_MOMENTUM_PHASE: u32 = 123;
+const F_SCROLL_INVERTED: u32 = 137;
+const F_GESTURE_HID_TYPE: u32 = 110;
+const F_GESTURE_SCROLL_X: u32 = 116;
+const F_GESTURE_SCROLL_Y: u32 = 119;
+const F_GESTURE_PHASE: u32 = 132;
+const HID_EVENT_SCROLL: i64 = 6;
+
+/// Envoie un événement du défilement fluide. `lines` : fractions de ligne
+/// pas encore envoyées (une ligne = 10 pixels).
+fn post_smooth_event(source: CGEventSourceRef, ev: smooth::Event, flags: u64, lines: &mut (f64, f64)) {
+    use smooth::{Event, GesturePhase, MomentumPhase};
+    let (v, h, phase, momentum) = match ev {
+        Event::Scroll { v, h } => {
+            // macOS : valeur positive = vers le haut (axe 1) / vers la gauche (axe 2).
+            // SAFETY: événement créé, envoyé puis libéré.
+            unsafe {
+                let e = CGEventCreateScrollWheelEvent2(source, SCROLL_UNIT_PIXEL, 2, v, -h, 0);
+                if !e.is_null() {
+                    CGEventSetFlags(e, flags);
+                    CGEventPost(TAP_HID, e);
+                    CFRelease(e);
+                }
+            }
+            return;
+        }
+        Event::Gesture { v, h, phase } => (v, -h, phase as i64, 0),
+        Event::Momentum { v, h, phase } => (v, -h, 0, phase as i64),
+    };
+    if phase == GesturePhase::Began as i64 || momentum == MomentumPhase::Begin as i64 {
+        *lines = (0.0, 0.0);
+    }
+    // Lignes : fractions cumulées d'un événement à l'autre.
+    lines.0 += v as f64 / 10.0;
+    lines.1 += h as f64 / 10.0;
+    let (l1, l2) = (lines.0.trunc(), lines.1.trunc());
+    lines.0 -= l1;
+    lines.1 -= l2;
+    let fixed = |l: f64| (l * 65536.0) as i64;
+    // SAFETY: événements créés, remplis, envoyés puis libérés.
+    unsafe {
+        let e = CGEventCreate(null_mut());
+        if e.is_null() {
+            return;
+        }
+        CGEventSetIntegerValueField(e, F_EVENT_TYPE, EV_SCROLL as i64);
+        CGEventSetIntegerValueField(e, F_SCROLL_IS_CONTINUOUS, 1);
+        CGEventSetIntegerValueField(e, F_SCROLL_INVERTED, 1);
+        CGEventSetIntegerValueField(e, F_SCROLL_DELTA_1, l1 as i64);
+        CGEventSetIntegerValueField(e, F_SCROLL_POINT_1, v as i64);
+        CGEventSetIntegerValueField(e, F_SCROLL_FIXED_1, fixed(l1));
+        CGEventSetIntegerValueField(e, F_SCROLL_DELTA_2, l2 as i64);
+        CGEventSetIntegerValueField(e, F_SCROLL_POINT_2, h as i64);
+        CGEventSetIntegerValueField(e, F_SCROLL_FIXED_2, fixed(l2));
+        CGEventSetIntegerValueField(e, F_SCROLL_PHASE, phase);
+        CGEventSetIntegerValueField(e, F_SCROLL_MOMENTUM_PHASE, momentum);
+        CGEventSetFlags(e, flags);
+        CGEventPost(TAP_SESSION, e);
+        CFRelease(e);
+        // Le geste lui-même (événement « gesture » de sous-type défilement).
+        if phase != 0 {
+            let g = CGEventCreate(null_mut());
+            if g.is_null() {
+                return;
+            }
+            CGEventSetIntegerValueField(g, F_EVENT_TYPE, EV_GESTURE as i64);
+            CGEventSetIntegerValueField(g, F_GESTURE_HID_TYPE, HID_EVENT_SCROLL);
+            let gesture = |d: i32| if d == 0 { -0.0 } else { d as f64 * 1.67 };
+            CGEventSetDoubleValueField(g, F_GESTURE_SCROLL_X, gesture(h));
+            CGEventSetDoubleValueField(g, F_GESTURE_SCROLL_Y, gesture(v));
+            CGEventSetIntegerValueField(g, F_GESTURE_PHASE, phase);
+            CGEventPost(TAP_SESSION, g);
+            CFRelease(g);
         }
     }
 }
@@ -1286,6 +1361,11 @@ struct MacUi {
     login_item: Retained<NSMenuItem>,
     _controller: Retained<Controller>,
     last: Option<Snapshot>,
+    menu: Retained<NSMenu>,
+    /// Depuis quand l'icône n'est plus à l'écran.
+    hidden_since: Option<Instant>,
+    recreated_at: Option<Instant>,
+    tray_icon: TrayIcon,
     role: Role,
     config_path: PathBuf,
     args: Args,
@@ -1429,20 +1509,33 @@ fn menu_item(
     }
 }
 
+/// Nom de sauvegarde de l'icône : macOS garde sa place (déplaçable avec
+/// ⌘ + glisser), y compris après un redémarrage de Bascule.
+const STATUS_AUTOSAVE: &str = "fr.bascule.status";
+
 /// Image de la barre des menus : la même icône que sous Windows (voir
-/// `icon.rs`), dessinée en 36 pixels pour 18 points (écrans Retina).
-fn status_image(snap: &Snapshot) -> Option<Retained<NSImage>> {
+/// `icon.rs`), dessinée en 36 pixels pour 18 points (écrans Retina). En
+/// monochrome, c'est une image « modèle » : macOS la colore comme les autres
+/// icônes de la barre des menus (claire ou sombre, sélectionnée…).
+fn status_image(snap: &Snapshot, style: TrayIcon) -> Option<Retained<NSImage>> {
     const PX: u32 = 36;
-    let rgba = icon::render(PX, Tone::of(&snap.conn), snap.remote_active);
+    let mono = style == TrayIcon::Mono;
+    let rgba = icon::render(
+        PX,
+        Tone::of(&snap.conn),
+        snap.remote_active,
+        if mono { icon::Style::Mono([0, 0, 0]) } else { icon::Style::Color },
+    );
     let png = crate::clipboard::encode_png(PX, PX, &rgba)?;
     let img = NSImage::initWithData(NSImage::alloc(), &NSData::with_bytes(&png))?;
     img.setSize(NSSize::new(18.0, 18.0));
+    img.setTemplate(mono);
     Some(img)
 }
 
 fn update_status_item(ui: &MacUi, mtm: MainThreadMarker, snap: &Snapshot) {
     if let Some(button) = ui.item.button(mtm) {
-        match status_image(snap) {
+        match status_image(snap, ui.tray_icon) {
             Some(img) => {
                 button.setImage(Some(&img));
                 button.setTitle(&NSString::from_str(""));
@@ -1455,6 +1548,22 @@ fn update_status_item(ui: &MacUi, mtm: MainThreadMarker, snap: &Snapshot) {
         button.setToolTip(Some(&NSString::from_str(&format!("Bascule — {}", snap.summary()))));
     }
     ui.status_line.setTitle(&NSString::from_str(&snap.summary()));
+}
+
+/// Remplace l'icône de la barre des menus par une nouvelle (même menu, même
+/// place).
+fn recreate_status_item(ui: &mut MacUi, mtm: MainThreadMarker) {
+    let bar = NSStatusBar::systemStatusBar();
+    bar.removeStatusItem(&ui.item);
+    let item = bar.statusItemWithLength(-1.0);
+    item.setAutosaveName(Some(&NSString::from_str(STATUS_AUTOSAVE)));
+    item.setMenu(Some(&ui.menu));
+    ui.item = item;
+    ui.recreated_at = Some(Instant::now());
+    ui.hidden_since = None;
+    let snap = status::snapshot();
+    update_status_item(ui, mtm, &snap);
+    ui.last = Some(snap);
 }
 
 fn ui_force_refresh(mtm: MainThreadMarker) {
@@ -1500,7 +1609,7 @@ fn ui_tick(mtm: MainThreadMarker) {
                 ensure_tap();
             }
         } else {
-            status::set_warning(Some("autorisation « Accessibilité » requise".into()));
+            status::set_warning(Some(i18n::t("status.needAccessibility")));
         }
     }
     if role == Role::Primary {
@@ -1519,6 +1628,36 @@ fn ui_tick(mtm: MainThreadMarker) {
             log::warn!("icône de la barre des menus masquée : réaffichage");
             ui.item.setVisible(true);
         }
+        // Image perdue (bouton vide) : on la redessine.
+        if ui.item.button(mtm).is_some_and(|b| b.image().is_none() && b.title().length() == 0) && ui.last.is_some() {
+            log::warn!("icône de la barre des menus sans image : nouveau dessin");
+            update_status_item(ui, mtm, &status::snapshot());
+        }
+        // Icône absente de l'écran (cachée par macOS, ou disparue) : notée
+        // dans le journal, puis recréée si cela dure.
+        let on_screen = ui
+            .item
+            .button(mtm)
+            .and_then(|b| b.window())
+            .is_some_and(|w| w.occlusionState().contains(NSWindowOcclusionState::Visible));
+        match (on_screen, ui.hidden_since) {
+            (true, Some(_)) => {
+                log::info!("icône de la barre des menus de nouveau visible");
+                ui.hidden_since = None;
+            }
+            (false, None) => {
+                log::info!("icône de la barre des menus absente de l'écran");
+                ui.hidden_since = Some(Instant::now());
+            }
+            (false, Some(since)) => {
+                let due = ui.recreated_at.is_none_or(|t| t.elapsed() > Duration::from_secs(120));
+                if since.elapsed() > Duration::from_secs(10) && due {
+                    log::warn!("icône de la barre des menus toujours absente : recréation");
+                    recreate_status_item(ui, mtm);
+                }
+            }
+            (true, None) => {}
+        }
         ui.access_item.setHidden(ui.permissions_ok);
         ui.login_item.setState(if login_item_enabled() { NSControlStateValueOn } else { NSControlStateValueOff });
         if let (Some(item), Some(l)) = (&ui.lock_item, locked) {
@@ -1536,7 +1675,7 @@ fn ensure_tap() {
     let tap = create_tap();
     if tap.is_null() {
         log::error!("capture du clavier et de la souris impossible (autorisations ?)");
-        status::set_warning(Some("capture impossible : vérifiez les autorisations".into()));
+        status::set_warning(Some(i18n::t("status.captureFailed")));
         return;
     }
     log::info!("capture du clavier et de la souris active");
@@ -1662,37 +1801,35 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
     let controller = Controller::new(mtm);
     app.setDelegate(Some(ProtocolObject::from_ref(&*controller)));
     let item = NSStatusBar::systemStatusBar().statusItemWithLength(-1.0);
-    // Nom de sauvegarde : macOS garde la place de l'icône (déplaçable avec
-    // ⌘ + glisser), y compris après un redémarrage de Bascule.
-    item.setAutosaveName(Some(&NSString::from_str("fr.bascule.status")));
+    item.setAutosaveName(Some(&NSString::from_str(STATUS_AUTOSAVE)));
     let menu = NSMenu::new(mtm);
     menu.setAutoenablesItems(false);
 
     let status_line = menu_item(mtm, "Bascule", None, &controller);
     status_line.setEnabled(false);
     menu.addItem(&status_line);
-    let access_item = menu_item(mtm, "Autoriser Bascule (Accessibilité)…", Some(sel!(openAccessibility:)), &controller);
+    let access_item = menu_item(mtm, &i18n::t("menu.allowAccessibility"), Some(sel!(openAccessibility:)), &controller);
     access_item.setHidden(true);
     menu.addItem(&access_item);
     menu.addItem(&NSMenuItem::separatorItem(mtm));
     let lock_item = if settings.role == Role::Primary {
-        menu.addItem(&menu_item(mtm, "Ramener le curseur sur ce Mac", Some(sel!(returnHere:)), &controller));
-        let l = menu_item(mtm, "Verrouiller le curseur sur ce Mac", Some(sel!(toggleLock:)), &controller);
+        menu.addItem(&menu_item(mtm, &i18n::t("menu.returnHereMac"), Some(sel!(returnHere:)), &controller));
+        let l = menu_item(mtm, &i18n::t("menu.lockMac"), Some(sel!(toggleLock:)), &controller);
         menu.addItem(&l);
         menu.addItem(&NSMenuItem::separatorItem(mtm));
         Some(l)
     } else {
         None
     };
-    menu.addItem(&menu_item(mtm, "Réglages…", Some(sel!(openSettings:)), &controller));
-    menu.addItem(&menu_item(mtm, "Ouvrir le journal", Some(sel!(openLog:)), &controller));
-    menu.addItem(&menu_item(mtm, "Ouvrir le dossier de Bascule", Some(sel!(openFolder:)), &controller));
+    menu.addItem(&menu_item(mtm, &i18n::t("menu.settings"), Some(sel!(openSettings:)), &controller));
+    menu.addItem(&menu_item(mtm, &i18n::t("menu.openLog"), Some(sel!(openLog:)), &controller));
+    menu.addItem(&menu_item(mtm, &i18n::t("menu.openFolder"), Some(sel!(openFolder:)), &controller));
     menu.addItem(&NSMenuItem::separatorItem(mtm));
-    let login_item = menu_item(mtm, "Ouvrir à l'ouverture de session", Some(sel!(toggleLogin:)), &controller);
+    let login_item = menu_item(mtm, &i18n::t("menu.openAtLogin"), Some(sel!(toggleLogin:)), &controller);
     menu.addItem(&login_item);
     menu.addItem(&NSMenuItem::separatorItem(mtm));
-    menu.addItem(&menu_item(mtm, "Redémarrer Bascule", Some(sel!(restart:)), &controller));
-    menu.addItem(&menu_item(mtm, "Quitter Bascule", Some(sel!(quit:)), &controller));
+    menu.addItem(&menu_item(mtm, &i18n::t("menu.restart"), Some(sel!(restart:)), &controller));
+    menu.addItem(&menu_item(mtm, &i18n::t("menu.quit"), Some(sel!(quit:)), &controller));
     item.setMenu(Some(&menu));
 
     let hooks = ClipboardHooks { sequence: clip_sequence, sensitive: clip_sensitive };
@@ -1704,7 +1841,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
                 log::warn!("autorisation « Accessibilité » manquante : demande à macOS");
                 // SAFETY: affiche la demande d'autorisation du système.
                 unsafe { CGRequestPostEventAccess() };
-                status::set_warning(Some("autorisation « Accessibilité » requise".into()));
+                status::set_warning(Some(i18n::t("status.needAccessibility")));
             }
             app::start_secondary(&settings, hooks, MacEmulator::new(&settings))
         }
@@ -1777,7 +1914,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
                     CGRequestListenEventAccess();
                     CGRequestPostEventAccess();
                 }
-                status::set_warning(Some("autorisation « Accessibilité » requise".into()));
+                status::set_warning(Some(i18n::t("status.needAccessibility")));
             }
             services
         }
@@ -1792,6 +1929,10 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
             login_item,
             _controller: controller.clone(),
             last: None,
+            menu: menu.clone(),
+            hidden_since: None,
+            recreated_at: None,
+            tray_icon: settings.ui.tray_icon,
             role: settings.role,
             config_path,
             args,

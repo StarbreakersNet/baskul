@@ -16,66 +16,69 @@ const mode = computed(() => props.config.scroll.mode);
 <template>
   <div>
     <linux-notice />
-    <setting-row label="Vitesse de la souris" help="Multiplie les déplacements reçus. 1 = identique.">
+    <setting-row :label="$t('settings.mouse.speed')" :help="$t('settings.mouse.speedHelp')">
       <number-input v-model="config.mouse.speed" :min="0.05" :max="20" :step="0.05" suffix="×" />
     </setting-row>
-    <setting-row label="Défilement">
-      <template #help>
-        Par lignes, comme une molette Windows ; au pixel, plus précis ; fluide, animé et accéléré comme avec Mac
-        Mouse Fix (macOS).
-      </template>
+    <setting-row :label="$t('settings.mouse.scrolling')" :help="$t('settings.mouse.scrollingHelp')">
       <choice-group
         v-model="config.scroll.mode"
         :options="[
-          { value: 'lines', label: 'Par lignes' },
-          { value: 'pixels', label: 'Au pixel' },
-          { value: 'smooth', label: 'Fluide', disabled: os !== 'macos' },
+          { value: 'lines', label: $t('settings.mouse.lines') },
+          { value: 'pixels', label: $t('settings.mouse.pixels') },
+          { value: 'smooth', label: $t('settings.mouse.smooth'), disabled: os !== 'macos' },
         ]"
       />
     </setting-row>
     <template v-if="mode === 'smooth'">
-      <setting-row label="Vitesse" help="Distance d'un cran ; les crans rapprochés vont plus loin.">
+      <setting-row :label="$t('settings.mouse.smoothSpeed')" :help="$t('settings.mouse.smoothSpeedHelp')">
         <choice-group
           v-model="config.scroll.smooth_speed"
           :options="[
-            { value: 'low', label: 'Lente' },
-            { value: 'medium', label: 'Moyenne' },
-            { value: 'high', label: 'Rapide' },
+            { value: 'low', label: $t('settings.mouse.slow') },
+            { value: 'medium', label: $t('settings.mouse.medium') },
+            { value: 'high', label: $t('settings.mouse.fast') },
           ]"
         />
       </setting-row>
-      <setting-row label="Douceur" help="Durée de l'élan après chaque cran. Mêmes réglages que dans Mac Mouse Fix.">
+      <setting-row :label="$t('settings.mouse.smoothness')" :help="$t('settings.mouse.smoothnessHelp')">
         <choice-group
           v-model="config.scroll.smoothness"
           :options="[
-            { value: 'regular', label: 'Normale' },
-            { value: 'high', label: 'Élevée' },
+            { value: 'regular', label: $t('settings.mouse.regular') },
+            { value: 'high', label: $t('settings.mouse.high') },
           ]"
         />
       </setting-row>
+      <setting-row
+        v-if="config.scroll.smoothness === 'high'"
+        :label="$t('settings.mouse.trackpad')"
+        :help="$t('settings.mouse.trackpadHelp')"
+      >
+        <n-switch v-model:value="config.scroll.trackpad_simulation" />
+      </setting-row>
     </template>
-    <setting-row v-else-if="mode === 'lines'" label="Lignes par cran">
+    <setting-row v-else-if="mode === 'lines'" :label="$t('settings.mouse.linesPerNotch')">
       <number-input v-model="config.scroll.lines_per_notch" :min="0.1" :max="50" :step="0.5" />
     </setting-row>
-    <setting-row v-else label="Pixels par cran">
+    <setting-row v-else :label="$t('settings.mouse.pixelsPerNotch')">
       <number-input v-model="config.scroll.pixels_per_notch" :min="1" :max="2000" :step="10" />
     </setting-row>
-    <setting-row label="Inverser le défilement vertical">
+    <setting-row :label="$t('settings.mouse.invertVertical')">
       <n-switch v-model:value="config.scroll.invert_vertical" />
     </setting-row>
-    <setting-row label="Inverser le défilement horizontal">
+    <setting-row :label="$t('settings.mouse.invertHorizontal')">
       <n-switch v-model:value="config.scroll.invert_horizontal" />
     </setting-row>
     <setting-row
-      label="Boutons latéraux (4 et 5)"
-      help="Boutons pour Chrome, Firefox, VS Code… Geste « balayage » pour Safari, le Finder, Xcode…"
+      :label="$t('settings.mouse.sideButtons')"
+      :help="$t('settings.mouse.sideButtonsHelp')"
       os="macos"
     >
       <choice-group
         v-model="config.buttons.side_buttons"
         :options="[
-          { value: 'buttons', label: 'Boutons' },
-          { value: 'swipe', label: 'Geste balayage' },
+          { value: 'buttons', label: $t('settings.mouse.buttons') },
+          { value: 'swipe', label: $t('settings.mouse.swipe') },
         ]"
       />
     </setting-row>

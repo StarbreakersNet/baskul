@@ -16,6 +16,7 @@ export interface BasculeConfig {
     pixels_per_notch: number;
     smooth_speed: "low" | "medium" | "high";
     smoothness: "regular" | "high";
+    trackpad_simulation: boolean;
     invert_vertical: boolean;
     invert_horizontal: boolean;
   };
@@ -23,6 +24,7 @@ export interface BasculeConfig {
   keyboard: { iso_swap: "auto" | "on" | "off"; media_keys: "cursor" | "primary" | "secondary"; remap: Record<string, string> };
   clipboard: { enabled: boolean; images: boolean; html: boolean; max_size_mb: number; skip_sensitive: boolean };
   hotkeys: { switch_to_secondary: string; return_to_primary: string; toggle_lock: string };
+  ui: { theme: "system" | "light" | "dark"; language: "system" | "fr" | "en"; tray_icon: "color" | "mono" };
   log: { level: string };
 }
 

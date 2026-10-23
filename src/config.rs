@@ -158,6 +158,9 @@ pub struct ScrollCfg {
     pub pixels_per_notch: f64,
     pub smooth_speed: SmoothSpeed,
     pub smoothness: Smoothness,
+    /// Douceur élevée : défilement simulé comme sur un trackpad (gestes et
+    /// élan), comme l'option de Mac Mouse Fix.
+    pub trackpad_simulation: bool,
     pub invert_vertical: bool,
     pub invert_horizontal: bool,
 }
@@ -170,6 +173,7 @@ impl Default for ScrollCfg {
             pixels_per_notch: 60.0,
             smooth_speed: SmoothSpeed::Medium,
             smoothness: Smoothness::Regular,
+            trackpad_simulation: false,
             invert_vertical: false,
             invert_horizontal: false,
         }
@@ -240,6 +244,45 @@ impl Default for HotkeysCfg {
     }
 }
 
+/// Thème de l'app de réglages.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Theme {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
+/// Langue de Bascule (app de réglages et menus).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Language {
+    #[default]
+    System,
+    Fr,
+    En,
+}
+
+/// Style de l'icône de la barre des menus / de la zone de notification.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TrayIcon {
+    /// En couleurs (l'état de la connexion se lit à la couleur).
+    #[default]
+    Color,
+    /// Monochrome, comme les autres icônes du système.
+    Mono,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct UiCfg {
+    pub theme: Theme,
+    pub language: Language,
+    pub tray_icon: TrayIcon,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct LogCfg {
@@ -275,6 +318,8 @@ pub struct Config {
     #[serde(default)]
     pub hotkeys: HotkeysCfg,
     #[serde(default)]
+    pub ui: UiCfg,
+    #[serde(default)]
     pub log: LogCfg,
 }
 
@@ -306,6 +351,7 @@ pub struct Settings {
     pub switch_hotkey: Option<Hotkey>,
     pub return_hotkey: Option<Hotkey>,
     pub lock_hotkey: Option<Hotkey>,
+    pub ui: UiCfg,
     pub log_level: log::LevelFilter,
 }
 
@@ -388,6 +434,7 @@ impl Config {
             switch_hotkey,
             return_hotkey,
             lock_hotkey,
+            ui: self.ui.clone(),
             log_level,
         })
     }
@@ -611,6 +658,9 @@ pixels_per_notch = 60.0
 smooth_speed = "medium"
 # Douceur : "regular" (animation courte) ou "high" (élan plus long).
 smoothness = "regular"
+# Douceur "high" : simulation du trackpad (gestes et élan, rebond en bout de
+# page…), comme l'option de Mac Mouse Fix.
+trackpad_simulation = false
 # Inverser le sens de défilement.
 invert_vertical = false
 invert_horizontal = false
@@ -663,6 +713,15 @@ return_to_primary = "Shift+F11"
 # (Machine principale) Verrouille / déverrouille le curseur sur l'écran courant.
 # Exemple : "ScrollLock". Vide = désactivé.
 toggle_lock = ""
+
+[ui]
+# Thème de l'app de Bascule : "system", "light" (clair) ou "dark" (sombre).
+theme = "system"
+# Langue : "system" (celle du système), "fr" ou "en".
+language = "system"
+# Icône de la barre des menus / de la zone de notification : "color" ou
+# "mono" (monochrome, assortie aux autres icônes du système).
+tray_icon = "color"
 
 [log]
 # "error", "warn", "info", "debug" ou "trace".

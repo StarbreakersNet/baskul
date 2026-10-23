@@ -15,23 +15,22 @@ const rules = computed(() => Object.keys(props.config.keyboard.remap).length);
   <div>
     <linux-notice />
     <setting-row
-      label="Touches multimédia"
-      help="Volume, lecture… : sur la machine où se trouve le curseur, ou toujours sur l'une des deux machines."
+      :label="$t('settings.keyboard.mediaKeys')"
+      :help="$t('settings.keyboard.mediaKeysHelp')"
       machine="primary"
     >
       <choice-group
         v-model="config.keyboard.media_keys"
         :options="[
-          { value: 'cursor', label: 'Machine du curseur' },
-          { value: 'primary', label: 'Machine principale' },
-          { value: 'secondary', label: 'Machine pilotée' },
+          { value: 'cursor', label: $t('settings.keyboard.cursorMachine') },
+          { value: 'primary', label: $t('settings.keyboard.primaryMachine') },
+          { value: 'secondary', label: $t('settings.keyboard.secondaryMachine') },
         ]"
       />
     </setting-row>
-    <setting-row label="Remappage de touches" machine="secondary">
-      <template #help>Section <code>[keyboard.remap]</code> du fichier de configuration.</template>
-      <n-text depth="3">{{ rules ? `${rules} règle${rules > 1 ? "s" : ""}` : "Aucune règle" }}</n-text>
-      <n-button size="small" @click="emit('openFile')">Ouvrir le fichier</n-button>
+    <setting-row :label="$t('settings.keyboard.remap')" :help="$t('settings.keyboard.remapHelp')" machine="secondary">
+      <n-text depth="3">{{ $t("settings.keyboard.rules", rules) }}</n-text>
+      <n-button size="small" @click="emit('openFile')">{{ $t("common.openFile") }}</n-button>
     </setting-row>
   </div>
 </template>

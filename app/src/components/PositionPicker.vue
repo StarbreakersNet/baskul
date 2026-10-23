@@ -16,29 +16,24 @@ const colors = computed(() => ({
   screen: vars.value.dividerColor,
 }));
 
-const spots: { edge: Edge; label: string }[] = [
-  { edge: "top", label: "En haut" },
-  { edge: "left", label: "À gauche" },
-  { edge: "right", label: "À droite" },
-  { edge: "bottom", label: "En bas" },
-];
+const spots: Edge[] = ["top", "left", "right", "bottom"];
 </script>
 
 <template>
-  <div class="pos" role="radiogroup" aria-label="Position de l'autre écran">
+  <div class="pos" role="radiogroup" :aria-label="$t('settings.position.aria')">
     <button
-      v-for="s in spots"
-      :key="s.edge"
+      v-for="edge in spots"
+      :key="edge"
       type="button"
       role="radio"
-      :aria-checked="model === s.edge"
-      :class="['spot', `p-${s.edge}`, { on: model === s.edge }]"
+      :aria-checked="model === edge"
+      :class="['spot', `p-${edge}`, { on: model === edge }]"
       :disabled="disabled"
-      @click="model = s.edge"
+      @click="model = edge"
     >
-      {{ s.label }}
+      {{ $t(`settings.position.${edge}`) }}
     </button>
-    <div class="me">Cet écran</div>
+    <div class="me">{{ $t("settings.position.thisScreen") }}</div>
   </div>
 </template>
 

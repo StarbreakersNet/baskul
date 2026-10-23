@@ -9,34 +9,34 @@ defineProps<{ config: BasculeConfig }>();
 
 <template>
   <div>
-    <setting-row label="Partager le presse-papiers">
+    <setting-row :label="$t('settings.clipboard.share')">
       <n-switch v-model:value="config.clipboard.enabled" />
     </setting-row>
-    <setting-row label="Images" :disabled="!config.clipboard.enabled">
+    <setting-row :label="$t('settings.clipboard.images')" :disabled="!config.clipboard.enabled">
       <n-switch v-model:value="config.clipboard.images" :disabled="!config.clipboard.enabled" />
     </setting-row>
     <setting-row
-      label="Texte mis en forme"
-      help="Conserve la mise en forme (HTML) quand elle est disponible."
+      :label="$t('settings.clipboard.html')"
+      :help="$t('settings.clipboard.htmlHelp')"
       :disabled="!config.clipboard.enabled"
     >
       <n-switch v-model:value="config.clipboard.html" :disabled="!config.clipboard.enabled" />
     </setting-row>
     <setting-row
-      label="Ignorer les contenus sensibles"
-      help="Mots de passe copiés depuis un gestionnaire de mots de passe."
+      :label="$t('settings.clipboard.sensitive')"
+      :help="$t('settings.clipboard.sensitiveHelp')"
       :disabled="!config.clipboard.enabled"
     >
       <n-switch v-model:value="config.clipboard.skip_sensitive" :disabled="!config.clipboard.enabled" />
     </setting-row>
-    <setting-row label="Taille maximale" :disabled="!config.clipboard.enabled">
+    <setting-row :label="$t('settings.clipboard.maxSize')" :disabled="!config.clipboard.enabled">
       <number-input
         v-model="config.clipboard.max_size_mb"
         :min="1"
         :max="1024"
         :precision="0"
         :disabled="!config.clipboard.enabled"
-        suffix="Mo"
+        :suffix="$t('settings.clipboard.mb')"
       />
     </setting-row>
   </div>

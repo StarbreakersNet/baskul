@@ -56,6 +56,9 @@ pixels_per_notch = 60.0
 smooth_speed = "medium"
 # Douceur : "regular" (animation courte) ou "high" (élan plus long).
 smoothness = "regular"
+# Douceur "high" : simulation du trackpad (gestes et élan, rebond en bout de
+# page…), comme l'option de Mac Mouse Fix.
+trackpad_simulation = false
 # Inverser le sens de défilement.
 invert_vertical = false
 invert_horizontal = false
@@ -108,6 +111,15 @@ return_to_primary = "Shift+F11"
 # (Machine principale) Verrouille / déverrouille le curseur sur l'écran courant.
 # Exemple : "ScrollLock". Vide = désactivé.
 toggle_lock = ""
+
+[ui]
+# Thème de l'app de Bascule : "system", "light" (clair) ou "dark" (sombre).
+theme = "system"
+# Langue : "system" (celle du système), "fr" ou "en".
+language = "system"
+# Icône de la barre des menus / de la zone de notification : "color" ou
+# "mono" (monochrome, assortie aux autres icônes du système).
+tray_icon = "color"
 
 [log]
 # "error", "warn", "info", "debug" ou "trace".

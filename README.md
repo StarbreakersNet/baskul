@@ -20,18 +20,18 @@ Bascule partage **le clavier, la souris et le presse-papiers** de votre PC Windo
 
 1. Créez un dépôt **privé** sur GitHub et poussez-y ce dossier.
 2. Mettez à jour `version` dans la section `[workspace.package]` de `Cargo.toml` (c'est la version affichée par les apps), puis, au choix :
-   - onglet **Actions** → **build** → **Run workflow**, en cochant **Publier une Release** : le tag (la version de `Cargo.toml`, par exemple `0.4.0`) est créé avec la Release ;
+   - onglet **Actions** → **release** → **Run workflow** : le tag (la version de `Cargo.toml`, par exemple `0.5.0`) est créé avec la Release ;
    - ou créez un tag et poussez-le :
      ```bash
-     git tag 0.4.0
-     git push origin 0.4.0
+     git tag 0.5.0
+     git push origin 0.5.0
      ```
 3. À la fin, une **Release** apparaît dans la page **Releases** du dépôt, avec :
    - `Bascule-Windows.zip` : `bascule.exe` et son app de réglages `bascule-settings.exe` ;
    - `Bascule-macOS.zip` : `Bascule.app`, universelle (Apple Silicon et Intel), app de réglages incluse ;
    - `Bascule-Linux.tar.gz` : la [version Linux minimale](#linux-version-minimale).
 
-Pour compiler sans publier de Release, lancez le workflow à la main sans cocher **Publier une Release**. Les programmes sont alors dans les *artifacts*, en bas de la page de l'exécution.
+Pour compiler sans publier de Release : onglet **Actions** → **build** → **Run workflow**. Les programmes sont alors dans les *artifacts*, en bas de la page de l'exécution. Le workflow **release** réutilise ce workflow **build** (tests puis compilation), puis publie.
 
 ### Option B : compiler soi-même
 
@@ -151,6 +151,7 @@ Le fichier complet et commenté est dans [`docs/config.exemple.toml`](docs/confi
 | | `pixels_per_notch = 60.0` | Vitesse en mode pixels |
 | | `smooth_speed = "medium"` | Mode fluide : vitesse `"low"`, `"medium"` ou `"high"`, comme le réglage « Vitesse » de Mac Mouse Fix |
 | | `smoothness = "regular"` | Mode fluide : `"regular"` (animation courte) ou `"high"` (élan plus long), comme le réglage « Douceur » de Mac Mouse Fix |
+| | `trackpad_simulation = false` | Douceur `"high"` : défilement envoyé comme un geste de trackpad suivi de son élan (rebond en bout de page…), comme l'option de Mac Mouse Fix |
 | | `invert_vertical`, `invert_horizontal` | Inverser le sens |
 | `[buttons]` (Mac) | `side_buttons = "buttons"` / `"swipe"` | Boutons 4/5 bruts (Chrome, Firefox, VS Code…) ou geste précédent/suivant (Safari, Finder, Xcode…) |
 | `[mouse]` (Mac) | `speed = 1.0` | Vitesse du curseur sur le Mac |
@@ -162,11 +163,14 @@ Le fichier complet et commenté est dans [`docs/config.exemple.toml`](docs/confi
 | `[hotkeys]` (PC) | `switch_to_secondary`, `return_to_primary` | Raccourcis pour aller sur le Mac (`"Shift+F12"`) et revenir sur le PC (`"Shift+F11"`) |
 | | `toggle_lock` | Raccourci de verrouillage du curseur (ex. `"ScrollLock"`) |
 | `[clipboard]` | `enabled`, `images`, `html`, `max_size_mb`, `skip_sensitive` | Presse-papiers partagé |
+| `[ui]` | `theme = "system"` / `"light"` / `"dark"` | Thème de la fenêtre de Bascule |
+| | `language = "system"` / `"fr"` / `"en"` | Langue de Bascule (fenêtre et menus) |
+| | `tray_icon = "color"` / `"mono"` | Icône en couleurs, ou monochrome (assortie aux icônes du système) |
 | `[log]` | `level = "debug"` | Journal détaillé, utile pour un diagnostic |
 
 Pour le défilement, commencez par `mode = "lines"`. Si la vitesse varie trop d'une app à l'autre (Safari vs Chrome), essayez `mode = "pixels"` avec `pixels_per_notch` entre 60 et 120. Pour retrouver le défilement de Mac Mouse Fix, choisissez `mode = "smooth"` avec la même vitesse et la même douceur que dans Mac Mouse Fix.
 
-> **Mac Mouse Fix** et les logiciels du même genre ne s'activent que si une souris est branchée sur le Mac : ils n'agissent donc pas sur la souris du PC. Le mode `"smooth"` de Bascule reprend leur algorithme : la vitesse de rotation de la molette est mesurée (les crans rapprochés vont plus loin), plusieurs gestes rapides enchaînés accélèrent encore, et chaque cran est animé à vitesse constante puis freiné jusqu'à l'arrêt ; un changement de sens arrête net le défilement.
+> **Mac Mouse Fix** et les logiciels du même genre ne s'activent que si une souris est branchée sur le Mac : ils n'agissent donc pas sur la souris du PC. Le mode `"smooth"` de Bascule reprend leur algorithme : la vitesse de rotation de la molette est mesurée (les crans rapprochés vont plus loin), plusieurs gestes rapides enchaînés accélèrent encore, et chaque cran est animé à vitesse constante puis freiné jusqu'à l'arrêt ; un changement de sens arrête net le défilement. Avec la simulation du trackpad, la phase à vitesse constante est envoyée comme un geste à deux doigts et le freinage comme l'élan qui suit. La vitesse « macOS » de Mac Mouse Fix n'existe pas dans Bascule : elle reprend l'accélération que macOS applique à une souris branchée sur le Mac, que Bascule ne reçoit pas.
 
 ---
 
@@ -259,6 +263,8 @@ cd app && yarn tauri dev # fenêtre de réglages, avec rechargement à chaud
 
 - `src/types.ts` reprend la configuration de `src/config.rs`. Pour un nouveau réglage : `config.rs` (structure, modèle commenté, validation), puis `types.ts` et la section concernée dans `src/sections/`.
 - `src/composables/useSettings.ts` gère l'état : chargement, état en direct, enregistrement, attente du redémarrage.
+- Pages (`src/pages/`) et menu latéral (`src/layouts/AppLayout.vue`) : vue-router. Icônes : [Tabler Icons](https://tabler.io/icons) (`@tabler/icons-vue`).
+- **Traductions** : `locales/fr.json` et `locales/en.json`, à la racine du dépôt. La section `app` est lue par [vue-i18n](https://vue-i18n.intlify.dev) (`$t("…")` dans les composants), la section `daemon` par Bascule (`src/i18n.rs`, menus et état de la connexion). Pour une nouvelle langue : un fichier de plus, avec les mêmes clés.
 - `yarn build` vérifie les types (`vue-tsc`) puis construit le front, qui est intégré à l'exécutable par `cargo build -p bascule-settings --features custom-protocol`.
 
 ---
@@ -290,14 +296,19 @@ src/
   secondary.rs     logique de la machine pilotée (position, sortie par le bord…)
   clipboard.rs     presse-papiers (texte, HTML, PNG), anti-écho
   hotkey.rs        raccourcis
+  capture.rs       saisie d'un raccourci pour l'app (crochet clavier)
+  smooth.rs        défilement fluide (algorithme de Mac Mouse Fix, simulation du trackpad)
+  icon.rs          icône (couleur ou monochrome)
+  i18n.rs          traductions des menus et de l'état (locales/*.json)
   api.rs           API locale (127.0.0.1 + jeton) pour l'app de réglages
   platform/
     windows.rs     hooks bas niveau, masquage du curseur, SendInput, icône
     macos.rs       CGEventPost, gestes, Verr. Maj (IOKit), CGEventTap, barre des menus
     linux.rs       version minimale (connexion, presse-papiers, réglages)
-app/               app de réglages : Tauri 2 + Vue 3 + Naive UI
-  src/             front (sections, composants, état)
+locales/           traductions (fr, en), partagées par Bascule et l'app
+app/               app de Bascule : Tauri 2 + Vue 3 + Naive UI
+  src/             front (pages, sections, composants, état)
   src-tauri/       commandes Tauri, client de l'API du daemon
 ```
 
-Tests : `cargo test` (72 tests, dont un test de bout en bout sur une vraie connexion TCP). Le code Windows et macOS se vérifie aussi depuis Linux avec `./scripts/xcheck.sh`.
+Tests : `cargo test` (92 tests, dont un test de bout en bout sur une vraie connexion TCP). Le code Windows et macOS se vérifie aussi depuis Linux avec `./scripts/xcheck.sh`.

@@ -6,16 +6,19 @@ import {
   NGlobalStyle,
   NMessageProvider,
   darkTheme,
+  dateEnUS,
   dateFrFR,
+  enUS,
   frFR,
-  useOsTheme,
   type GlobalThemeOverrides,
 } from "naive-ui";
+import { usePreferences } from "./composables/usePreferences";
 import AppLayout from "./layouts/AppLayout.vue";
 
-// Thème clair ou sombre selon le système.
-const osTheme = useOsTheme();
-const dark = computed(() => osTheme.value === "dark");
+// Thème (système, clair ou sombre) et langue choisis dans les réglages.
+const { dark, locale } = usePreferences();
+const naiveLocale = computed(() => (locale.value === "fr" ? frFR : enUS));
+const naiveDateLocale = computed(() => (locale.value === "fr" ? dateFrFR : dateEnUS));
 
 const overrides = computed<GlobalThemeOverrides>(() => ({
   common: {
@@ -31,7 +34,12 @@ const overrides = computed<GlobalThemeOverrides>(() => ({
 </script>
 
 <template>
-  <n-config-provider :theme="dark ? darkTheme : null" :theme-overrides="overrides" :locale="frFR" :date-locale="dateFrFR">
+  <n-config-provider
+    :theme="dark ? darkTheme : null"
+    :theme-overrides="overrides"
+    :locale="naiveLocale"
+    :date-locale="naiveDateLocale"
+  >
     <n-global-style />
     <n-message-provider placement="top">
       <n-dialog-provider>

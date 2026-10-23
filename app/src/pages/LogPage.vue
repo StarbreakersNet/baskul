@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Journal de Bascule : les dernières lignes, rafraîchies en direct.
-import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { nextTick, onActivated, onDeactivated, ref } from "vue";
 import { NButton, NCard, NFlex, NLog, NSwitch, NText } from "naive-ui";
 import { useActions } from "../composables/useActions";
 import { daemon } from "../daemon";
@@ -33,23 +33,24 @@ async function refresh() {
   }
 }
 
+// Rafraîchi seulement quand la page est affichée (elle reste en mémoire).
 let timer: ReturnType<typeof setInterval> | undefined;
-onMounted(() => {
+onActivated(() => {
   void refresh();
   timer = setInterval(refresh, REFRESH_MS);
 });
-onBeforeUnmount(() => clearInterval(timer));
+onDeactivated(() => clearInterval(timer));
 </script>
 
 <template>
-  <n-card size="small" title="Dernières lignes">
+  <n-card size="small" :title="$t('log.title')">
     <template #header-extra>
       <n-flex align="center" :size="12">
         <n-flex align="center" :size="6">
           <n-switch v-model:value="follow" size="small" />
-          <n-text depth="3">Suivre</n-text>
+          <n-text depth="3">{{ $t("log.follow") }}</n-text>
         </n-flex>
-        <n-button size="small" @click="actions.openLogFile">Ouvrir le fichier</n-button>
+        <n-button size="small" @click="actions.openLogFile">{{ $t("common.openFile") }}</n-button>
       </n-flex>
     </template>
     <n-log ref="log" :log="text" :rows="26" :loading="loading" trim />

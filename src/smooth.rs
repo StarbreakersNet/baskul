@@ -13,7 +13,10 @@
 //! Les constantes viennent de Mac Mouse Fix (ScrollConfig.swift,
 //! ScrollAnalyzer.m, Scroll.m) ; seule la courbe du « fast scroll » est une
 //! approximation. Comme Mac Mouse Fix, on produit des défilements continus au
-//! pixel, sans phases de geste.
+//! pixel ; avec la simulation du trackpad (GestureScrollSimulator.m), la
+//! phase à vitesse constante devient un geste à deux doigts et le freinage
+//! l'élan qui suit (« momentum ») : les apps réagissent comme avec un
+//! trackpad (rebond en bout de page, élan géré par l'app…).
 
 use std::time::{Duration, Instant};
 
@@ -41,6 +44,59 @@ pub enum Dir {
     Left,
     Right,
 }
+
+/// Phase d'un geste de trackpad (valeurs `IOHIDEventPhaseBits`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GesturePhase {
+    Began = 1,
+    Changed = 2,
+    Ended = 4,
+    Cancelled = 8,
+    MayBegin = 128,
+}
+
+/// Phase de l'élan après le geste (valeurs `CGMomentumScrollPhase`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MomentumPhase {
+    Begin = 1,
+    Continue = 2,
+    End = 3,
+}
+
+/// Événement à envoyer. `v` : vertical, positif vers le haut ; `h` :
+/// horizontal, positif vers la droite (pixels).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Event {
+    /// Défilement continu, sans phase.
+    Scroll { v: i32, h: i32 },
+    /// Geste à deux doigts (simulation du trackpad).
+    Gesture { v: i32, h: i32, phase: GesturePhase },
+    /// Élan après le geste (simulation du trackpad).
+    Momentum { v: i32, h: i32, phase: MomentumPhase },
+}
+
+/// Partie de l'animation : vitesse constante (geste) ou freinage (élan).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Part {
+    Gesture,
+    Momentum,
+}
+
+impl Part {
+    fn end(self) -> Event {
+        match self {
+            Part::Gesture => Event::Gesture { v: 0, h: 0, phase: GesturePhase::Ended },
+            Part::Momentum => Event::Momentum { v: 0, h: 0, phase: MomentumPhase::End },
+        }
+    }
+}
+
+/// « Tape » à deux doigts : arrête l'élan que certaines apps (Xcode…)
+/// ajoutent d'elles-mêmes.
+const TAP: [Event; 2] = [
+    Event::Gesture { v: 0, h: 0, phase: GesturePhase::MayBegin },
+    Event::Gesture { v: 0, h: 0, phase: GesturePhase::Cancelled },
+];
 
 /// Paramètres dérivés des réglages.
 #[derive(Debug, Clone, Copy)]
@@ -278,11 +334,25 @@ pub struct Scroller {
     anim: Option<Animation>,
     /// Fraction de pixel pas encore envoyée.
     carry: f64,
+    /// Simulation du trackpad : gestes et élan au lieu de défilements simples.
+    trackpad: bool,
+    /// Partie en cours (geste ou élan) des événements déjà envoyés.
+    part: Option<Part>,
+    /// Événements à envoyer à la prochaine image (arrêt net).
+    pending: Vec<Event>,
 }
 
 impl Scroller {
-    pub fn new(speed: SmoothSpeed, smoothness: Smoothness) -> Scroller {
-        Scroller { params: Params::new(speed, smoothness), analyzer: Analyzer::default(), anim: None, carry: 0.0 }
+    pub fn new(speed: SmoothSpeed, smoothness: Smoothness, trackpad: bool) -> Scroller {
+        Scroller {
+            params: Params::new(speed, smoothness),
+            analyzer: Analyzer::default(),
+            anim: None,
+            carry: 0.0,
+            trackpad,
+            part: None,
+            pending: vec![],
+        }
     }
 
     /// Cran de molette reçu à `now`. `weight` vaut 1 pour un cran entier, une
@@ -295,6 +365,10 @@ impl Scroller {
             // Changement de sens pendant le défilement : arrêt net.
             self.anim = None;
             self.carry = 0.0;
+            if let Some(part) = self.part.take() {
+                self.pending.push(part.end());
+                self.pending.extend(TAP);
+            }
             return;
         }
         // Un cran qui suit de près reprend ce qui restait à parcourir ; un
@@ -310,33 +384,69 @@ impl Scroller {
         self.anim = Some(Animation::new(&p, now, dir, px + left, p.base_duration(a.interval)));
     }
 
-    /// Plus rien à animer.
+    /// Plus rien à animer ni à envoyer.
     pub fn is_idle(&self) -> bool {
-        self.anim.is_none()
+        self.anim.is_none() && self.pending.is_empty()
     }
 
-    /// Pixels à envoyer pour l'image affichée à `now` : (vertical, positif
-    /// vers le haut ; horizontal, positif vers la droite).
-    pub fn frame(&mut self, now: Instant) -> (i32, i32) {
+    /// Événements à envoyer pour l'image affichée à `now`.
+    pub fn frame(&mut self, now: Instant) -> Vec<Event> {
         let p = self.params;
-        let Some(an) = self.anim.as_mut() else { return (0, 0) };
+        let mut out = std::mem::take(&mut self.pending);
+        let Some(an) = self.anim.as_mut() else { return out };
         let t = now.saturating_duration_since(an.start).as_secs_f64();
         let pos = an.position(&p, t);
         let total = pos - an.done + self.carry;
         an.done = pos;
         let px = total.round();
         self.carry = total - px;
-        let dir = an.dir;
-        if t >= an.duration {
+        let (dir, part) = (an.dir, if t <= an.base { Part::Gesture } else { Part::Momentum });
+        let done = t >= an.duration;
+        if done {
             self.anim = None;
         }
         let px = px as i32;
-        match dir {
+        let (v, h) = match dir {
             Dir::Up => (px, 0),
             Dir::Down => (-px, 0),
             Dir::Left => (0, -px),
             Dir::Right => (0, px),
+        };
+        if !self.trackpad {
+            if px != 0 {
+                out.push(Event::Scroll { v, h });
+            }
+            return out;
         }
+        // Simulation du trackpad (comme Mac Mouse Fix) : geste pendant la
+        // phase à vitesse constante, élan pendant le freinage ; un nouveau
+        // cran pendant l'élan termine celui-ci et commence un nouveau geste.
+        if self.part.is_some_and(|q| q != part) {
+            out.push(self.part.take().unwrap().end());
+        }
+        if px != 0 {
+            let started = self.part.is_none();
+            out.push(match part {
+                Part::Gesture => {
+                    Event::Gesture { v, h, phase: if started { GesturePhase::Began } else { GesturePhase::Changed } }
+                }
+                Part::Momentum => Event::Momentum {
+                    v,
+                    h,
+                    phase: if started { MomentumPhase::Begin } else { MomentumPhase::Continue },
+                },
+            });
+            self.part = Some(part);
+        }
+        if done {
+            if let Some(part) = self.part.take() {
+                out.push(part.end());
+                if part == Part::Momentum {
+                    out.extend(TAP);
+                }
+            }
+        }
+        out
     }
 }
 
@@ -347,8 +457,8 @@ mod tests {
     const MS: Duration = Duration::from_millis(1);
 
     /// Simule une molette : crans `(instant en ms, sens, poids)`, images
-    /// toutes les 8 ms. Renvoie les pixels (vertical, horizontal) par image.
-    fn simulate(s: &mut Scroller, ticks: &[(u64, Dir, f64)]) -> Vec<(i32, i32)> {
+    /// toutes les 8 ms. Renvoie les événements de chaque image.
+    fn run(s: &mut Scroller, ticks: &[(u64, Dir, f64)]) -> Vec<Vec<Event>> {
         let t0 = Instant::now();
         let mut frames = vec![];
         let mut next = ticks.iter().peekable();
@@ -368,12 +478,31 @@ mod tests {
         frames
     }
 
+    /// Pixels (vertical, horizontal) de chaque image.
+    fn simulate(s: &mut Scroller, ticks: &[(u64, Dir, f64)]) -> Vec<(i32, i32)> {
+        run(s, ticks)
+            .iter()
+            .map(|frame| {
+                frame.iter().fold((0, 0), |(av, ah), e| match *e {
+                    Event::Scroll { v, h } | Event::Gesture { v, h, .. } | Event::Momentum { v, h, .. } => {
+                        (av + v, ah + h)
+                    }
+                })
+            })
+            .collect()
+    }
+
+    /// Tous les événements, dans l'ordre.
+    fn events(s: &mut Scroller, ticks: &[(u64, Dir, f64)]) -> Vec<Event> {
+        run(s, ticks).concat()
+    }
+
     fn vertical(frames: &[(i32, i32)]) -> i32 {
         frames.iter().map(|f| f.0).sum()
     }
 
     fn regular() -> Scroller {
-        Scroller::new(SmoothSpeed::Medium, Smoothness::Regular)
+        Scroller::new(SmoothSpeed::Medium, Smoothness::Regular, false)
     }
 
     #[test]
@@ -473,7 +602,7 @@ mod tests {
 
     #[test]
     fn high_smoothness_glides_longer() {
-        let mut s = Scroller::new(SmoothSpeed::Medium, Smoothness::High);
+        let mut s = Scroller::new(SmoothSpeed::Medium, Smoothness::High, false);
         let frames = simulate(&mut s, &[(0, Dir::Up, 1.0)]);
         assert_eq!(vertical(&frames), 90);
         assert!(frames.len() * 8 > 320, "{} ms", frames.len() * 8);
@@ -481,9 +610,73 @@ mod tests {
 
     #[test]
     fn speed_setting_scales_distance() {
-        let low = vertical(&simulate(&mut Scroller::new(SmoothSpeed::Low, Smoothness::Regular), &[(0, Dir::Up, 1.0)]));
-        let high =
-            vertical(&simulate(&mut Scroller::new(SmoothSpeed::High, Smoothness::Regular), &[(0, Dir::Up, 1.0)]));
+        let low =
+            vertical(&simulate(&mut Scroller::new(SmoothSpeed::Low, Smoothness::Regular, false), &[(0, Dir::Up, 1.0)]));
+        let high = vertical(&simulate(
+            &mut Scroller::new(SmoothSpeed::High, Smoothness::Regular, false),
+            &[(0, Dir::Up, 1.0)],
+        ));
         assert_eq!((low, high), (30, 120));
+    }
+
+    fn trackpad() -> Scroller {
+        Scroller::new(SmoothSpeed::Medium, Smoothness::High, true)
+    }
+
+    fn phases(evs: &[Event]) -> Vec<String> {
+        let mut out: Vec<String> = vec![];
+        for e in evs {
+            let name = match e {
+                Event::Scroll { .. } => "scroll".to_string(),
+                Event::Gesture { phase, .. } => format!("{phase:?}"),
+                Event::Momentum { phase, .. } => format!("momentum {phase:?}"),
+            };
+            // Les répétitions sont regroupées.
+            if out.last() != Some(&name) {
+                out.push(name);
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn trackpad_simulation_gesture_then_momentum() {
+        let evs = events(&mut trackpad(), &[(0, Dir::Up, 1.0)]);
+        assert_eq!(
+            phases(&evs),
+            [
+                "Began",
+                "Changed",
+                "Ended",
+                "momentum Begin",
+                "momentum Continue",
+                "momentum End",
+                "MayBegin",
+                "Cancelled"
+            ]
+        );
+        let total: i32 = evs
+            .iter()
+            .map(|e| match *e {
+                Event::Gesture { v, .. } | Event::Momentum { v, .. } => v,
+                Event::Scroll { .. } => panic!("défilement simple inattendu"),
+            })
+            .sum();
+        assert_eq!(total, 90);
+    }
+
+    #[test]
+    fn trackpad_new_notch_during_momentum_starts_new_gesture() {
+        // Second cran pendant l'élan du premier (vers 300 ms).
+        let evs = events(&mut trackpad(), &[(0, Dir::Up, 1.0), (300, Dir::Up, 1.0)]);
+        let p = phases(&evs);
+        let i = p.iter().position(|x| x == "momentum Begin").unwrap();
+        assert_eq!(p[i + 1..i + 5], ["momentum Continue", "momentum End", "Began", "Changed"]);
+    }
+
+    #[test]
+    fn trackpad_reversal_ends_and_taps() {
+        let evs = events(&mut trackpad(), &[(0, Dir::Up, 1.0), (40, Dir::Down, 1.0)]);
+        assert_eq!(phases(&evs), ["Began", "Changed", "Ended", "MayBegin", "Cancelled"]);
     }
 }

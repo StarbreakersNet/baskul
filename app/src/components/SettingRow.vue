@@ -25,7 +25,7 @@ const divider = computed(() => vars.value.dividerColor);
         <n-flex align="center" :size="8">
           <n-text strong>{{ label }}</n-text>
           <n-tag v-if="os" size="small" :bordered="false" :type="otherOs ? 'default' : 'info'">
-            {{ otherOs ? `${osLabel(os)} uniquement` : osLabel(os) }}
+            {{ otherOs ? $t("common.osOnly", { os: osLabel(os) }) : osLabel(os) }}
           </n-tag>
         </n-flex>
         <n-text v-if="help || $slots.help" depth="3" tag="div" class="help">

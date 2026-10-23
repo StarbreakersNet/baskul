@@ -1,17 +1,11 @@
 name: build
 
-# Se lance quand un tag est poussé (par exemple `0.4.0`), et publie alors une
-# Release. « Run workflow » (onglet Actions) compile ; avec « Publier une
-# Release » coché, il crée aussi le tag (version de Cargo.toml) et la Release.
+# Tests puis compilation pour Windows, macOS et Linux ; les programmes sont
+# dans les « artifacts » de l'exécution. Se lance à la main (onglet Actions →
+# build → Run workflow) et sert aussi au workflow « release ».
 on:
-  push:
-    tags: ["*"]
   workflow_dispatch:
-    inputs:
-      release:
-        description: "Publier une Release (tag = version de Cargo.toml)"
-        type: boolean
-        default: false
+  workflow_call:
 
 permissions:
   contents: read
@@ -93,40 +87,3 @@ jobs:
         with:
           name: Bascule-macOS
           path: dist/Bascule-macOS.zip
-
-  release:
-    name: Release
-    if: github.ref_type == 'tag' || inputs.release
-    needs: [tests, linux, windows, macos]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-      # Tag poussé : son nom. Lancement manuel : la version de Cargo.toml ; le
-      # tag est alors créé sur ce commit avec la Release.
-      # Si la Release existe déjà (créée depuis l'interface de GitHub, par
-      # exemple), on y ajoute seulement les fichiers.
-      - run: |
-          if [ "$GITHUB_REF_TYPE" = tag ]; then
-            tag="$GITHUB_REF_NAME"
-          else
-            tag=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
-          fi
-          files=(
-            artifacts/Bascule-Windows/Bascule-Windows.zip
-            artifacts/Bascule-macOS/Bascule-macOS.zip
-            artifacts/Bascule-Linux/Bascule-Linux.tar.gz
-          )
-          if gh release view "$tag" > /dev/null 2>&1; then
-            gh release upload "$tag" "${files[@]}" --clobber
-          else
-            gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" \
-              --title "Bascule $tag" --generate-notes
-          fi
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}

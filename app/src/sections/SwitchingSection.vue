@@ -18,33 +18,33 @@ const missingHotkey = computed(
 <template>
   <div>
     <linux-notice />
-    <setting-row label="Aller sur la machine pilotée" help="Le curseur y reprend là où il était.">
+    <setting-row :label="$t('settings.switching.goToSecondary')" :help="$t('settings.switching.goToSecondaryHelp')">
       <hotkey-input v-model="config.hotkeys.switch_to_secondary" :os="info.os" />
     </setting-row>
-    <setting-row label="Revenir sur cette machine" help="Le même raccourci que ci-dessus permet d'aller et venir.">
+    <setting-row :label="$t('settings.switching.returnHere')" :help="$t('settings.switching.returnHereHelp')">
       <hotkey-input v-model="config.hotkeys.return_to_primary" :os="info.os" />
     </setting-row>
     <n-alert v-if="!edges && missingHotkey" type="warning" style="margin: 4px 0 8px">
-      Sans bascule par les bords, ces deux raccourcis sont indispensables.
+      {{ $t("settings.switching.hotkeysNeeded") }}
     </n-alert>
-    <setting-row label="Bascule par les bords de l'écran" help="Pousser la souris contre le bord fait passer sur l'autre machine.">
+    <setting-row :label="$t('settings.switching.edges')" :help="$t('settings.switching.edgesHelp')">
       <n-switch v-model:value="config.screen.edge_switching" />
     </setting-row>
     <setting-row
-      label="Position de l'autre écran"
-      help="Où se trouve l'écran de la machine pilotée par rapport à celui-ci."
+      :label="$t('settings.switching.position')"
+      :help="$t('settings.switching.positionHelp')"
       :disabled="!edges"
     >
       <position-picker v-model="config.screen.secondary_position" :disabled="!edges" />
     </setting-row>
     <setting-row
-      label="Coins neutres"
-      help="Dans les coins, le bord ne fait pas changer de machine (bouton ✕ d'une fenêtre…). 0 = aucun."
+      :label="$t('settings.switching.corners')"
+      :help="$t('settings.switching.cornersHelp')"
       :disabled="!edges"
     >
       <number-input v-model="config.screen.corner_size" :min="0" :max="500" :precision="0" :disabled="!edges" suffix="px" />
     </setting-row>
-    <setting-row label="Verrouiller le curseur" help="Bloque ou débloque le curseur sur l'écran où il se trouve.">
+    <setting-row :label="$t('settings.switching.lock')" :help="$t('settings.switching.lockHelp')">
       <hotkey-input v-model="config.hotkeys.toggle_lock" :os="info.os" />
     </setting-row>
   </div>

@@ -44,8 +44,19 @@ enum Mode {
 pub enum PeerEvent {
     Connected,
     Disconnected,
-    Leave { ratio: f32 },
+    Leave {
+        ratio: f32,
+    },
+    /// Fin du délai de grâce ouvert par la n-ième coupure (voir
+    /// `RECONNECT_GRACE`).
+    GraceOver(u64),
 }
+
+/// Coupure pendant que l'on pilote l'autre machine : on attend ce délai
+/// avant de ramener le curseur ici. Une reconnexion entre-temps (redémarrage
+/// de Bascule sur l'autre machine, après un changement de réglages…) reprend
+/// le pilotage là où il en était.
+pub const RECONNECT_GRACE: std::time::Duration = std::time::Duration::from_secs(4);
 
 #[derive(Debug, Clone)]
 pub struct PrimaryOptions {
@@ -92,6 +103,8 @@ pub struct PrimaryCore {
     button_targets: [Option<Target>; 5],
     /// Touches physiquement enfoncées (pour les raccourcis).
     pressed: HashSet<u32>,
+    /// Nombre de coupures (pour reconnaître le délai de grâce en cours).
+    disconnects: u64,
 }
 
 impl PrimaryCore {
@@ -107,6 +120,7 @@ impl PrimaryCore {
             key_targets: HashMap::new(),
             button_targets: [None; 5],
             pressed: HashSet::new(),
+            disconnects: 0,
         }
     }
 
@@ -119,7 +133,13 @@ impl PrimaryCore {
     }
 
     fn input_target(&self) -> Target {
-        if self.mode == Mode::Remote && self.connected { Target::Remote } else { Target::Local }
+        match (self.mode, self.connected) {
+            (Mode::Remote, true) => Target::Remote,
+            // Coupure pendant le pilotage (délai de grâce) : rien ne part ni
+            // n'arrive aux applications d'ici.
+            (Mode::Remote, false) => Target::Consumed,
+            (Mode::Local, _) => Target::Local,
+        }
     }
 
     fn local_buttons_down(&self) -> bool {
@@ -224,11 +244,13 @@ impl PrimaryCore {
     }
 
     pub fn wheel<H: Host>(&mut self, host: &mut H, dx: i32, dy: i32) -> Decision {
-        if self.input_target() == Target::Remote {
-            host.send(Message::Wheel { dx, dy });
-            Decision::Swallow
-        } else {
-            Decision::Pass
+        match self.input_target() {
+            Target::Remote => {
+                host.send(Message::Wheel { dx, dy });
+                Decision::Swallow
+            }
+            Target::Consumed => Decision::Swallow,
+            Target::Local => Decision::Pass,
         }
     }
 
@@ -280,8 +302,7 @@ impl PrimaryCore {
             if let Some(hk) = &self.opts.return_hotkey {
                 if hk.matches(code, &self.pressed) {
                     log::info!("raccourci : retour sur la machine principale");
-                    let p = self.exit_point;
-                    self.force_local(host, p);
+                    self.come_back(host);
                     return Target::Consumed;
                 }
             }
@@ -289,9 +310,8 @@ impl PrimaryCore {
             if let Some(hk) = &self.opts.switch_hotkey {
                 if hk.matches(code, &self.pressed) {
                     log::info!("raccourci : passage sur l'autre machine");
-                    let exit = self.opts.edge_switching.then(|| self.opts.position.opposite());
                     let cur = host.cursor();
-                    self.go_remote(host, cur, Message::Jump { exit });
+                    self.go_remote(host, cur, Message::Jump { exit: self.remote_exit() });
                     return Target::Consumed;
                 }
             }
@@ -327,9 +347,16 @@ impl PrimaryCore {
         match ev {
             PeerEvent::Connected => {
                 self.connected = true;
+                if self.mode == Mode::Remote {
+                    // Reconnexion pendant le pilotage : l'autre machine (peut-être
+                    // redémarrée) reprend le curseur là où il est.
+                    log::info!("reconnexion : reprise du pilotage de l'autre machine");
+                    host.send(Message::Jump { exit: self.remote_exit() });
+                }
             }
             PeerEvent::Disconnected => {
                 self.connected = false;
+                self.disconnects += 1;
                 // Les relâchements des touches envoyées là-bas n'ont plus de
                 // destination : on les supprime (le système local n'a jamais vu
                 // l'appui correspondant).
@@ -344,6 +371,11 @@ impl PrimaryCore {
                     }
                 }
                 if self.mode == Mode::Remote {
+                    log::info!("connexion perdue pendant le pilotage : attente d'une reconnexion");
+                }
+            }
+            PeerEvent::GraceOver(n) => {
+                if n == self.disconnects && !self.connected && self.mode == Mode::Remote {
                     log::info!("connexion perdue : retour du curseur sur la machine principale");
                     let p = self.exit_point;
                     self.force_local(host, p);
@@ -383,9 +415,18 @@ impl PrimaryCore {
     /// Ramène le curseur sur la machine principale (menu de l'icône).
     pub fn return_home<H: Host>(&mut self, host: &mut H) {
         if self.mode == Mode::Remote {
-            let p = self.exit_point;
-            self.force_local(host, p);
+            self.come_back(host);
         }
+    }
+
+    /// Retour décidé ici (raccourci, menu) : l'autre machine relâche tout et
+    /// sait qu'elle n'est plus pilotée (son icône change).
+    fn come_back<H: Host>(&mut self, host: &mut H) {
+        if self.connected {
+            host.send(Message::ReleaseAll);
+        }
+        let p = self.exit_point;
+        self.force_local(host, p);
     }
 
     pub fn toggle_lock(&mut self) -> bool {
@@ -396,6 +437,11 @@ impl PrimaryCore {
 
     pub fn is_locked(&self) -> bool {
         self.locked
+    }
+
+    /// Bord par lequel le curseur peut quitter l'autre machine.
+    fn remote_exit(&self) -> Option<Edge> {
+        self.opts.edge_switching.then(|| self.opts.position.opposite())
     }
 
     fn force_local<H: Host>(&mut self, host: &mut H, pos: Point) {
@@ -529,11 +575,13 @@ mod tests {
         let n = host.sent.len();
         assert_eq!(core.key(&mut host, b, true), Decision::Swallow);
         assert!(!core.is_remote());
-        assert_eq!(host.sent.len(), n, "la touche du raccourci n'est pas transmise");
+        // La touche du raccourci n'est pas transmise ; l'autre machine est
+        // prévenue qu'elle n'est plus pilotée.
+        assert_eq!(host.sent[n..], [Message::ReleaseAll]);
         assert_eq!(host.shown_at, Some(Point::new(1919, 540)));
         // Relâchements : B est consommée, les modificateurs vont là-bas.
         assert_eq!(core.key(&mut host, b, false), Decision::Swallow);
-        assert_eq!(host.sent.len(), n);
+        assert_eq!(host.sent.len(), n + 1);
         assert_eq!(core.key(&mut host, HID_CONTROL_LEFT, false), Decision::Swallow);
         assert_eq!(host.sent.last(), Some(&Message::Key { code: HID_CONTROL_LEFT, down: false, repeat: false }));
     }
@@ -546,11 +594,49 @@ mod tests {
         core.key(&mut host, a, true);
         core.button(&mut host, MouseButton::Right, true);
         core.peer_event(&mut host, PeerEvent::Disconnected);
+        core.peer_event(&mut host, PeerEvent::GraceOver(1));
         assert!(!core.is_remote());
         assert_eq!(core.key(&mut host, a, false), Decision::Swallow);
         assert_eq!(core.button(&mut host, MouseButton::Right, false), Decision::Swallow);
         // Ensuite tout redevient local.
         assert_eq!(core.key(&mut host, a, true), Decision::Pass);
+    }
+
+    #[test]
+    fn short_disconnect_resumes_remote_control() {
+        let (mut core, mut host) = setup();
+        go_remote(&mut core, &mut host);
+        host.sent.clear();
+        core.peer_event(&mut host, PeerEvent::Disconnected);
+        // Pendant la coupure : le curseur reste là-bas, rien n'arrive ici.
+        assert!(core.is_remote());
+        let a = hid_from_name("A").unwrap();
+        assert_eq!(core.key(&mut host, a, true), Decision::Swallow);
+        assert_eq!(core.key(&mut host, a, false), Decision::Swallow);
+        assert_eq!(core.button(&mut host, MouseButton::Left, true), Decision::Swallow);
+        assert_eq!(core.button(&mut host, MouseButton::Left, false), Decision::Swallow);
+        assert_eq!(core.wheel(&mut host, 0, 120), Decision::Swallow);
+        assert!(host.sent.is_empty());
+        // Reconnexion : l'autre machine reprend le curseur.
+        core.peer_event(&mut host, PeerEvent::Connected);
+        assert!(core.is_remote());
+        assert_eq!(host.sent, [Message::Jump { exit: Some(Edge::Left) }]);
+        // Le délai de la coupure passée n'a plus d'effet.
+        core.peer_event(&mut host, PeerEvent::GraceOver(1));
+        assert!(core.is_remote());
+        assert_eq!(core.key(&mut host, a, true), Decision::Swallow);
+        assert_eq!(host.sent.last(), Some(&Message::Key { code: a, down: true, repeat: false }));
+    }
+
+    #[test]
+    fn return_hotkey_during_disconnect() {
+        let (mut core, mut host) = setup();
+        go_remote(&mut core, &mut host);
+        core.peer_event(&mut host, PeerEvent::Disconnected);
+        let b = hid_from_name("B").unwrap();
+        press(&mut core, &mut host, &[HID_CONTROL_LEFT, HID_ALT_LEFT, HID_SHIFT_LEFT, b]);
+        assert!(!core.is_remote());
+        assert_eq!(host.shown_at, Some(Point::new(1919, 540)));
     }
 
     #[test]
