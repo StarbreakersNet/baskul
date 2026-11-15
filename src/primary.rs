@@ -426,6 +426,12 @@ impl PrimaryCore {
         }
     }
 
+    /// Dernière position réelle du curseur connue en mode distant : celle
+    /// du départ, du recentrage, ou vue par le dernier déplacement.
+    pub fn cursor_seen(&self) -> Point {
+        self.anchor
+    }
+
     /// Déplacement absolu en mode distant (Windows : le curseur réel reste
     /// immobile, la position demandée moins la position réelle donne le
     /// déplacement). `cur` : position réelle du curseur au moment de
@@ -813,6 +819,47 @@ impl PrimaryCore {
     }
 }
 
+/// Surveillance des hooks pendant le pilotage (Windows). Tant qu'ils
+/// reçoivent les événements, la souris ne déplace pas le curseur réel (les
+/// événements sont supprimés) ; s'il s'éloigne tout seul, c'est qu'ils ne les
+/// reçoivent plus. Une autre application peut toutefois le déplacer (un jeu
+/// qui le replace en perdant la main) : il s'arrête alors à un endroit fixe,
+/// et le hook l'y voit au déplacement suivant.
+#[derive(Debug, Default)]
+pub struct HookWatch {
+    /// Dernière position suspecte : loin, sans que le hook l'y ait vu.
+    last: Option<Point>,
+    /// Nombre de fois où elle a changé.
+    moves: u8,
+}
+
+impl HookWatch {
+    /// Distance (|dx| + |dy|) au-delà de laquelle le curseur est « loin ».
+    const FAR: i32 = 200;
+    /// Changements de position suspecte qui valent une panne des hooks.
+    const MOVES: u8 = 2;
+
+    pub const fn new() -> HookWatch {
+        HookWatch { last: None, moves: 0 }
+    }
+
+    /// Vérification périodique. `left_at` : où le curseur a été laissé au
+    /// départ ; `pos` : sa position réelle ; `seen` : la dernière position
+    /// connue du hook (`PrimaryCore::cursor_seen`). Renvoie `true` si les
+    /// hooks ne reçoivent plus les événements.
+    pub fn hooks_lost(&mut self, left_at: Point, pos: Point, seen: Point) -> bool {
+        let far = (pos.x - left_at.x).abs() + (pos.y - left_at.y).abs() > Self::FAR;
+        if !far || pos == seen {
+            *self = HookWatch::new();
+            return false;
+        }
+        if self.last.replace(pos).is_some_and(|prev| prev != pos) {
+            self.moves += 1;
+        }
+        self.moves >= Self::MOVES
+    }
+}
+
 /// Le dernier signal d'activité date d'au moins `ACTIVITY_INTERVAL`.
 fn due(last: Option<Instant>) -> bool {
     last.is_none_or(|t| t.elapsed() >= ACTIVITY_INTERVAL)
@@ -1097,6 +1144,61 @@ mod tests {
         host.sent.clear();
         core.remote_abs_motion(&mut host, Some(Point::new(960, 540)), Point::new(1926, 541));
         assert_eq!(motions(&host), []);
+    }
+
+    /// Hooks en panne : la souris déplace le curseur réel, loin et sans que
+    /// le hook le voie. Détecté dès que cela se répète.
+    #[test]
+    fn hook_watch_detects_a_cursor_that_keeps_moving_unseen() {
+        let center = Point::new(960, 540);
+        let mut w = HookWatch::default();
+        assert!(!w.hooks_lost(center, Point::new(1300, 540), center));
+        assert!(!w.hooks_lost(center, Point::new(1400, 500), center));
+        assert!(w.hooks_lost(center, Point::new(1500, 480), center));
+
+        // Même avec des pauses entre les mouvements.
+        let mut w = HookWatch::default();
+        assert!(!w.hooks_lost(center, Point::new(1300, 540), center));
+        assert!(!w.hooks_lost(center, Point::new(1300, 540), center));
+        assert!(!w.hooks_lost(center, Point::new(1400, 540), center));
+        assert!(!w.hooks_lost(center, Point::new(1400, 540), center));
+        assert!(w.hooks_lost(center, Point::new(1500, 540), center));
+    }
+
+    /// Un jeu replace le curseur loin du centre en perdant la main : ce
+    /// n'est pas une panne des hooks, on reste sur la pilotée.
+    #[test]
+    fn hook_watch_accepts_a_cursor_moved_once_by_another_application() {
+        let center = Point::new(1920, 540);
+        let spot = Point::new(1922, 250);
+        let mut w = HookWatch::default();
+        // Souris immobile : le curseur reste là où le jeu l'a mis.
+        for _ in 0..100 {
+            assert!(!w.hooks_lost(center, spot, center));
+        }
+        // La souris bouge : le hook voit le curseur à cet endroit.
+        for _ in 0..100 {
+            assert!(!w.hooks_lost(center, spot, spot));
+        }
+        // Le jeu le replace encore une fois ailleurs : toujours toléré.
+        assert!(!w.hooks_lost(center, Point::new(1920, 200), spot));
+        assert!(!w.hooks_lost(center, Point::new(1920, 200), spot));
+    }
+
+    /// Près de l'endroit où il a été laissé, le curseur n'est jamais suspect
+    /// (comme avant), et un passage par là remet la surveillance à zéro.
+    #[test]
+    fn hook_watch_ignores_a_cursor_that_stays_close() {
+        let center = Point::new(960, 540);
+        let mut w = HookWatch::default();
+        for i in 0..50 {
+            assert!(!w.hooks_lost(center, Point::new(960 + i, 540 - i), center));
+        }
+        assert!(!w.hooks_lost(center, Point::new(1300, 540), center));
+        assert!(!w.hooks_lost(center, Point::new(1400, 540), center));
+        assert!(!w.hooks_lost(center, Point::new(1000, 540), center));
+        assert!(!w.hooks_lost(center, Point::new(1300, 540), center));
+        assert!(!w.hooks_lost(center, Point::new(1400, 540), center));
     }
 
     #[test]

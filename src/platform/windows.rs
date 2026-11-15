@@ -20,7 +20,7 @@ use crate::i18n;
 use crate::icon::{self, Style, Tone};
 use crate::keymap::{self, *};
 use crate::net::{LinkHandle, PeerId};
-use crate::primary::{Decision, Host, PeerEvent, PrimaryCore, PrimaryOptions};
+use crate::primary::{Decision, HookWatch, Host, PeerEvent, PrimaryCore, PrimaryOptions};
 use crate::protocol::{ClipHeader, ClipImage, ImageFormat, Message, MouseButton, Role, SwitchTo};
 use crate::secondary::Emulator;
 use crate::status::{self, Conn};
@@ -568,7 +568,12 @@ struct PrimaryState {
 struct CursorState {
     hider: HWND,
     saved_fg: HWND,
+    /// Où le curseur a été laissé pendant le pilotage.
     hidden_at: Option<Point>,
+    /// Le curseur a été recentré par Baskul (et sera replacé au retour).
+    /// Faux s'il était déjà caché par une application : il reste en place.
+    warped: bool,
+    watch: HookWatch,
     mouse_hook: HHOOK,
     kbd_hook: HHOOK,
     last_fg_fix: Option<Instant>,
@@ -581,6 +586,8 @@ thread_local! {
             hider: null_mut(),
             saved_fg: null_mut(),
             hidden_at: None,
+            warped: false,
+            watch: HookWatch::new(),
             mouse_hook: null_mut(),
             kbd_hook: null_mut(),
             last_fg_fix: None,
@@ -814,6 +821,16 @@ fn force_foreground(hwnd: HWND) {
     }
 }
 
+/// Le curseur est caché par une application : jeu en vue souris, vidéo en
+/// plein écran…
+fn cursor_hidden_by_app() -> bool {
+    // SAFETY: structure de nombres et de handles, initialisable à zéro.
+    let mut ci: CURSORINFO = unsafe { zeroed() };
+    ci.cbSize = size_of::<CURSORINFO>() as u32;
+    // SAFETY: pointeur valide vers une structure dont la taille est renseignée.
+    unsafe { GetCursorInfo(&mut ci) != 0 && (ci.flags & CURSOR_SHOWING == 0 || ci.hCursor.is_null()) }
+}
+
 /// Le curseur part sur l'autre machine : recentrage et masquage.
 fn do_hide() {
     let Some((layout, cur)) = with_primary(|s| {
@@ -822,27 +839,45 @@ fn do_hide() {
     .flatten() else {
         return;
     };
-    let center = layout.nearest_display(cur).center();
-    let hider = CURSOR.with(|c| c.borrow().hider);
-    // SAFETY: déplacement du curseur. Un jeu peut l'avoir confiné
-    // (ClipCursor) : on lève ce confinement, sinon le recentrage n'arrive pas
-    // au centre. Le jeu le rétablit quand il reprend la main.
-    unsafe {
-        ClipCursor(null());
-        SetCursorPos(center.x, center.y);
+    let (hider, already_hidden, was_warped) = CURSOR.with(|c| {
+        let c = c.borrow();
+        (c.hider, c.hidden_at.is_some(), c.warped)
+    });
+    // Un curseur déjà caché par une application (jeu en vue souris) lui
+    // appartient : on ne le déplace pas, ni maintenant ni au retour. Le jeu
+    // prendrait ces déplacements pour des mouvements de souris (la caméra
+    // tourne) et replacerait le curseur. Si c'est Baskul qui le cache déjà
+    // (nouvelle bascule avant la fin du retour), on garde le choix précédent.
+    let warp = if already_hidden { was_warped } else { !cursor_hidden_by_app() };
+    let at = if warp { layout.nearest_display(cur).center() } else { cur };
+    // SAFETY: un jeu peut avoir confiné le curseur (ClipCursor) : on lève ce
+    // confinement, comme le fait un Alt+Tab. Le jeu le rétablit quand il
+    // reprend la main.
+    unsafe { ClipCursor(null()) };
+    if warp {
+        // SAFETY: déplacement du curseur.
+        unsafe { SetCursorPos(at.x, at.y) };
+        // Le point de référence des déplacements doit changer AVANT tout
+        // appel susceptible de traiter des messages (et donc d'appeler les
+        // hooks) : sinon un déplacement mesuré depuis le bord de l'écran
+        // serait envoyé.
+        with_primary(|s| s.core.on_warped(at));
+    } else if !already_hidden {
+        log::info!("curseur caché par une application : laissé à sa place");
     }
-    // Le point de référence des déplacements doit changer AVANT tout appel
-    // susceptible de traiter des messages (et donc d'appeler les hooks) :
-    // sinon un déplacement mesuré depuis le bord de l'écran serait envoyé.
-    with_primary(|s| s.core.on_warped(center));
-    CURSOR.with(|c| c.borrow_mut().hidden_at = Some(center));
+    CURSOR.with(|c| {
+        let mut c = c.borrow_mut();
+        c.hidden_at = Some(at);
+        c.warped = warp;
+        c.watch = HookWatch::new();
+    });
     // SAFETY: appels Win32 sur nos propres fenêtres.
     unsafe {
         let fg = GetForegroundWindow();
         if fg != hider {
             CURSOR.with(|c| c.borrow_mut().saved_fg = fg);
         }
-        SetWindowPos(hider, HWND_TOPMOST, center.x - 16, center.y - 16, 32, 32, SWP_SHOWWINDOW);
+        SetWindowPos(hider, HWND_TOPMOST, at.x - 16, at.y - 16, 32, 32, SWP_SHOWWINDOW);
     }
     // Peut traiter d'autres messages (et des appels de hooks) : aucun emprunt
     // n'est conservé pendant ces appels.
@@ -864,10 +899,11 @@ fn do_show(pos: Point) {
         // Une nouvelle bascule a eu lieu entre-temps.
         return;
     }
-    let (hider, saved) = CURSOR.with(|c| {
+    let (hider, saved, warped) = CURSOR.with(|c| {
         let mut c = c.borrow_mut();
         c.hidden_at = None;
-        (c.hider, std::mem::replace(&mut c.saved_fg, null_mut()))
+        c.watch = HookWatch::new();
+        (c.hider, std::mem::replace(&mut c.saved_fg, null_mut()), std::mem::replace(&mut c.warped, false))
     });
     // SAFETY: appels Win32 sur nos fenêtres ou des handles vérifiés par IsWindow.
     unsafe {
@@ -880,7 +916,11 @@ fn do_show(pos: Point) {
         if !saved.is_null() && IsWindow(saved) != 0 {
             force_foreground(saved);
         }
-        SetCursorPos(pos.x, pos.y);
+        // Un curseur laissé en place au départ (caché par une application)
+        // n'est pas déplacé non plus au retour.
+        if warped {
+            SetCursorPos(pos.x, pos.y);
+        }
     }
 }
 
@@ -893,11 +933,13 @@ fn watchdog() {
         let c = c.borrow();
         (c.hidden_at, c.hider)
     });
-    let Some(center) = hidden_at else { return };
-    // Si le curseur réel a bougé, les hooks ne reçoivent plus les
-    // événements (Windows peut les retirer sans prévenir) : on revient ici.
-    if let Some(p) = cursor_pos() {
-        if (p.x - center.x).abs() + (p.y - center.y).abs() > 200 {
+    let Some(left_at) = hidden_at else { return };
+    // Si le curseur réel s'éloigne tout seul, les hooks ne reçoivent plus
+    // les événements (Windows peut les retirer sans prévenir) : on revient
+    // ici. Un curseur déplacé une fois par une autre application (un jeu qui
+    // le replace en perdant la main) n'en fait pas partie.
+    if let (Some(p), Some(seen)) = (cursor_pos(), with_primary(|s| s.core.cursor_seen())) {
+        if CURSOR.with(|c| c.borrow_mut().watch.hooks_lost(left_at, p, seen)) {
             log::warn!("les hooks d'entrée ne répondent plus : retour sur ce PC et réinstallation");
             with_primary(|s| s.core.reset(&mut s.host));
             install_hooks();
