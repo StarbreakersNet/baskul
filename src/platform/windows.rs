@@ -826,21 +826,15 @@ fn do_hide() {
     let hider = CURSOR.with(|c| c.borrow().hider);
     // SAFETY: déplacement du curseur. Un jeu peut l'avoir confiné
     // (ClipCursor) : on lève ce confinement, sinon le recentrage n'arrive pas
-    // au centre.
+    // au centre. Le jeu le rétablit quand il reprend la main.
     unsafe {
         ClipCursor(null());
         SetCursorPos(center.x, center.y);
     }
-    // Position réellement atteinte : elle peut différer du centre si une
-    // application replace le curseur ou le confine de nouveau.
-    let reached = cursor_pos().unwrap_or(center);
-    if reached != center {
-        log::debug!("recentrage en {center:?}, curseur resté en {reached:?}");
-    }
     // Le point de référence des déplacements doit changer AVANT tout appel
     // susceptible de traiter des messages (et donc d'appeler les hooks) :
     // sinon un déplacement mesuré depuis le bord de l'écran serait envoyé.
-    with_primary(|s| s.core.on_warped(reached));
+    with_primary(|s| s.core.on_warped(center));
     CURSOR.with(|c| c.borrow_mut().hidden_at = Some(center));
     // SAFETY: appels Win32 sur nos propres fenêtres.
     unsafe {
