@@ -153,8 +153,12 @@ pub struct PrimaryCore {
     last_client: Option<String>,
     /// Position réelle du curseur pendant que l'on pilote une machine.
     anchor: Point,
-    /// Le curseur a été recentré : on peut filtrer les déplacements aberrants.
-    warp_done: bool,
+    /// Point où le curseur a été recentré : permet de filtrer les
+    /// déplacements aberrants.
+    warped_to: Option<Point>,
+    /// Curseur déplacé par une autre application : déjà noté dans le journal
+    /// (une fois par passage sur une pilotée).
+    moved_logged: bool,
     /// Position où le curseur a quitté l'écran local.
     exit_point: Point,
     key_targets: HashMap<u32, Target>,
@@ -178,7 +182,8 @@ impl PrimaryCore {
             locked: false,
             last_client: None,
             anchor: Point::default(),
-            warp_done: false,
+            warped_to: None,
+            moved_logged: false,
             exit_point: Point::default(),
             key_targets: HashMap::new(),
             button_targets: Default::default(),
@@ -396,7 +401,8 @@ impl PrimaryCore {
         self.last_client = Some(name.to_string());
         self.exit_point = cur;
         self.anchor = cur;
-        self.warp_done = false;
+        self.warped_to = None;
+        self.moved_logged = false;
         self.send_to(host, name, msg);
         host.hide_cursor(cur);
         status::set_active_peer(Some(name));
@@ -416,20 +422,40 @@ impl PrimaryCore {
     pub fn on_warped(&mut self, anchor: Point) {
         if self.is_remote() {
             self.anchor = anchor;
-            self.warp_done = true;
+            self.warped_to = Some(anchor);
         }
+    }
+
+    /// Dernière position réelle du curseur connue en mode distant : celle
+    /// du départ, du recentrage, ou vue par le dernier déplacement.
+    pub fn cursor_seen(&self) -> Point {
+        self.anchor
     }
 
     /// Déplacement absolu en mode distant (Windows : le curseur réel reste
     /// immobile, la position demandée moins la position réelle donne le
-    /// déplacement).
-    pub fn remote_abs_motion<H: Host>(&mut self, host: &mut H, pt: Point) {
+    /// déplacement). `cur` : position réelle du curseur au moment de
+    /// l'événement, si elle est connue. Ce n'est pas forcément le point de
+    /// recentrage : un jeu qui confine le curseur (`ClipCursor`) ou le
+    /// replace lui-même le laisse ailleurs, et mesurer depuis le point de
+    /// recentrage ajouterait cet écart à chaque déplacement.
+    pub fn remote_abs_motion<H: Host>(&mut self, host: &mut H, cur: Option<Point>, pt: Point) {
+        if let Some(cur) = cur {
+            if cur != self.anchor && !self.moved_logged {
+                self.moved_logged = true;
+                log::info!(
+                    "curseur déplacé par une autre application ({:?} → {cur:?}) : déplacements mesurés depuis sa position réelle",
+                    self.anchor
+                );
+            }
+            self.anchor = cur;
+        }
         let dx = pt.x - self.anchor.x;
         let dy = pt.y - self.anchor.y;
         if dx == 0 && dy == 0 {
             return;
         }
-        if self.warp_done && self.is_bogus(host, dx, dy) {
+        if self.is_bogus(host, dx, dy) {
             log::debug!("déplacement aberrant ignoré ({dx}, {dy})");
             return;
         }
@@ -448,10 +474,13 @@ impl PrimaryCore {
     }
 
     /// Juste après le recentrage, un événement émis avant celui-ci peut donner
-    /// un déplacement d'environ la distance centre → bord : on l'ignore.
+    /// un déplacement d'environ la distance centre → bord : on l'ignore. La
+    /// mesure se fait depuis le point de recentrage, où que soit le curseur :
+    /// un curseur retenu près d'un bord par une autre application ne bloque
+    /// donc aucun déplacement normal.
     fn is_bogus<H: Host>(&self, host: &H, dx: i32, dy: i32) -> bool {
         const ZONE: i32 = 10;
-        let a = self.anchor;
+        let Some(a) = self.warped_to else { return false };
         let d = host.layout().nearest_display(a);
         -dx + ZONE > a.x - d.left || dx + ZONE > d.right - a.x || -dy + ZONE > a.y - d.top || dy + ZONE > d.bottom - a.y
     }
@@ -783,10 +812,51 @@ impl PrimaryCore {
 
     fn go_local<H: Host>(&mut self, host: &mut H, pos: Point) {
         self.mode = Mode::Local;
-        self.warp_done = false;
+        self.warped_to = None;
         self.grace_until = None;
         host.show_cursor(pos);
         status::set_active_peer(None);
+    }
+}
+
+/// Surveillance des hooks pendant le pilotage (Windows). Tant qu'ils
+/// reçoivent les événements, la souris ne déplace pas le curseur réel (les
+/// événements sont supprimés) ; s'il s'éloigne tout seul, c'est qu'ils ne les
+/// reçoivent plus. Une autre application peut toutefois le déplacer (un jeu
+/// qui le replace en perdant la main) : il s'arrête alors à un endroit fixe,
+/// et le hook l'y voit au déplacement suivant.
+#[derive(Debug, Default)]
+pub struct HookWatch {
+    /// Dernière position suspecte : loin, sans que le hook l'y ait vu.
+    last: Option<Point>,
+    /// Nombre de fois où elle a changé.
+    moves: u8,
+}
+
+impl HookWatch {
+    /// Distance (|dx| + |dy|) au-delà de laquelle le curseur est « loin ».
+    const FAR: i32 = 200;
+    /// Changements de position suspecte qui valent une panne des hooks.
+    const MOVES: u8 = 2;
+
+    pub const fn new() -> HookWatch {
+        HookWatch { last: None, moves: 0 }
+    }
+
+    /// Vérification périodique. `left_at` : où le curseur a été laissé au
+    /// départ ; `pos` : sa position réelle ; `seen` : la dernière position
+    /// connue du hook (`PrimaryCore::cursor_seen`). Renvoie `true` si les
+    /// hooks ne reçoivent plus les événements.
+    pub fn hooks_lost(&mut self, left_at: Point, pos: Point, seen: Point) -> bool {
+        let far = (pos.x - left_at.x).abs() + (pos.y - left_at.y).abs() > Self::FAR;
+        if !far || pos == seen {
+            *self = HookWatch::new();
+            return false;
+        }
+        if self.last.replace(pos).is_some_and(|prev| prev != pos) {
+            self.moves += 1;
+        }
+        self.moves >= Self::MOVES
     }
 }
 
@@ -932,11 +1002,15 @@ mod tests {
         assert_eq!(host.hidden_at, Some(Point::new(1919, 540)));
         assert_eq!(core.active_client(), Some("Atelier"));
 
-        core.remote_abs_motion(&mut host, Point::new(965, 538));
+        let center = Some(Point::new(960, 540));
+        core.remote_abs_motion(&mut host, center, Point::new(965, 538));
         assert_eq!(host.last(), Some(&Message::Motion { dx: 5, dy: -2 }));
+        // Position réelle inconnue : mesuré depuis la dernière connue.
+        core.remote_abs_motion(&mut host, None, Point::new(957, 541));
+        assert_eq!(host.last(), Some(&Message::Motion { dx: -3, dy: 1 }));
         // Artefact du recentrage : ignoré.
         let n = host.sent.len();
-        core.remote_abs_motion(&mut host, Point::new(1925, 540));
+        core.remote_abs_motion(&mut host, center, Point::new(1925, 540));
         assert_eq!(host.sent.len(), n);
 
         core.peer_event(&mut host, PeerEvent::Leave { id: ATELIER, edge: Edge::Left, ratio: 0.5 });
@@ -944,6 +1018,187 @@ mod tests {
         let p = host.shown_at.unwrap();
         assert_eq!(p.x, 1918);
         assert!((p.y - 540).abs() <= 1);
+    }
+
+    /// Déplacements envoyés à « Atelier ».
+    fn motions(host: &FakeHost) -> Vec<(i32, i32)> {
+        host.to(ATELIER)
+            .iter()
+            .filter_map(|m| if let Message::Motion { dx, dy } = m { Some((*dx, *dy)) } else { None })
+            .collect()
+    }
+
+    /// Suite de déplacements de souris, toujours la même (petits pas, comme
+    /// ceux d'une souris, dans toutes les directions).
+    fn mouse_steps(n: usize) -> Vec<(i32, i32)> {
+        let mut seed: u32 = 0x2545_f491;
+        let mut next = || {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            ((seed >> 16) % 13) as i32 - 6
+        };
+        (0..n).map(|_| (next(), next())).filter(|d| *d != (0, 0)).collect()
+    }
+
+    /// Le système vu par le hook Windows : le curseur réel reste immobile
+    /// (événements supprimés), la position demandée est `réelle + pas`.
+    fn hook_event(core: &mut PrimaryCore, host: &mut FakeHost, real: Point, step: (i32, i32)) {
+        core.remote_abs_motion(host, Some(real), Point::new(real.x + step.0, real.y + step.1));
+    }
+
+    /// Sans autre application qui touche au curseur, rien ne change : le
+    /// déplacement reste « position demandée moins point de recentrage ».
+    #[test]
+    fn remote_motion_is_unchanged_when_nothing_moves_the_cursor() {
+        let (mut core, mut host) = setup();
+        go_remote(&mut core, &mut host);
+        host.sent.clear();
+        let center = Point::new(960, 540);
+        let steps = mouse_steps(500);
+        for step in &steps {
+            hook_event(&mut core, &mut host, center, *step);
+        }
+        assert_eq!(motions(&host), steps);
+    }
+
+    /// Un jeu qui confine le curseur l'empêche d'arriver au point de
+    /// recentrage : le déplacement se mesure depuis sa position réelle, sans
+    /// dérive (l'écart ne s'ajoute pas à chaque événement).
+    #[test]
+    fn no_drift_when_cursor_is_not_where_it_was_warped() {
+        let (mut core, mut host) = setup();
+        go_remote(&mut core, &mut host);
+        host.sent.clear();
+        // Recentrage demandé en (960, 540), curseur resté un pixel plus haut.
+        let real = Point::new(960, 539);
+        let steps = mouse_steps(500);
+        for step in &steps {
+            hook_event(&mut core, &mut host, real, *step);
+        }
+        assert_eq!(motions(&host), steps);
+    }
+
+    /// Un jeu qui replace le curseur à chaque image, à des endroits
+    /// différents : chaque déplacement reste exact.
+    #[test]
+    fn no_drift_when_another_application_keeps_moving_the_cursor() {
+        let (mut core, mut host) = setup();
+        go_remote(&mut core, &mut host);
+        host.sent.clear();
+        let spots = [Point::new(960, 539), Point::new(959, 540), Point::new(700, 300), Point::new(960, 540)];
+        let steps = mouse_steps(500);
+        for (i, step) in steps.iter().enumerate() {
+            hook_event(&mut core, &mut host, spots[(i / 7) % spots.len()], *step);
+        }
+        assert_eq!(motions(&host), steps);
+    }
+
+    /// Un événement qui échappe au hook déplace vraiment le curseur : il est
+    /// perdu, mais les suivants restent exacts (pas d'écart qui s'installe).
+    #[test]
+    fn a_missed_event_does_not_shift_the_following_ones() {
+        let (mut core, mut host) = setup();
+        go_remote(&mut core, &mut host);
+        host.sent.clear();
+        let mut real = Point::new(960, 540);
+        hook_event(&mut core, &mut host, real, (4, 0));
+        // Événement non vu : le curseur réel bouge de (3, -5).
+        real = Point::new(963, 535);
+        hook_event(&mut core, &mut host, real, (2, 1));
+        hook_event(&mut core, &mut host, real, (-1, 0));
+        assert_eq!(motions(&host), [(4, 0), (2, 1), (-1, 0)]);
+    }
+
+    /// Curseur retenu tout près d'un bord par une autre application : les
+    /// déplacements vers ce bord ne sont pas pris pour des artefacts.
+    #[test]
+    fn cursor_held_near_an_edge_still_moves_everywhere() {
+        let (mut core, mut host) = setup();
+        go_remote(&mut core, &mut host);
+        host.sent.clear();
+        let real = Point::new(3, 2);
+        let steps = [(-5, 0), (0, -5), (-6, -6), (5, 5)];
+        for step in steps {
+            hook_event(&mut core, &mut host, real, step);
+        }
+        assert_eq!(motions(&host), steps);
+    }
+
+    /// L'artefact du recentrage reste filtré après le recentrage, et
+    /// seulement après (comme avant).
+    #[test]
+    fn warp_artifact_is_filtered_only_after_the_warp() {
+        let (mut core, mut host) = setup();
+        let d = core.local_motion(&mut host, Point::new(1919, 540), Point::new(1925, 540));
+        assert_eq!(d, Decision::Swallow);
+        host.sent.clear();
+        // Avant le recentrage : le curseur est encore au bord.
+        hook_event(&mut core, &mut host, Point::new(1919, 540), (7, 0));
+        assert_eq!(motions(&host), [(7, 0)]);
+        core.on_warped(Point::new(960, 540));
+        // Événement émis au bord, traité après le recentrage : ignoré.
+        core.remote_abs_motion(&mut host, Some(Point::new(960, 540)), Point::new(1926, 541));
+        assert_eq!(motions(&host), [(7, 0)]);
+        // De retour sur la principale puis sur la pilotée : filtre réarmé.
+        core.peer_event(&mut host, PeerEvent::Leave { id: ATELIER, edge: Edge::Left, ratio: 0.5 });
+        go_remote(&mut core, &mut host);
+        host.sent.clear();
+        core.remote_abs_motion(&mut host, Some(Point::new(960, 540)), Point::new(1926, 541));
+        assert_eq!(motions(&host), []);
+    }
+
+    /// Hooks en panne : la souris déplace le curseur réel, loin et sans que
+    /// le hook le voie. Détecté dès que cela se répète.
+    #[test]
+    fn hook_watch_detects_a_cursor_that_keeps_moving_unseen() {
+        let center = Point::new(960, 540);
+        let mut w = HookWatch::default();
+        assert!(!w.hooks_lost(center, Point::new(1300, 540), center));
+        assert!(!w.hooks_lost(center, Point::new(1400, 500), center));
+        assert!(w.hooks_lost(center, Point::new(1500, 480), center));
+
+        // Même avec des pauses entre les mouvements.
+        let mut w = HookWatch::default();
+        assert!(!w.hooks_lost(center, Point::new(1300, 540), center));
+        assert!(!w.hooks_lost(center, Point::new(1300, 540), center));
+        assert!(!w.hooks_lost(center, Point::new(1400, 540), center));
+        assert!(!w.hooks_lost(center, Point::new(1400, 540), center));
+        assert!(w.hooks_lost(center, Point::new(1500, 540), center));
+    }
+
+    /// Un jeu replace le curseur loin du centre en perdant la main : ce
+    /// n'est pas une panne des hooks, on reste sur la pilotée.
+    #[test]
+    fn hook_watch_accepts_a_cursor_moved_once_by_another_application() {
+        let center = Point::new(1920, 540);
+        let spot = Point::new(1922, 250);
+        let mut w = HookWatch::default();
+        // Souris immobile : le curseur reste là où le jeu l'a mis.
+        for _ in 0..100 {
+            assert!(!w.hooks_lost(center, spot, center));
+        }
+        // La souris bouge : le hook voit le curseur à cet endroit.
+        for _ in 0..100 {
+            assert!(!w.hooks_lost(center, spot, spot));
+        }
+        // Le jeu le replace encore une fois ailleurs : toujours toléré.
+        assert!(!w.hooks_lost(center, Point::new(1920, 200), spot));
+        assert!(!w.hooks_lost(center, Point::new(1920, 200), spot));
+    }
+
+    /// Près de l'endroit où il a été laissé, le curseur n'est jamais suspect
+    /// (comme avant), et un passage par là remet la surveillance à zéro.
+    #[test]
+    fn hook_watch_ignores_a_cursor_that_stays_close() {
+        let center = Point::new(960, 540);
+        let mut w = HookWatch::default();
+        for i in 0..50 {
+            assert!(!w.hooks_lost(center, Point::new(960 + i, 540 - i), center));
+        }
+        assert!(!w.hooks_lost(center, Point::new(1300, 540), center));
+        assert!(!w.hooks_lost(center, Point::new(1400, 540), center));
+        assert!(!w.hooks_lost(center, Point::new(1000, 540), center));
+        assert!(!w.hooks_lost(center, Point::new(1300, 540), center));
+        assert!(!w.hooks_lost(center, Point::new(1400, 540), center));
     }
 
     #[test]
