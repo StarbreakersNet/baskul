@@ -422,8 +422,15 @@ impl PrimaryCore {
 
     /// Déplacement absolu en mode distant (Windows : le curseur réel reste
     /// immobile, la position demandée moins la position réelle donne le
-    /// déplacement).
-    pub fn remote_abs_motion<H: Host>(&mut self, host: &mut H, pt: Point) {
+    /// déplacement). `cur` : position réelle du curseur au moment de
+    /// l'événement, si elle est connue. Elle n'est pas forcément celle du
+    /// recentrage : un jeu qui confine le curseur (`ClipCursor`) ou le
+    /// replace lui-même le laisse ailleurs, et mesurer depuis le point de
+    /// recentrage ajouterait cet écart à chaque déplacement.
+    pub fn remote_abs_motion<H: Host>(&mut self, host: &mut H, cur: Option<Point>, pt: Point) {
+        if let Some(cur) = cur {
+            self.anchor = cur;
+        }
         let dx = pt.x - self.anchor.x;
         let dy = pt.y - self.anchor.y;
         if dx == 0 && dy == 0 {
@@ -932,11 +939,15 @@ mod tests {
         assert_eq!(host.hidden_at, Some(Point::new(1919, 540)));
         assert_eq!(core.active_client(), Some("Atelier"));
 
-        core.remote_abs_motion(&mut host, Point::new(965, 538));
+        let center = Some(Point::new(960, 540));
+        core.remote_abs_motion(&mut host, center, Point::new(965, 538));
         assert_eq!(host.last(), Some(&Message::Motion { dx: 5, dy: -2 }));
+        // Position réelle inconnue : mesuré depuis la dernière connue.
+        core.remote_abs_motion(&mut host, None, Point::new(957, 541));
+        assert_eq!(host.last(), Some(&Message::Motion { dx: -3, dy: 1 }));
         // Artefact du recentrage : ignoré.
         let n = host.sent.len();
-        core.remote_abs_motion(&mut host, Point::new(1925, 540));
+        core.remote_abs_motion(&mut host, center, Point::new(1925, 540));
         assert_eq!(host.sent.len(), n);
 
         core.peer_event(&mut host, PeerEvent::Leave { id: ATELIER, edge: Edge::Left, ratio: 0.5 });
@@ -944,6 +955,31 @@ mod tests {
         let p = host.shown_at.unwrap();
         assert_eq!(p.x, 1918);
         assert!((p.y - 540).abs() <= 1);
+    }
+
+    /// Un jeu qui confine le curseur l'empêche d'arriver au point de
+    /// recentrage : le déplacement se mesure depuis sa position réelle, sans
+    /// dérive (l'écart ne s'ajoute pas à chaque événement).
+    #[test]
+    fn no_drift_when_cursor_is_not_where_it_was_warped() {
+        let (mut core, mut host) = setup();
+        go_remote(&mut core, &mut host);
+        host.sent.clear();
+
+        // Recentrage demandé en (960, 540), curseur resté en (960, 539).
+        let real = Some(Point::new(960, 539));
+        core.remote_abs_motion(&mut host, real, Point::new(963, 539));
+        core.remote_abs_motion(&mut host, real, Point::new(958, 539));
+        core.remote_abs_motion(&mut host, real, Point::new(960, 541));
+        assert_eq!(
+            host.to(ATELIER),
+            [Message::Motion { dx: 3, dy: 0 }, Message::Motion { dx: -2, dy: 0 }, Message::Motion { dx: 0, dy: 2 }]
+        );
+
+        // Le jeu replace ensuite le curseur ailleurs : toujours aucun écart.
+        host.sent.clear();
+        core.remote_abs_motion(&mut host, Some(Point::new(900, 500)), Point::new(904, 500));
+        assert_eq!(host.to(ATELIER), [Message::Motion { dx: 4, dy: 0 }]);
     }
 
     #[test]

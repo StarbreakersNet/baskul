@@ -628,7 +628,9 @@ impl PrimaryState {
         match msg {
             WM_MOUSEMOVE => {
                 if remote {
-                    self.core.remote_abs_motion(host, pt);
+                    // Pendant un hook, GetCursorPos donne encore la position
+                    // d'avant l'événement : celle où le curseur est resté.
+                    self.core.remote_abs_motion(host, cursor_pos(), pt);
                     Decision::Swallow
                 } else {
                     let cur = cursor_pos().unwrap_or(self.last_pt);
@@ -822,12 +824,23 @@ fn do_hide() {
     };
     let center = layout.nearest_display(cur).center();
     let hider = CURSOR.with(|c| c.borrow().hider);
-    // SAFETY: déplacement du curseur.
-    unsafe { SetCursorPos(center.x, center.y) };
+    // SAFETY: déplacement du curseur. Un jeu peut l'avoir confiné
+    // (ClipCursor) : on lève ce confinement, sinon le recentrage n'arrive pas
+    // au centre.
+    unsafe {
+        ClipCursor(null());
+        SetCursorPos(center.x, center.y);
+    }
+    // Position réellement atteinte : elle peut différer du centre si une
+    // application replace le curseur ou le confine de nouveau.
+    let reached = cursor_pos().unwrap_or(center);
+    if reached != center {
+        log::debug!("recentrage en {center:?}, curseur resté en {reached:?}");
+    }
     // Le point de référence des déplacements doit changer AVANT tout appel
     // susceptible de traiter des messages (et donc d'appeler les hooks) :
     // sinon un déplacement mesuré depuis le bord de l'écran serait envoyé.
-    with_primary(|s| s.core.on_warped(center));
+    with_primary(|s| s.core.on_warped(reached));
     CURSOR.with(|c| c.borrow_mut().hidden_at = Some(center));
     // SAFETY: appels Win32 sur nos propres fenêtres.
     unsafe {
