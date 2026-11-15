@@ -443,7 +443,7 @@ impl PrimaryCore {
         if let Some(cur) = cur {
             if cur != self.anchor && !self.moved_logged {
                 self.moved_logged = true;
-                log::info!(
+                log::debug!(
                     "curseur déplacé par une autre application ({:?} → {cur:?}) : déplacements mesurés depuis sa position réelle",
                     self.anchor
                 );
