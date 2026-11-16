@@ -236,7 +236,7 @@ Pour le défilement d'une pilotée macOS, commencez par `mode = "lines"`. Si la 
 Peu après son démarrage, puis toutes les six heures, Baskul cherche une nouvelle version dans les [Releases](https://github.com/StarbreakersNet/baskul/releases). S'il en trouve une, il la télécharge en arrière-plan et vérifie son empreinte SHA-256. Il ne reste plus qu'à cliquer sur **Redémarrer pour mettre à jour** : dans le menu de l'icône, dans le bandeau de la fenêtre de Baskul, ou dans la page À propos (qui permet aussi de chercher tout de suite). Baskul remplace ses programmes et redémarre dans la nouvelle version ; lancée depuis la fenêtre de Baskul, la mise à jour la rouvre ensuite.
 
 - Mettez à jour **toutes les machines** : des versions trop différentes ne se connectent pas (le menu affiche « versions incompatibles »).
-- macOS : Baskul.app est remplacée là où elle se trouve ; il faut donc pouvoir écrire dans son dossier (c'est le cas d'un compte administrateur dans Applications). L'app n'étant pas signée par un développeur identifié, macOS peut redemander l'autorisation **Accessibilité** après une mise à jour (voir [Dépannage](#6-dépannage)).
+- macOS : Baskul.app est remplacée là où elle se trouve ; il faut donc pouvoir écrire dans son dossier (c'est le cas d'un compte administrateur dans Applications). L'app n'étant pas signée par un développeur identifié, macOS redemande l'autorisation **Accessibilité** après une mise à jour : activez de nouveau **Baskul** dans les Réglages, et Baskul redémarre tout seul (voir [Dépannage](#6-dépannage)).
 - Windows : les programmes sont remplacés dans leur dossier (les anciens, renommés en `.old`, sont effacés au démarrage suivant).
 - Linux : la nouvelle version est signalée ; installez-la à la main.
 - Pour ne plus chercher automatiquement : « Mises à jour automatiques », onglet Avancé (`[updates] check = false`).
@@ -262,7 +262,7 @@ Peu après son démarrage, puis toutes les six heures, Baskul cherche une nouvel
 
 **Précédent / suivant (boutons 4/5) ne fonctionne pas dans Safari ou le Finder.** Réglez `side_buttons = "swipe"`.
 
-**Après une mise à jour, macOS ne réagit plus.** Une app non signée par un développeur identifié change d'identité à chaque version. Dans *Accessibilité* (et *Surveillance de l'entrée* sur une principale), supprimez Baskul (bouton **−**), puis ajoutez-la à nouveau (**+**).
+**Après une mise à jour, macOS ne réagit plus.** Une app non signée par un développeur identifié change d'identité à chaque version : l'ancienne autorisation reste cochée dans les Réglages, mais ne vaut plus rien. Au premier lancement d'une nouvelle version, Baskul la fait oublier à macOS puis la redemande : activez **Baskul** dans *Accessibilité* (et *Surveillance de l'entrée* sur une principale), et Baskul redémarre tout seul. Si rien ne se passe, choisissez **Autoriser Baskul (Accessibilité)…** dans le menu de l'icône. En dernier recours, supprimez Baskul de la liste (bouton **−**), puis ajoutez-la à nouveau (**+**).
 
 Pour éviter cette manipulation avec vos compilations locales, signez-les avec un certificat local :
 1. Ouvrez *Trousseaux d'accès → Assistant de certification → Créer un certificat*.
