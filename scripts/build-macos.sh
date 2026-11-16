@@ -5,9 +5,10 @@
 #
 #   ./scripts/build-macos.sh                 # pour l'architecture de ce Mac
 #   UNIVERSAL=1 ./scripts/build-macos.sh     # Apple Silicon + Intel
-#   CODESIGN_IDENTITY="Baskul Local" ./scripts/build-macos.sh
-#       signe avec un certificat local : les autorisations macOS
-#       (Accessibilité) sont alors conservées d'une version à l'autre.
+#   CODESIGN_IDENTITY="Baskul" ./scripts/build-macos.sh
+#       signe avec un certificat (nom ou empreinte SHA-1) : les autorisations
+#       macOS (Accessibilité) sont alors conservées d'une version à l'autre.
+#       C'est ce que fait le CI avec le secret MACOS_CERTIFICATE.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

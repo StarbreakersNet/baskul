@@ -38,6 +38,24 @@ pub fn set_relaunch_exe(exe: PathBuf) {
     *RELAUNCH_EXE.lock().unwrap_or_else(|e| e.into_inner()) = Some(exe);
 }
 
+/// Le programme `exe` n'est plus celui du lancement précédent : première
+/// exécution d'une nouvelle version (ou toute première exécution). Sa taille
+/// et sa date sont notées dans `marker` pour la fois suivante.
+#[cfg(any(target_os = "macos", test, feature = "xcheck"))]
+pub fn program_changed(marker: &Path, exe: &Path) -> bool {
+    let Ok(meta) = std::fs::metadata(exe) else { return false };
+    let modified =
+        meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs());
+    let id = format!("{}:{modified}", meta.len());
+    if std::fs::read_to_string(marker).is_ok_and(|old| old.trim() == id) {
+        return false;
+    }
+    if let Err(e) = std::fs::write(marker, &id) {
+        log::warn!("écriture de {} impossible : {e}", marker.display());
+    }
+    true
+}
+
 /// Demande de redémarrage, traitée par la boucle principale avec
 /// [`take_restart_request`] (macOS, Linux, configuration invalide).
 pub fn request_restart() {
@@ -121,5 +139,24 @@ mod tests {
         assert_eq!(app_bundle(Path::new("/Users/moi/baskul/target/release/baskul")), None);
         assert_eq!(app_bundle(Path::new("/Applications/Baskul.app/Contents/Resources/baskul")), None);
         assert_eq!(app_bundle(Path::new("baskul")), None);
+    }
+
+    #[test]
+    fn program_change_is_seen_once_per_version() {
+        let dir = std::env::temp_dir().join(format!("baskul-program-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (marker, exe) = (dir.join("program-id"), dir.join("baskul"));
+        std::fs::write(&exe, "version 1").unwrap();
+        // Première exécution, puis lancements suivants du même programme.
+        assert!(program_changed(&marker, &exe));
+        assert!(!program_changed(&marker, &exe));
+        assert!(!program_changed(&marker, &exe));
+        // Mise à jour : le programme est remplacé.
+        std::fs::write(&exe, "version 2, plus longue").unwrap();
+        assert!(program_changed(&marker, &exe));
+        assert!(!program_changed(&marker, &exe));
+        // Programme introuvable : rien à signaler.
+        assert!(!program_changed(&marker, &dir.join("absent")));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

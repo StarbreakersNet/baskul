@@ -82,7 +82,42 @@ jobs:
         with:
           node-version: 22
       - run: cargo test -p baskul
+      # Signature avec le certificat de Baskul (secrets MACOS_CERTIFICATE et
+      # MACOS_CERTIFICATE_PASSWORD) : l'identité de l'app reste la même d'une
+      # version à l'autre, et macOS conserve ses autorisations (Accessibilité,
+      # Surveillance de l'entrée) après une mise à jour. Sans ces secrets
+      # (fork…), signature ad hoc : les autorisations sont redemandées à
+      # chaque version.
+      - name: Certificat de signature
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERTIFICATE }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -z "$CERT_P12" ]; then
+            echo "::warning::secret MACOS_CERTIFICATE absent : signature ad hoc, macOS redemandera les autorisations après la mise à jour"
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/baskul.keychain-db"
+          keychain_password=$(openssl rand -hex 16)
+          echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/baskul.p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/baskul.p12" -k "$keychain" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/baskul.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          # Certificat auto-signé, non approuvé sur la machine de build :
+          # désigné par son empreinte SHA-1 (son nom ne suffit pas).
+          identity=$(security find-identity -p codesigning "$keychain" | awk '/[0-9]+\)/ { print $2; exit }')
+          if [ -z "$identity" ]; then
+            echo "::error::aucune identité de signature dans MACOS_CERTIFICATE"
+            exit 1
+          fi
+          echo "CODESIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
       - run: UNIVERSAL=1 ./scripts/build-macos.sh
+      - name: Signature
+        run: codesign --display --requirements - dist/Baskul.app
       - uses: actions/upload-artifact@v4
         with:
           name: Baskul-macOS

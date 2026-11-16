@@ -1536,6 +1536,62 @@ fn primary_permissions_ok() -> bool {
     unsafe { AXIsProcessTrusted() && CGPreflightListenEventAccess() }
 }
 
+/// Identifiant de Baskul.app (Info.plist) : c'est sous ce nom que macOS
+/// enregistre ses autorisations.
+const BUNDLE_ID: &str = "fr.baskul.app";
+
+/// Autorisations macOS qui manquent pour ce rôle (noms de `tccutil`).
+fn missing_permissions(role: Role) -> Vec<&'static str> {
+    let mut v = Vec::new();
+    // SAFETY: fonctions sans précondition.
+    unsafe {
+        match role {
+            Role::Secondary => {
+                if !CGPreflightPostEventAccess() {
+                    v.extend(["Accessibility", "PostEvent"]);
+                }
+            }
+            Role::Primary => {
+                if !AXIsProcessTrusted() {
+                    v.extend(["Accessibility", "PostEvent"]);
+                }
+                if !CGPreflightListenEventAccess() {
+                    v.push("ListenEvent");
+                }
+            }
+        }
+    }
+    v
+}
+
+/// Fait oublier à macOS les autorisations enregistrées pour Baskul. Une app
+/// non signée par un développeur identifié change d'identité à chaque
+/// version : après une mise à jour, l'ancienne entrée reste cochée dans les
+/// Réglages mais ne vaut plus rien, et empêche d'en créer une nouvelle. Une
+/// fois oubliée, la demande d'autorisation en recrée une, valable.
+fn forget_permissions(services: &[&str]) {
+    // Hors de Baskul.app, les autorisations sont celles du terminal.
+    if !std::env::current_exe().is_ok_and(|e| super::app_bundle(&e).is_some()) {
+        return;
+    }
+    for service in services {
+        match std::process::Command::new("/usr/bin/tccutil").args(["reset", service, BUNDLE_ID]).output() {
+            Ok(out) if out.status.success() => log::info!("autorisation macOS « {service} » remise à zéro"),
+            Ok(out) => log::warn!(
+                "remise à zéro de l'autorisation « {service} » refusée : {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ),
+            Err(e) => log::warn!("tccutil introuvable : {e}"),
+        }
+    }
+}
+
+/// Premier lancement d'une nouvelle version de Baskul.app.
+fn new_version_started() -> bool {
+    let Ok(exe) = std::env::current_exe() else { return false };
+    super::app_bundle(&exe).is_some() && super::program_changed(&crate::config::config_dir().join("program-id"), &exe)
+}
+
 // ---------------------------------------------------------------------------
 // Barre des menus
 // ---------------------------------------------------------------------------
@@ -1566,6 +1622,8 @@ struct MacUi {
     config_path: PathBuf,
     args: Args,
     permissions_ok: bool,
+    /// Autorisation « Accessibilité » au dernier contrôle.
+    ax_trusted: bool,
 }
 
 define_class!(
@@ -1621,9 +1679,16 @@ define_class!(
 
         #[unsafe(method(openAccessibility:))]
         fn open_accessibility(&self, _sender: Option<&AnyObject>) {
+            // L'entrée déjà présente dans les Réglages peut être celle d'une
+            // ancienne version (cochée, mais sans effet) : on la fait oublier,
+            // puis Baskul redémarre et redemande l'autorisation.
+            if let Some(role) = ui_value(|u| u.role) {
+                forget_permissions(&missing_permissions(role));
+            }
             let _ = std::process::Command::new("/usr/bin/open")
                 .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
                 .spawn();
+            super::request_restart();
         }
 
         #[unsafe(method(toggleLogin:))]
@@ -1812,6 +1877,23 @@ fn ui_tick(mtm: MainThreadMarker) {
         Some(r) => r,
         None => return,
     };
+    // Autorisation « Accessibilité » accordée pendant que Baskul tourne :
+    // macOS ne l'applique complètement qu'à un nouveau processus.
+    // SAFETY: fonction sans précondition.
+    let ax = unsafe { AXIsProcessTrusted() };
+    if ax && !ui_value(|u| u.ax_trusted).unwrap_or(true) {
+        log::info!("autorisation « Accessibilité » accordée : redémarrage");
+        let args = ui_value(|u| u.args.clone()).unwrap_or_default();
+        shutdown();
+        super::relaunch(&args);
+    }
+    MAC_UI.with(|u| {
+        if let Ok(mut g) = u.try_borrow_mut() {
+            if let Some(ui) = g.as_mut() {
+                ui.ax_trusted = ax;
+            }
+        }
+    });
     // Autorisations.
     let ok = match role {
         Role::Secondary => post_access(),
@@ -2271,6 +2353,13 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
         write: clip_write,
         formats: clip_formats,
     };
+    // Après une mise à jour, les autorisations enregistrées par macOS sont
+    // celles de l'ancienne version : on les fait oublier avant de les
+    // redemander. Seulement au premier lancement d'une nouvelle version : une
+    // autorisation valable n'est jamais touchée.
+    if new_version_started() {
+        forget_permissions(&missing_permissions(settings.role));
+    }
     let permissions_ok;
     let _services: Services = match settings.role {
         Role::Secondary => {
@@ -2384,6 +2473,8 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
             config_path,
             args,
             permissions_ok,
+            // SAFETY: fonction sans précondition.
+            ax_trusted: unsafe { AXIsProcessTrusted() },
         })
     });
     ui_tick(mtm);
