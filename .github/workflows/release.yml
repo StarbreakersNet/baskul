@@ -16,6 +16,8 @@ jobs:
   # Tests et compilation : le workflow « build », partagé.
   build:
     uses: ./.github/workflows/build.yml
+    # Certificat de signature macOS.
+    secrets: inherit
 
   release:
     name: Release

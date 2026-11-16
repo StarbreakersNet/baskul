@@ -43,6 +43,20 @@ Une fois installé, Baskul se met à jour tout seul (voir [Mises à jour](#5-mis
 
 Pour compiler sans publier : onglet **Actions** → **build** → **Run workflow**. Les programmes sont alors dans les *artifacts*, en bas de la page de l'exécution. Le workflow **release** réutilise ce workflow **build** (tests puis compilation), puis publie.
 
+#### Certificat de signature macOS
+
+Pour que macOS garde les autorisations de Baskul (Accessibilité, Surveillance de l'entrée) d'une version à l'autre, toutes les versions doivent être signées avec **le même certificat**. Il suffit d'un certificat auto-signé, gratuit, créé une seule fois sur un Mac :
+
+1. Ouvrez *Trousseaux d'accès → Assistant de certification → Créer un certificat*. Nom : `Baskul` ; type d'identité : *Racine auto-signée* ; type de certificat : *Signature de code*.
+2. Dans *Mes certificats*, faites un clic droit sur **Baskul** → *Exporter* au format `.p12`, avec un mot de passe.
+3. Copiez le fichier en base64 :
+   ```bash
+   base64 -i Baskul.p12 | pbcopy
+   ```
+4. Dans *Settings → Secrets and variables → Actions* du dépôt, créez `MACOS_CERTIFICATE` (le texte copié) et `MACOS_CERTIFICATE_PASSWORD` (le mot de passe).
+
+Gardez ce certificat précieusement, et nulle part ailleurs que dans votre trousseau et ces secrets : il permet de signer une app qui hériterait des autorisations de Baskul. S'il est perdu ou changé, macOS redemandera les autorisations une fois. Sans ces secrets, le CI signe « ad hoc » (avertissement dans l'exécution), et macOS redemande les autorisations à chaque mise à jour.
+
 ### Compiler soi-même
 
 Il faut [Rust](https://rustup.rs) et [Node.js](https://nodejs.org) 22 (pour l'app de réglages). Yarn 4 est fourni par `corepack`, inclus dans Node.js.
@@ -236,7 +250,7 @@ Pour le défilement d'une pilotée macOS, commencez par `mode = "lines"`. Si la 
 Peu après son démarrage, puis toutes les six heures, Baskul cherche une nouvelle version dans les [Releases](https://github.com/StarbreakersNet/baskul/releases). S'il en trouve une, il la télécharge en arrière-plan et vérifie son empreinte SHA-256. Il ne reste plus qu'à cliquer sur **Redémarrer pour mettre à jour** : dans le menu de l'icône, dans le bandeau de la fenêtre de Baskul, ou dans la page À propos (qui permet aussi de chercher tout de suite). Baskul remplace ses programmes et redémarre dans la nouvelle version ; lancée depuis la fenêtre de Baskul, la mise à jour la rouvre ensuite.
 
 - Mettez à jour **toutes les machines** : des versions trop différentes ne se connectent pas (le menu affiche « versions incompatibles »).
-- macOS : Baskul.app est remplacée là où elle se trouve ; il faut donc pouvoir écrire dans son dossier (c'est le cas d'un compte administrateur dans Applications). L'app n'étant pas signée par un développeur identifié, macOS redemande l'autorisation **Accessibilité** après une mise à jour : activez de nouveau **Baskul** dans les Réglages, et Baskul redémarre tout seul (voir [Dépannage](#6-dépannage)).
+- macOS : Baskul.app est remplacée là où elle se trouve ; il faut donc pouvoir écrire dans son dossier (c'est le cas d'un compte administrateur dans Applications). Les versions publiées sont toutes signées avec le même certificat : macOS garde l'autorisation **Accessibilité** après une mise à jour. Si elle est tout de même redemandée (passage depuis la 0.7.0 ou une version antérieure, signées autrement), activez de nouveau **Baskul** dans les Réglages, et Baskul redémarre tout seul (voir [Dépannage](#6-dépannage)).
 - Windows : les programmes sont remplacés dans leur dossier (les anciens, renommés en `.old`, sont effacés au démarrage suivant).
 - Linux : la nouvelle version est signalée ; installez-la à la main.
 - Pour ne plus chercher automatiquement : « Mises à jour automatiques », onglet Avancé (`[updates] check = false`).
@@ -262,12 +276,9 @@ Peu après son démarrage, puis toutes les six heures, Baskul cherche une nouvel
 
 **Précédent / suivant (boutons 4/5) ne fonctionne pas dans Safari ou le Finder.** Réglez `side_buttons = "swipe"`.
 
-**Après une mise à jour, macOS ne réagit plus.** Une app non signée par un développeur identifié change d'identité à chaque version : l'ancienne autorisation reste cochée dans les Réglages, mais ne vaut plus rien. Au premier lancement d'une nouvelle version, Baskul la fait oublier à macOS puis la redemande : activez **Baskul** dans *Accessibilité* (et *Surveillance de l'entrée* sur une principale), et Baskul redémarre tout seul. Si rien ne se passe, choisissez **Autoriser Baskul (Accessibilité)…** dans le menu de l'icône. En dernier recours, supprimez Baskul de la liste (bouton **−**), puis ajoutez-la à nouveau (**+**).
+**Après une mise à jour, macOS ne réagit plus.** Si la nouvelle version n'est pas signée avec le même certificat que l'ancienne (passage depuis la 0.7.0 ou une version antérieure, compilation personnelle…), macOS la considère comme une autre app : l'ancienne autorisation reste cochée dans les Réglages, mais ne vaut plus rien. Au premier lancement d'une nouvelle version, Baskul la fait oublier à macOS puis la redemande : activez **Baskul** dans *Accessibilité* (et *Surveillance de l'entrée* sur une principale), et Baskul redémarre tout seul. Si rien ne se passe, choisissez **Autoriser Baskul (Accessibilité)…** dans le menu de l'icône. En dernier recours, supprimez Baskul de la liste (bouton **−**), puis ajoutez-la à nouveau (**+**).
 
-Pour éviter cette manipulation avec vos compilations locales, signez-les avec un certificat local :
-1. Ouvrez *Trousseaux d'accès → Assistant de certification → Créer un certificat*.
-2. Indiquez le nom `Baskul Local`, le type *Racine auto-signée* et le type de certificat *Signature de code*.
-3. Compilez avec `CODESIGN_IDENTITY="Baskul Local" ./scripts/build-macos.sh`.
+Pour éviter cette manipulation avec vos compilations locales, signez-les toujours avec le même certificat (voir [Certificat de signature macOS](#certificat-de-signature-macos)) : `CODESIGN_IDENTITY="Baskul" ./scripts/build-macos.sh`.
 
 **Win + L verrouille la principale Windows, même quand le curseur est sur une pilotée.** C'est une limite de Windows, comme Ctrl + Alt + Suppr : ces combinaisons ne peuvent pas être interceptées. Baskul relâche alors tout proprement.
 
