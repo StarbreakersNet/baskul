@@ -22,6 +22,7 @@ mod cli;
 mod icon;
 pub mod logging;
 pub mod platform;
+pub mod tray;
 mod update;
 
 // Le cœur (crate `baskul-core`) : ses modules sont accessibles ici sous les

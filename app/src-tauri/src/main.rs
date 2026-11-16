@@ -6,13 +6,16 @@
 //! l'instance unique et la configuration. Une fois Tauri prêt, Baskul démarre
 //! (`baskul_desktop::start`) : sa couche système tourne dans ses propres
 //! threads (sur la boucle principale pour macOS) et n'attend jamais la
-//! fenêtre. La fenêtre de réglages (Vue 3, dans `app/src`) n'existe que
+//! fenêtre. Son icône (zone de notification, barre des menus) est dessinée
+//! ici, avec Tauri (`tray.rs`). La fenêtre de réglages (Vue 3, dans `app/src`) n'existe que
 //! lorsqu'elle est ouverte ; ses commandes appellent l'API de Baskul dans le
 //! même processus.
 
 // Pas de fenêtre console sous Windows (les journaux vont dans un fichier ;
 // `--console` et les commandes s'attachent à la console qui les a lancées).
 #![cfg_attr(windows, windows_subsystem = "windows")]
+
+mod tray;
 
 use baskul_desktop::{api, platform};
 use serde::Serialize;
@@ -177,6 +180,7 @@ fn main() {
             let handle = app.handle().clone();
             platform::set_settings_opener(move |welcome| show_settings(&handle, welcome));
             baskul_desktop::start(prepared);
+            tray::install(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {

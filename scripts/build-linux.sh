@@ -2,7 +2,8 @@
 # Construit dist/baskul (Baskul et sa fenêtre de réglages, avec Tauri) et
 # dist/Baskul-Linux.tar.gz. Nécessite Rust, Node.js et les bibliothèques de
 # développement de WebKitGTK :
-#   sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libxdo-dev libssl-dev
+#   sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libxdo-dev libssl-dev \
+#     libayatana-appindicator3-dev
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

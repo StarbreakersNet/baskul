@@ -6,7 +6,9 @@
 //!   fenêtre transparente ; les événements sont alors supprimés localement et
 //!   envoyés à la pilotée.
 //! - Machine pilotée : injection par `SendInput`.
-//! - Icône dans la zone de notification avec menu.
+//! - Icône dans la zone de notification : dessinée par l'app (Tauri), à
+//!   partir de `crate::tray` ; ses choix sont exécutés ici, sur le thread de
+//!   Baskul.
 //!
 //! Les touches sont capturées par **scancode** (position physique), jamais
 //! par caractère : aucune fonction de traduction (`ToUnicode`…) n'est appelée,
@@ -16,23 +18,24 @@ use crate::Args;
 use crate::config::{MachineCfg, ScrollCfg, Settings, TrayIcon};
 use crate::geometry::{Layout, Point, Rect};
 use crate::i18n;
-use crate::icon::{self, Style, Tone};
+use crate::icon::Style;
 use crate::keymap::{self, *};
 use crate::net::{LinkHandle, PeerId};
 use crate::primary::{Decision, HookWatch, Host, PeerEvent, PrimaryCore, PrimaryOptions};
 use crate::protocol::{ClipHeader, ClipImage, ImageFormat, Message, MouseButton, Role, SwitchTo};
 use crate::secondary::Emulator;
 use crate::services::{self, ClipboardHooks, Services};
-use crate::status::{self, Conn};
+use crate::status;
+use crate::tray::{self, Action, IconStyle};
 use crossbeam_channel::Receiver;
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::ffi::c_void;
 use std::mem::{size_of, zeroed};
 use std::path::{Path, PathBuf};
 use std::ptr::{null, null_mut};
-use std::sync::OnceLock;
-use std::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use windows_sys::Win32::Foundation::{
@@ -40,10 +43,10 @@ use windows_sys::Win32::Foundation::{
 };
 use windows_sys::Win32::Graphics::Gdi::{
     AC_SRC_ALPHA, AC_SRC_OVER, ANTIALIASED_QUALITY, BI_BITFIELDS, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BITMAPV5HEADER,
-    BLENDFUNCTION, CLIP_DEFAULT_PRECIS, CreateBitmap, CreateCompatibleDC, CreateDIBSection, CreateFontW,
-    DEFAULT_CHARSET, DEFAULT_PITCH, DIB_RGB_COLORS, DeleteDC, DeleteObject, EnumDisplayMonitors, FW_SEMIBOLD, GdiFlush,
-    GetDC, GetMonitorInfoW, GetTextExtentPoint32W, HDC, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO,
-    MonitorFromPoint, OUT_DEFAULT_PRECIS, ReleaseDC, SelectObject, SetBkMode, SetTextColor, TRANSPARENT, TextOutW,
+    BLENDFUNCTION, CLIP_DEFAULT_PRECIS, CreateCompatibleDC, CreateDIBSection, CreateFontW, DEFAULT_CHARSET,
+    DEFAULT_PITCH, DIB_RGB_COLORS, DeleteDC, DeleteObject, EnumDisplayMonitors, FW_SEMIBOLD, GdiFlush, GetDC,
+    GetMonitorInfoW, GetTextExtentPoint32W, HDC, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint,
+    OUT_DEFAULT_PRECIS, ReleaseDC, SelectObject, SetBkMode, SetTextColor, TRANSPARENT, TextOutW,
 };
 use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 use windows_sys::Win32::System::DataExchange::{
@@ -75,19 +78,16 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     VK_MEDIA_PLAY_PAUSE, VK_MEDIA_PREV_TRACK, VK_MEDIA_STOP, VK_NUMLOCK, VK_PAUSE, VK_VOLUME_DOWN, VK_VOLUME_MUTE,
     VK_VOLUME_UP,
 };
-use windows_sys::Win32::UI::Shell::{
-    DROPFILES, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY, NOTIFYICONDATAW, Shell_NotifyIconW,
-    ShellExecuteW,
-};
+use windows_sys::Win32::UI::Shell::{DROPFILES, ShellExecuteW};
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 // ---------------------------------------------------------------------------
 // Constantes et état global
 // ---------------------------------------------------------------------------
 
-const WM_APP_TRAY: u32 = WM_APP + 1;
+/// Choix du menu de l'icône, en attente dans `TRAY_ACTIONS`.
+const WM_APP_TRAY_ACTION: u32 = WM_APP + 1;
 const WM_APP_NET: u32 = WM_APP + 2;
-const WM_APP_STATUS: u32 = WM_APP + 3;
 const WM_APP_HIDE: u32 = WM_APP + 4;
 const WM_APP_SHOW: u32 = WM_APP + 5;
 const WM_APP_RESTART: u32 = WM_APP + 6;
@@ -100,20 +100,7 @@ const BASKUL_INPUT: usize = 0x4241_5343; // "BASC"
 
 const TIMER_WATCHDOG: usize = 1;
 const TIMER_REHOOK: usize = 2;
-const TIMER_TRAY: usize = 3;
 const TIMER_BUBBLE: usize = 4;
-
-const ID_RETURN: usize = 10;
-const ID_LOCK: usize = 11;
-const ID_SETTINGS: usize = 12;
-const ID_LOG: usize = 13;
-const ID_FOLDER: usize = 14;
-const ID_AUTOSTART: usize = 15;
-const ID_RESTART: usize = 16;
-const ID_QUIT: usize = 17;
-const ID_UPDATE: usize = 18;
-/// Entrées « Aller sur… » : une par pilotée connectée.
-const ID_GOTO: usize = 100;
 
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const RUN_VALUE: &str = "Baskul";
@@ -122,7 +109,8 @@ const RUN_VALUE: &str = "Baskul";
 const FAKE_LCTRL_BIT: u32 = 0x200;
 
 static MAIN_HWND: AtomicPtr<c_void> = AtomicPtr::new(null_mut());
-static TASKBAR_CREATED: AtomicU32 = AtomicU32::new(0);
+/// Choix du menu de l'icône, exécutés sur le thread de Baskul.
+static TRAY_ACTIONS: Mutex<Vec<Action>> = Mutex::new(Vec::new());
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
@@ -1163,59 +1151,8 @@ impl Emulator for WinEmulator {
 // ---------------------------------------------------------------------------
 
 struct Ui {
-    hwnd: HWND,
-    tray_added: bool,
-    icons: HashMap<(u8, bool, Style), HICON>,
-    tray_icon: TrayIcon,
     config_path: PathBuf,
     args: Args,
-    role: Role,
-}
-
-fn make_icon(size: i32, rgba: &[u8]) -> HICON {
-    // SAFETY: création de bitmaps GDI de la taille demandée, puis copie de
-    // `size*size` pixels dans le tampon alloué par CreateDIBSection.
-    unsafe {
-        let mut bi: BITMAPV5HEADER = zeroed();
-        bi.bV5Size = size_of::<BITMAPV5HEADER>() as u32;
-        bi.bV5Width = size;
-        bi.bV5Height = -size;
-        bi.bV5Planes = 1;
-        bi.bV5BitCount = 32;
-        bi.bV5Compression = BI_BITFIELDS;
-        bi.bV5RedMask = 0x00ff_0000;
-        bi.bV5GreenMask = 0x0000_ff00;
-        bi.bV5BlueMask = 0x0000_00ff;
-        bi.bV5AlphaMask = 0xff00_0000;
-        let hdc = GetDC(null_mut());
-        let mut bits: *mut c_void = null_mut();
-        let color = CreateDIBSection(
-            hdc,
-            &bi as *const BITMAPV5HEADER as *const BITMAPINFO,
-            DIB_RGB_COLORS,
-            &mut bits,
-            null_mut(),
-            0,
-        );
-        ReleaseDC(null_mut(), hdc);
-        if color.is_null() || bits.is_null() {
-            return LoadIconW(null_mut(), IDI_APPLICATION);
-        }
-        let n = (size * size) as usize;
-        let dst = std::slice::from_raw_parts_mut(bits as *mut u8, n * 4);
-        for i in 0..n {
-            dst[i * 4] = rgba[i * 4 + 2];
-            dst[i * 4 + 1] = rgba[i * 4 + 1];
-            dst[i * 4 + 2] = rgba[i * 4];
-            dst[i * 4 + 3] = rgba[i * 4 + 3];
-        }
-        let mask = CreateBitmap(size, size, 1, 1, null());
-        let ii = ICONINFO { fIcon: 1, xHotspot: 0, yHotspot: 0, hbmMask: mask, hbmColor: color };
-        let icon = CreateIconIndirect(&ii);
-        DeleteObject(color as _);
-        DeleteObject(mask as _);
-        if icon.is_null() { LoadIconW(null_mut(), IDI_APPLICATION) } else { icon }
-    }
 }
 
 /// La barre des tâches est claire (thème Windows).
@@ -1239,64 +1176,43 @@ fn light_taskbar() -> bool {
     r == ERROR_SUCCESS && value != 0
 }
 
-impl Ui {
-    fn icon(&mut self, tone: Tone, remote: bool) -> HICON {
+/// Ce que l'icône (dessinée par l'app) demande à Windows.
+struct WinTray {
+    role: Role,
+    tray_icon: TrayIcon,
+}
+
+impl tray::Backend for WinTray {
+    fn role(&self) -> Role {
+        self.role
+    }
+
+    fn icon_style(&self) -> IconStyle {
         let style = match self.tray_icon {
             TrayIcon::Color => Style::Color,
             // Monochrome : noir sur une barre des tâches claire, blanc sinon.
             TrayIcon::Mono if light_taskbar() => Style::Mono([0, 0, 0]),
             TrayIcon::Mono => Style::Mono([255, 255, 255]),
         };
-        let key = (tone as u8, remote, style);
-        if let Some(i) = self.icons.get(&key) {
-            return *i;
-        }
+        // Deux fois la taille d'une petite icône : nette jusqu'à 200 %.
         // SAFETY: lecture de métrique système.
-        let size = unsafe { GetSystemMetrics(SM_CXSMICON) }.clamp(16, 64);
-        let h = make_icon(size, &icon::render(size as u32, tone, remote, style));
-        self.icons.insert(key, h);
-        h
+        let size = (unsafe { GetSystemMetrics(SM_CXSMICON) } * 2).clamp(32, 128) as u32;
+        IconStyle { style, size, template: false }
     }
 
-    fn update_tray(&mut self) {
-        let snap = status::snapshot();
-        let tone = Tone::of(&snap.conn);
-        let hicon = self.icon(tone, snap.remote_active);
-        // SAFETY: structure initialisable à zéro.
-        let mut nid: NOTIFYICONDATAW = unsafe { zeroed() };
-        nid.cbSize = size_of::<NOTIFYICONDATAW>() as u32;
-        nid.hWnd = self.hwnd;
-        nid.uID = 1;
-        nid.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE;
-        nid.uCallbackMessage = WM_APP_TRAY;
-        nid.hIcon = hicon;
-        let tip: Vec<u16> = format!("Baskul — {}", snap.summary()).encode_utf16().take(127).collect();
-        nid.szTip[..tip.len()].copy_from_slice(&tip);
-        // SAFETY: structure correctement remplie.
-        unsafe {
-            if self.tray_added {
-                if Shell_NotifyIconW(NIM_MODIFY, &nid) == 0 {
-                    self.tray_added = Shell_NotifyIconW(NIM_ADD, &nid) != 0;
-                }
-            } else {
-                self.tray_added = Shell_NotifyIconW(NIM_ADD, &nid) != 0;
-            }
-        }
+    fn login_item(&self) -> Option<(String, bool)> {
+        Some((i18n::t("menu.startWithWindows"), autostart_enabled()))
     }
 
-    fn remove_tray(&mut self) {
-        if !self.tray_added {
-            return;
-        }
-        // SAFETY: structure initialisable à zéro.
-        let mut nid: NOTIFYICONDATAW = unsafe { zeroed() };
-        nid.cbSize = size_of::<NOTIFYICONDATAW>() as u32;
-        nid.hWnd = self.hwnd;
-        nid.uID = 1;
-        // SAFETY: structure correctement remplie.
-        unsafe { Shell_NotifyIconW(NIM_DELETE, &nid) };
-        self.tray_added = false;
+    fn perform(&self, action: Action) {
+        TRAY_ACTIONS.lock().unwrap_or_else(|e| e.into_inner()).push(action);
+        post(WM_APP_TRAY_ACTION, 0, 0);
     }
+}
+
+/// L'icône de l'app peut s'afficher (appelé au démarrage, avant la boucle).
+pub fn set_tray_backend(settings: &Settings) {
+    tray::set_backend(WinTray { role: settings.role, tray_icon: settings.ui.tray_icon });
 }
 
 fn with_ui<R>(f: impl FnOnce(&mut Ui) -> R) -> Option<R> {
@@ -1366,97 +1282,53 @@ fn set_autostart(on: bool, args: &Args) {
     }
 }
 
-fn append(menu: HMENU, flags: MENU_ITEM_FLAGS, id: usize, text: &str) {
-    let t = wide(text);
-    // SAFETY: menu valide, chaîne terminée par un zéro.
-    unsafe { AppendMenuW(menu, flags, id, t.as_ptr()) };
-}
-
-fn show_menu(hwnd: HWND) {
-    let Some((role, snap)) = with_ui(|ui| (ui.role, status::snapshot())) else { return };
-    let locked = with_primary(|s| s.core.is_locked()).unwrap_or(false);
-    let names: Vec<String> = snap.peers.iter().map(|p| p.name.clone()).collect();
-    // SAFETY: création et destruction d'un menu local.
-    unsafe {
-        let menu = CreatePopupMenu();
-        append(menu, MF_STRING | MF_GRAYED, 0, &snap.summary());
-        if let Some(v) = crate::update::ready_version() {
-            append(menu, MF_STRING, ID_UPDATE, &i18n::tf("menu.updateReady", &[("version", &v)]));
-        }
-        append(menu, MF_SEPARATOR, 0, "");
-        if role == Role::Primary {
-            append(menu, MF_STRING, ID_RETURN, &i18n::t("menu.returnHere"));
-            for (i, name) in names.iter().enumerate() {
-                let on = if snap.active_peer.as_deref() == Some(name.as_str()) { MF_CHECKED } else { 0 };
-                append(menu, MF_STRING | on, ID_GOTO + i, &i18n::tf("menu.goTo", &[("name", name)]));
-            }
-            append(menu, MF_STRING | if locked { MF_CHECKED } else { 0 }, ID_LOCK, &i18n::t("menu.lock"));
-            append(menu, MF_SEPARATOR, 0, "");
-        }
-        append(menu, MF_STRING, ID_SETTINGS, &i18n::t("menu.settings"));
-        append(menu, MF_STRING, ID_LOG, &i18n::t("menu.openLog"));
-        append(menu, MF_STRING, ID_FOLDER, &i18n::t("menu.openFolder"));
-        append(menu, MF_SEPARATOR, 0, "");
-        let auto = if autostart_enabled() { MF_CHECKED } else { 0 };
-        append(menu, MF_STRING | auto, ID_AUTOSTART, &i18n::t("menu.startWithWindows"));
-        append(menu, MF_SEPARATOR, 0, "");
-        append(menu, MF_STRING, ID_RESTART, &i18n::t("menu.restart"));
-        append(menu, MF_STRING, ID_QUIT, &i18n::t("menu.quit"));
-        let mut pt = POINT { x: 0, y: 0 };
-        GetCursorPos(&mut pt);
-        SetForegroundWindow(hwnd);
-        let cmd = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, null());
-        PostMessageW(hwnd, WM_NULL, 0, 0);
-        DestroyMenu(menu);
-        match (cmd as usize).checked_sub(ID_GOTO).and_then(|i| names.get(i)) {
-            Some(name) => {
-                with_primary(|s| s.core.switch_to(&mut s.host, None, SwitchTo::Client(name.clone())));
-            }
-            None => handle_command(cmd as usize),
-        }
-    }
-}
-
-fn handle_command(cmd: usize) {
+/// Exécute un choix du menu de l'icône (thread de Baskul).
+fn handle_action(action: Action) {
     let Some((path, args)) = with_ui(|ui| (ui.config_path.clone(), ui.args.clone())) else { return };
-    match cmd {
-        ID_RETURN => {
+    match action {
+        Action::ReturnHere => {
             with_primary(|s| s.core.return_home(&mut s.host));
         }
-        ID_LOCK => {
+        Action::GoTo(name) => {
+            with_primary(|s| s.core.switch_to(&mut s.host, None, SwitchTo::Client(name)));
+        }
+        Action::ToggleLock => {
             with_primary(|s| s.core.toggle_lock());
         }
-        ID_SETTINGS => {
+        Action::Settings => {
             super::open_settings(&path, false);
         }
-        ID_LOG => {
+        Action::OpenLog => {
             if let Some(p) = crate::logging::log_path() {
                 crate::logging::flush();
                 shell_open("notepad.exe", Some(&format!("\"{}\"", p.display())));
             }
         }
-        ID_FOLDER => {
+        Action::OpenFolder => {
             if let Some(dir) = path.parent() {
                 shell_open(&dir.display().to_string(), None);
             }
         }
-        ID_AUTOSTART => set_autostart(!autostart_enabled(), &args),
-        ID_UPDATE => {
+        Action::ToggleLogin => {
+            set_autostart(!autostart_enabled(), &args);
+            tray::changed();
+        }
+        Action::AllowAccessibility => {}
+        Action::InstallUpdate => {
             if let Err(e) = crate::update::install(None) {
                 log::warn!("{e}");
             }
         }
-        ID_RESTART => {
+        Action::Restart => {
             shutdown();
             super::relaunch(&args);
         }
-        ID_QUIT => {
+        Action::Quit => {
             shutdown();
             log::info!("arrêt demandé");
             crate::logging::flush();
             std::process::exit(0);
         }
-        _ => {}
     }
 }
 
@@ -1474,7 +1346,6 @@ fn shutdown() {
         }
     }
     uninstall_hooks();
-    with_ui(|ui| ui.remove_tray());
 }
 
 // ---------------------------------------------------------------------------
@@ -1487,10 +1358,6 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) ->
             process_peer_events();
             0
         }
-        WM_APP_STATUS => {
-            with_ui(|ui| ui.update_tray());
-            0
-        }
         WM_APP_HIDE => {
             do_hide();
             0
@@ -1500,7 +1367,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) ->
             0
         }
         WM_APP_RESTART => {
-            handle_command(ID_RESTART);
+            handle_action(Action::Restart);
             0
         }
         WM_APP_ACTIVE => {
@@ -1511,10 +1378,10 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) ->
             show_bubble();
             0
         }
-        WM_APP_TRAY => {
-            let ev = (l as u32) & 0xffff;
-            if ev == WM_RBUTTONUP || ev == WM_LBUTTONUP || ev == WM_CONTEXTMENU {
-                show_menu(hwnd);
+        WM_APP_TRAY_ACTION => {
+            let actions = std::mem::take(&mut *TRAY_ACTIONS.lock().unwrap_or_else(|e| e.into_inner()));
+            for a in actions {
+                handle_action(a);
             }
             0
         }
@@ -1522,23 +1389,12 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) ->
             match w {
                 TIMER_WATCHDOG => watchdog(),
                 TIMER_BUBBLE => bubble_tick(),
-                TIMER_REHOOK => {
-                    // Windows peut retirer un hook sans prévenir : on le
-                    // réinstalle régulièrement (jamais pendant le pilotage).
-                    if PRIMARY.with(|p| p.try_borrow().map(|g| g.is_some()).unwrap_or(false)) && !is_remote() {
-                        install_hooks();
-                    }
-                }
-                TIMER_TRAY => {
-                    let added = with_ui(|ui| {
-                        ui.update_tray();
-                        ui.tray_added
-                    })
-                    .unwrap_or(true);
-                    if added {
-                        // SAFETY: notre fenêtre.
-                        unsafe { KillTimer(hwnd, TIMER_TRAY) };
-                    }
+                // Windows peut retirer un hook sans prévenir : on le
+                // réinstalle régulièrement (jamais pendant le pilotage).
+                TIMER_REHOOK
+                    if PRIMARY.with(|p| p.try_borrow().map(|g| g.is_some()).unwrap_or(false)) && !is_remote() =>
+                {
+                    install_hooks();
                 }
                 _ => {}
             }
@@ -1546,7 +1402,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) ->
         }
         // Thème de Windows changé : l'icône monochrome suit la barre des tâches.
         WM_SETTINGCHANGE => {
-            with_ui(|ui| ui.update_tray());
+            tray::changed();
             // SAFETY: traitement par défaut.
             unsafe { DefWindowProcW(hwnd, msg, w, l) }
         }
@@ -1577,14 +1433,6 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) ->
         WM_DESTROY => {
             // SAFETY: fin de la boucle de messages.
             unsafe { PostQuitMessage(0) };
-            0
-        }
-        m if m != 0 && m == TASKBAR_CREATED.load(Ordering::Relaxed) => {
-            // L'Explorateur a redémarré : il faut recréer l'icône.
-            with_ui(|ui| {
-                ui.tray_added = false;
-                ui.update_tray();
-            });
             0
         }
         // SAFETY: traitement par défaut.
@@ -1892,8 +1740,6 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
         }
         // Presque transparente (une opacité nulle la rendrait « traversable »).
         SetLayeredWindowAttributes(hider, 0, 1, LWA_ALPHA);
-        let tc = wide("TaskbarCreated");
-        TASKBAR_CREATED.store(RegisterWindowMessageW(tc.as_ptr()), Ordering::Relaxed);
         WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION);
         (hwnd, hider)
     };
@@ -1902,19 +1748,8 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
     if settings.ui.arrival_bubble {
         let _ = BUBBLE_NAME.set(settings.name.clone());
     }
-    status::on_change(|| post(WM_APP_STATUS, 0, 0));
     crate::api::set_restart_handler(|| post(WM_APP_RESTART, 0, 0));
-    UI.with(|u| {
-        *u.borrow_mut() = Some(Ui {
-            hwnd,
-            tray_added: false,
-            icons: HashMap::new(),
-            tray_icon: settings.ui.tray_icon,
-            config_path: config_path.clone(),
-            args,
-            role: settings.role,
-        })
-    });
+    UI.with(|u| *u.borrow_mut() = Some(Ui { config_path: config_path.clone(), args }));
 
     let hooks = ClipboardHooks {
         sequence: clip_sequence,
@@ -1971,10 +1806,8 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
         }
     };
 
-    with_ui(|ui| ui.update_tray());
-    // SAFETY: minuterie sur notre fenêtre (réessai de création de l'icône si
-    // l'Explorateur n'est pas encore prêt, au démarrage de session).
-    unsafe { SetTimer(hwnd, TIMER_TRAY, 2000, None) };
+    // Choix du menu de l'icône arrivés avant la boucle de messages.
+    post(WM_APP_TRAY_ACTION, 0, 0);
 
     // SAFETY: boucle de messages standard.
     unsafe {

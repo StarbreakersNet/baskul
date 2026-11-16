@@ -305,7 +305,7 @@ Le menu propose aussi **Ouvrir le journal**. Avec `[log] level = "debug"`, chaqu
 Sous Linux, Baskul se connecte aux autres machines, partage le presse-papiers (texte surtout) et a les mêmes réglages. En revanche, il **ne partage ni le clavier ni la souris** : cette version sert surtout à tester les réglages et la connexion.
 
 ```bash
-sudo apt install libwebkit2gtk-4.1-0     # pour la fenêtre de réglages, s'il manque
+sudo apt install libwebkit2gtk-4.1-0 libayatana-appindicator3-1   # fenêtre de réglages et icône, s'ils manquent
 tar xzf Baskul-Linux.tar.gz
 ./baskul/baskul
 ```
@@ -363,8 +363,8 @@ Deux détails de Windows sont gérés :
 Trois crates, du plus général au plus particulier :
 
 - le **cœur** (`core/`, `baskul-core`) ne dépend d'aucun système ni d'aucune interface. Il tourne dans ses propres threads et n'attend jamais l'interface ;
-- la **couche système** (`src/`, `baskul-desktop`) : capture et injection du clavier et de la souris, icône, bulle, API locale, ligne de commande, journaux, mises à jour. Sous Windows et Linux, elle tourne dans son propre thread, avec sa propre boucle de messages ; sur macOS, sur la boucle principale ;
-- l'**app** (`app/src-tauri`, `baskul`) : l'exécutable, avec Tauri. Elle démarre la couche système et ouvre la fenêtre de réglages à la demande.
+- la **couche système** (`src/`, `baskul-desktop`) : capture et injection du clavier et de la souris, contenu et actions de l'icône, bulle, API locale, ligne de commande, journaux, mises à jour. Sous Windows et Linux, elle tourne dans son propre thread, avec sa propre boucle de messages ; sur macOS, sur la boucle principale ;
+- l'**app** (`app/src-tauri`, `baskul`) : l'exécutable, avec Tauri. Elle démarre la couche système, dessine l'icône (zone de notification, barre des menus) et ouvre la fenêtre de réglages à la demande.
 
 ```
 core/src/          cœur (baskul-core)
@@ -389,18 +389,19 @@ core/src/          cœur (baskul-core)
 src/               couche système (baskul-desktop)
   lib.rs           démarrage (prepare, start), arguments, instance unique, reprise des réglages de Bascule
   update.rs        mises à jour (Releases GitHub, SHA-256, installation, redémarrage)
-  icon.rs          icône (couleur ou monochrome)
+  icon.rs          image de l'icône (couleur ou monochrome)
+  tray.rs          icône : image, info-bulle, menu et actions, quel que soit le système
   logging.rs       journaux
   api.rs           API : fenêtre de réglages (dans le processus) ; commandes et second lancement (127.0.0.1 + jeton)
   cli.rs           commandes `baskul switch …` et `baskul status`
   platform/
-    windows.rs     hooks bas niveau, masquage du curseur, SendInput, presse-papiers, bulle, icône
-    macos.rs       CGEventTap, CGEventPost, gestes, Verr. Maj (IOKit), presse-papiers, bulle, barre des menus
-    linux.rs       version minimale (connexion, presse-papiers, réglages)
+    windows.rs     hooks bas niveau, masquage du curseur, SendInput, presse-papiers, bulle, actions de l'icône
+    macos.rs       CGEventTap, CGEventPost, gestes, Verr. Maj (IOKit), presse-papiers, bulle, actions de l'icône
+    linux.rs       version minimale (connexion, presse-papiers, réglages, actions de l'icône)
 locales/           traductions (fr, en), partagées par Baskul et l'app
 app/               app Baskul : Tauri 2 + Vue 3 + Naive UI
   src/             front de la fenêtre de réglages (pages, sections, composants, état)
-  src-tauri/       exécutable : démarrage de Baskul, fenêtre de réglages, commandes Tauri
+  src-tauri/       exécutable : démarrage de Baskul, icône (tray.rs), fenêtre de réglages, commandes Tauri
 ```
 
 Tests : `cargo test -p baskul-core -p baskul-desktop` (dont des tests de bout en bout sur de vraies connexions TCP, avec plusieurs pilotées). Le code Windows et macOS se vérifie aussi depuis Linux avec `./scripts/xcheck.sh`.

@@ -38,6 +38,12 @@ pub fn start(settings: Settings, config_path: PathBuf, args: Args) {
     self::macos::start(settings, config_path, args);
     #[cfg(not(target_os = "macos"))]
     {
+        // L'icône (dessinée par l'app) peut s'afficher tout de suite ; ses
+        // choix attendent la boucle de messages.
+        #[cfg(windows)]
+        self::windows::set_tray_backend(&settings);
+        #[cfg(not(windows))]
+        self::linux::set_tray_backend(&settings, &config_path, &args);
         let spawned =
             std::thread::Builder::new().name("baskul-system".into()).spawn(move || run(settings, config_path, args));
         if let Err(e) = spawned {
