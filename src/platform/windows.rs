@@ -1426,7 +1426,9 @@ fn handle_command(cmd: usize) {
         ID_LOCK => {
             with_primary(|s| s.core.toggle_lock());
         }
-        ID_SETTINGS => super::open_settings(&path, false),
+        ID_SETTINGS => {
+            super::open_settings(&path, false);
+        }
         ID_LOG => {
             if let Some(p) = crate::logging::log_path() {
                 crate::logging::flush();

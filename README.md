@@ -23,8 +23,8 @@ Windows et macOS peuvent jouer l'un ou l'autre rôle. Linux est [expérimental](
 
 Les versions publiées sont dans la page [**Releases**](https://github.com/StarbreakersNet/baskul/releases) :
 
-- `Baskul-Windows.zip` : `baskul.exe` et son app de réglages `baskul-settings.exe` ;
-- `Baskul-macOS.zip` : `Baskul.app`, universelle (Apple Silicon et Intel), app de réglages incluse ;
+- `Baskul-Windows.zip` : `baskul.exe` (réglages inclus) ;
+- `Baskul-macOS.zip` : `Baskul.app`, universelle (Apple Silicon et Intel), réglages inclus ;
 - `Baskul-Linux.tar.gz` : la [version Linux](#linux-expérimental) ;
 - `SHA256SUMS` : les empreintes des fichiers, vérifiées par la mise à jour intégrée.
 
@@ -59,7 +59,7 @@ Gardez ce certificat précieusement, et nulle part ailleurs que dans votre trous
 
 ### Compiler soi-même
 
-Il faut [Rust](https://rustup.rs) et [Node.js](https://nodejs.org) 22 (pour l'app de réglages). Yarn 4 est fourni par `corepack`, inclus dans Node.js.
+Il faut [Rust](https://rustup.rs) et [Node.js](https://nodejs.org) 22 (pour la fenêtre de réglages). Yarn 4 est fourni par `corepack`, inclus dans Node.js. Les scripts construisent l'app avec la CLI de [Tauri](https://tauri.app).
 
 **macOS**
 
@@ -97,7 +97,7 @@ Quittez tout autre logiciel de partage de souris (CursorHop, Deskflow…) avant 
 
 **Windows**
 
-1. Décompressez `Baskul-Windows.zip` dans un dossier définitif, par exemple `%LOCALAPPDATA%\Programs\Baskul`. Gardez `baskul.exe` et `baskul-settings.exe` ensemble. Si SmartScreen s'affiche, cliquez sur **Informations complémentaires**, puis **Exécuter quand même**.
+1. Décompressez `Baskul-Windows.zip` dans un dossier définitif, par exemple `%LOCALAPPDATA%\Programs\Baskul`. Si SmartScreen s'affiche, cliquez sur **Informations complémentaires**, puis **Exécuter quand même**.
 2. Lancez `baskul.exe`. Sur une machine principale, le pare-feu de Windows demande d'autoriser Baskul : acceptez pour les **réseaux privés**.
 
 Au premier lancement, Baskul crée sa configuration et ouvre ses **réglages**.
@@ -284,7 +284,7 @@ Pour éviter cette manipulation avec vos compilations locales, signez-les toujou
 
 **Une fenêtre lancée en administrateur sur une principale Windows (Gestionnaire des tâches…).** Windows interdit à un programme normal d'intercepter le clavier quand une telle fenêtre est active. Baskul reprend le premier plan quand vous passez sur une pilotée. Pour couvrir aussi ce cas, lancez Baskul en administrateur.
 
-**Les réglages ne s'ouvrent pas sous Windows.** L'app de réglages utilise WebView2, inclus dans Windows 11 et installé par les mises à jour de Windows 10. Sinon, installez le *WebView2 Runtime* de Microsoft. En attendant, le menu « Ouvrir le dossier de Baskul » donne accès au fichier `config.toml`.
+**Les réglages ne s'ouvrent pas sous Windows.** La fenêtre de réglages utilise WebView2, inclus dans Windows 11 et installé par les mises à jour de Windows 10. Sinon, installez le *WebView2 Runtime* de Microsoft. En attendant, le menu « Ouvrir le dossier de Baskul » donne accès au fichier `config.toml`.
 
 **Journaux**
 - Windows : `%APPDATA%\Baskul\baskul.log`
@@ -302,10 +302,10 @@ Le menu propose aussi **Ouvrir le journal**. Avec `[log] level = "debug"`, chaqu
 
 ## Linux (expérimental)
 
-Sous Linux, Baskul se connecte aux autres machines, partage le presse-papiers (texte surtout) et a les mêmes réglages. En revanche, il **ne partage ni le clavier ni la souris** : cette version sert surtout à tester l'app de réglages et la connexion.
+Sous Linux, Baskul se connecte aux autres machines, partage le presse-papiers (texte surtout) et a les mêmes réglages. En revanche, il **ne partage ni le clavier ni la souris** : cette version sert surtout à tester les réglages et la connexion.
 
 ```bash
-sudo apt install libwebkit2gtk-4.1-0     # pour l'app de réglages, s'il manque
+sudo apt install libwebkit2gtk-4.1-0     # pour la fenêtre de réglages, s'il manque
 tar xzf Baskul-Linux.tar.gz
 ./baskul/baskul
 ```
@@ -323,19 +323,18 @@ sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libxdo-dev libs
 
 ## Développer l'interface (Tauri + Vue 3)
 
-Les réglages sont une app [Tauri 2](https://tauri.app) à part, `baskul-settings`, dans `app/` : Vue 3, TypeScript, Vite, Yarn 4 et [Naive UI](https://www.naiveui.com). Baskul (le daemon) la lance et lui répond par une API locale :
+Baskul est une seule app [Tauri 2](https://tauri.app), dans `app/` : Vue 3, TypeScript, Vite, Yarn 4 et [Naive UI](https://www.naiveui.com). L'exécutable (`app/src-tauri`) héberge Baskul (`baskul-desktop`, qui démarre le cœur `baskul-core`). La fenêtre de réglages n'existe que lorsqu'elle est ouverte ; ses commandes appellent l'API de Baskul dans le même processus :
 
 ```
-Vue (app/src)  →  commandes Tauri (app/src-tauri)  →  API locale du daemon (src/api.rs)
+Vue (app/src)  →  commandes Tauri (app/src-tauri)  →  API de Baskul (src/api.rs)  →  cœur
 ```
 
-Le daemon écrit le port et un jeton de son API dans `api.json`, à côté de `config.toml`, lisible par l'utilisateur seulement. L'app le relit à chaque appel, ce qui suit les redémarrages du daemon.
+L'API écoute aussi en HTTP sur 127.0.0.1, pour les commandes `baskul switch` / `baskul status` et pour un second lancement (qui ouvre la fenêtre de l'instance déjà lancée). Son port et un jeton sont dans `api.json`, à côté de `config.toml`, lisible par l'utilisateur seulement.
 
 ```bash
 corepack enable          # une fois : active Yarn 4 (champ packageManager)
 cd app && yarn install
-cargo run                # à la racine : lance Baskul (le daemon)
-cd app && yarn tauri dev # fenêtre de réglages, avec rechargement à chaud
+yarn tauri dev           # Baskul complet, fenêtre de réglages avec rechargement à chaud
 ```
 
 - `src/types.ts` reprend la configuration de `core/src/config.rs`. Pour un nouveau réglage : `config.rs` (structure, modèle commenté, validation), puis `types.ts` et la section concernée dans `src/sections/`.
@@ -343,7 +342,7 @@ cd app && yarn tauri dev # fenêtre de réglages, avec rechargement à chaud
 - `src/components/LayoutEditor.vue` : la grille des machines (glisser-déposer au pointeur, ou sélection puis clic).
 - Pages (`src/pages/`) et menu latéral (`src/layouts/AppLayout.vue`) : vue-router. Icônes : [Tabler Icons](https://tabler.io/icons) (`@tabler/icons-vue`).
 - **Traductions** : `locales/fr.json` et `locales/en.json`, à la racine du dépôt. La section `app` est lue par [vue-i18n](https://vue-i18n.intlify.dev) (`$t("…")` dans les composants), la section `daemon` par Baskul (`core/src/i18n.rs`, menus et état de la connexion). Pour une nouvelle langue : un fichier de plus, avec les mêmes clés.
-- `yarn build` vérifie les types (`vue-tsc`) puis construit le front, qui est intégré à l'exécutable par `cargo build -p baskul-settings --features custom-protocol`.
+- `yarn build` vérifie les types (`vue-tsc`) puis construit le front ; `yarn tauri build` l'intègre à l'exécutable (et, sur macOS, construit `Baskul.app`).
 
 ---
 
@@ -361,7 +360,11 @@ Deux détails de Windows sont gérés :
 
 ## Architecture
 
-Le **cœur** (`core/`, crate `baskul-core`) ne dépend d'aucun système ni d'aucune interface : il tourne dans ses propres threads et n'attend jamais l'interface. Le **daemon** (`src/`, crate `baskul`) l'héberge : capture et injection du clavier et de la souris, icône, fenêtres, API locale, mises à jour.
+Trois crates, du plus général au plus particulier :
+
+- le **cœur** (`core/`, `baskul-core`) ne dépend d'aucun système ni d'aucune interface. Il tourne dans ses propres threads et n'attend jamais l'interface ;
+- la **couche système** (`src/`, `baskul-desktop`) : capture et injection du clavier et de la souris, icône, bulle, API locale, ligne de commande, journaux, mises à jour. Sous Windows et Linux, elle tourne dans son propre thread, avec sa propre boucle de messages ; sur macOS, sur la boucle principale ;
+- l'**app** (`app/src-tauri`, `baskul`) : l'exécutable, avec Tauri. Elle démarre la couche système et ouvre la fenêtre de réglages à la demande.
 
 ```
 core/src/          cœur (baskul-core)
@@ -383,21 +386,21 @@ core/src/          cœur (baskul-core)
   smooth.rs        défilement fluide (algorithme de Mac Mouse Fix, simulation du trackpad)
   status.rs        état de la connexion, partagé avec l'icône et l'app
   i18n.rs          traductions des menus et de l'état (locales/*.json)
-src/               daemon (baskul)
-  main.rs          démarrage, arguments, instance unique, reprise des réglages de Bascule
+src/               couche système (baskul-desktop)
+  lib.rs           démarrage (prepare, start), arguments, instance unique, reprise des réglages de Bascule
   update.rs        mises à jour (Releases GitHub, SHA-256, installation, redémarrage)
   icon.rs          icône (couleur ou monochrome)
   logging.rs       journaux
-  api.rs           API locale (127.0.0.1 + jeton) pour l'app de réglages et les commandes
+  api.rs           API : fenêtre de réglages (dans le processus) ; commandes et second lancement (127.0.0.1 + jeton)
   cli.rs           commandes `baskul switch …` et `baskul status`
   platform/
     windows.rs     hooks bas niveau, masquage du curseur, SendInput, presse-papiers, bulle, icône
     macos.rs       CGEventTap, CGEventPost, gestes, Verr. Maj (IOKit), presse-papiers, bulle, barre des menus
     linux.rs       version minimale (connexion, presse-papiers, réglages)
 locales/           traductions (fr, en), partagées par Baskul et l'app
-app/               app de Baskul : Tauri 2 + Vue 3 + Naive UI
-  src/             front (pages, sections, composants, état)
-  src-tauri/       commandes Tauri, client de l'API du daemon
+app/               app Baskul : Tauri 2 + Vue 3 + Naive UI
+  src/             front de la fenêtre de réglages (pages, sections, composants, état)
+  src-tauri/       exécutable : démarrage de Baskul, fenêtre de réglages, commandes Tauri
 ```
 
-Tests : `cargo test -p baskul-core -p baskul` (dont des tests de bout en bout sur de vraies connexions TCP, avec plusieurs pilotées). Le code Windows et macOS se vérifie aussi depuis Linux avec `./scripts/xcheck.sh`.
+Tests : `cargo test -p baskul-core -p baskul-desktop` (dont des tests de bout en bout sur de vraies connexions TCP, avec plusieurs pilotées). Le code Windows et macOS se vérifie aussi depuis Linux avec `./scripts/xcheck.sh`.

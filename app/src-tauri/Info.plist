@@ -1,34 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Ajouté par Tauri à l'Info.plist de Baskul.app. -->
 <plist version="1.0">
 <dict>
-	<key>CFBundleName</key>
-	<string>Baskul</string>
-	<key>CFBundleDisplayName</key>
-	<string>Baskul</string>
-	<key>CFBundleIdentifier</key>
-	<string>fr.baskul.app</string>
-	<key>CFBundleExecutable</key>
-	<string>baskul</string>
-	<key>CFBundleIconFile</key>
-	<string>Baskul</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleInfoDictionaryVersion</key>
-	<string>6.0</string>
-	<key>CFBundleShortVersionString</key>
-	<string>@VERSION@</string>
-	<key>CFBundleVersion</key>
-	<string>@VERSION@</string>
-	<key>LSMinimumSystemVersion</key>
-	<string>11.0</string>
 	<!-- Application de barre des menus : pas d'icône dans le Dock. -->
 	<key>LSUIElement</key>
 	<true/>
 	<!-- Pas d'App Nap (sinon latence de la souris). -->
 	<key>NSAppSleepDisabled</key>
-	<true/>
-	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Baskul communique avec vos autres ordinateurs sur le réseau local pour partager le clavier, la souris et le presse-papiers.</string>

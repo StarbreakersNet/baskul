@@ -1,4 +1,4 @@
-// Commandes Tauri (voir `src-tauri/src/main.rs`), relayées à l'API du daemon.
+// Commandes Tauri (voir `src-tauri/src/main.rs`), qui appellent l'API de Baskul dans le même processus.
 import { invoke } from "@tauri-apps/api/core";
 import type { BaskulConfig, CaptureState, DaemonInfo, DaemonStatus, NetworkInfo, UpdateInfo } from "./types";
 

@@ -1,8 +1,8 @@
 //! Code propre à chaque système.
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 #[cfg(any(windows, all(feature = "xcheck", target_os = "linux")))]
 pub mod windows;
@@ -14,13 +14,57 @@ pub mod macos;
 mod linux;
 
 #[cfg(windows)]
-pub use self::windows::{early_init, fatal, first_run, open_in_editor, run};
+use self::windows::run;
+#[cfg(windows)]
+pub use self::windows::{early_init, fatal, first_run, open_in_editor};
 
 #[cfg(target_os = "macos")]
-pub use self::macos::{early_init, fatal, first_run, open_in_editor, run};
+pub use self::macos::{early_init, fatal, first_run, open_in_editor};
 
 #[cfg(not(any(windows, target_os = "macos")))]
-pub use self::linux::{early_init, fatal, first_run, open_in_editor, run};
+use self::linux::run;
+#[cfg(not(any(windows, target_os = "macos")))]
+pub use self::linux::{early_init, fatal, first_run, open_in_editor};
+
+use crate::Args;
+use baskul_core::config::Settings;
+
+/// Démarre la couche système. Windows et Linux : dans son propre thread, avec
+/// sa propre boucle de messages (les crochets clavier et souris ne dépendent
+/// jamais de l'interface). macOS : sur la boucle principale, celle de l'app
+/// (à appeler depuis le thread principal).
+pub fn start(settings: Settings, config_path: PathBuf, args: Args) {
+    #[cfg(target_os = "macos")]
+    self::macos::start(settings, config_path, args);
+    #[cfg(not(target_os = "macos"))]
+    {
+        let spawned =
+            std::thread::Builder::new().name("baskul-system".into()).spawn(move || run(settings, config_path, args));
+        if let Err(e) = spawned {
+            fatal(&format!("démarrage de Baskul impossible : {e}"));
+        }
+    }
+}
+
+/// Fonction qui ouvre la fenêtre de réglages (fournie par l'app) ;
+/// l'argument indique un premier lancement.
+type SettingsOpener = Box<dyn Fn(bool) + Send + Sync>;
+
+static SETTINGS_OPENER: OnceLock<SettingsOpener> = OnceLock::new();
+
+/// La fenêtre de réglages est ouverte : elle se rouvre après un redémarrage.
+static SETTINGS_OPEN: AtomicBool = AtomicBool::new(false);
+
+/// Donne la fonction qui ouvre la fenêtre de réglages (appelable depuis
+/// n'importe quel thread).
+pub fn set_settings_opener(f: impl Fn(bool) + Send + Sync + 'static) {
+    let _ = SETTINGS_OPENER.set(Box::new(f));
+}
+
+/// L'app signale l'ouverture ou la fermeture de la fenêtre de réglages.
+pub fn set_settings_window_open(open: bool) {
+    SETTINGS_OPEN.store(open, Ordering::Release);
+}
 
 /// Option ajoutée lors d'un redémarrage : la nouvelle instance attend alors
 /// la fin de l'ancienne. (Une option plutôt qu'une variable d'environnement :
@@ -66,17 +110,19 @@ pub fn take_restart_request() -> bool {
     RESTART_REQUESTED.swap(false, Ordering::AcqRel)
 }
 
-/// Ouvre l'app de réglages ; à défaut, le fichier de configuration dans
-/// l'éditeur de texte. `welcome` : premier lancement.
-pub fn open_settings(path: &Path, welcome: bool) {
-    match crate::api::launch_settings_app(path, welcome) {
-        Ok(mut child) => {
-            // On attend sa fin pour ne pas laisser de processus zombie.
-            let _ = std::thread::Builder::new().name("baskul-settings-wait".into()).spawn(move || child.wait());
+/// Ouvre la fenêtre de réglages ; à défaut, le fichier de configuration
+/// dans l'éditeur de texte (et renvoie `false`). `welcome` : premier
+/// lancement.
+pub fn open_settings(path: &Path, welcome: bool) -> bool {
+    match SETTINGS_OPENER.get() {
+        Some(open) => {
+            open(welcome);
+            true
         }
-        Err(e) => {
-            log::warn!("{e} : ouverture du fichier de configuration");
+        None => {
+            log::warn!("fenêtre de réglages indisponible : ouverture du fichier de configuration");
             open_in_editor(path);
+            false
         }
     }
 }
@@ -85,6 +131,10 @@ pub fn open_settings(path: &Path, welcome: bool) {
 pub fn relaunch(args: &crate::Args) -> ! {
     let mut argv = args.to_vec();
     argv.push(RELAUNCH_ARG.into());
+    // La fenêtre de réglages ouverte se rouvre dans la nouvelle instance.
+    if SETTINGS_OPEN.load(Ordering::Acquire) {
+        argv.push("--settings".into());
+    }
     match launch_again(&argv) {
         Ok(()) => log::info!("redémarrage…"),
         Err(e) => log::error!("redémarrage impossible : {e}"),

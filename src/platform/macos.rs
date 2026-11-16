@@ -32,10 +32,10 @@ use objc2_app_kit::{
     NSWindowStyleMask,
 };
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationPolicy, NSApplicationDelegate, NSBitmapImageFileType, NSBitmapImageRep,
-    NSControlStateValueOff, NSControlStateValueOn, NSEvent, NSEventModifierFlags, NSEventType, NSImage, NSMenu,
-    NSMenuItem, NSPasteboard, NSPasteboardItem, NSPasteboardTypeFileURL, NSPasteboardTypeHTML, NSPasteboardTypeString,
-    NSPasteboardTypeTIFF, NSPasteboardWriting, NSStatusBar, NSStatusItem, NSWindowOcclusionState,
+    NSApplication, NSApplicationActivationPolicy, NSBitmapImageFileType, NSBitmapImageRep, NSControlStateValueOff,
+    NSControlStateValueOn, NSEvent, NSEventModifierFlags, NSEventType, NSImage, NSMenu, NSMenuItem, NSPasteboard,
+    NSPasteboardItem, NSPasteboardTypeFileURL, NSPasteboardTypeHTML, NSPasteboardTypeString, NSPasteboardTypeTIFF,
+    NSPasteboardWriting, NSStatusBar, NSStatusItem, NSWindowOcclusionState,
 };
 use objc2_foundation::{
     NSActivityOptions, NSArray, NSData, NSDictionary, NSObjectProtocol, NSPoint, NSProcessInfo, NSRect, NSSize,
@@ -1636,17 +1636,6 @@ define_class!(
 
     unsafe impl NSObjectProtocol for Controller {}
 
-    unsafe impl NSApplicationDelegate for Controller {
-        /// Double-clic sur Baskul.app alors qu'il tourne déjà : réglages.
-        #[unsafe(method(applicationShouldHandleReopen:hasVisibleWindows:))]
-        fn should_handle_reopen(&self, _app: &NSApplication, _visible: bool) -> bool {
-            if let Some(p) = ui_value(|u| u.config_path.clone()) {
-                super::open_settings(&p, false);
-            }
-            false
-        }
-    }
-
     impl Controller {
         #[unsafe(method(tick:))]
         fn tick(&self, _sender: Option<&AnyObject>) {
@@ -2287,7 +2276,11 @@ pub fn open_in_editor(path: &Path) {
     let _ = std::process::Command::new("/usr/bin/open").arg("-t").arg(path).spawn();
 }
 
-pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
+/// Démarre la couche macOS sur la boucle principale de l'app (thread
+/// principal), sans la faire tourner : c'est l'app (Tauri) qui la fait
+/// tourner. Un double-clic sur Baskul.app déjà lancée ouvre les réglages :
+/// c'est l'app qui le reçoit.
+pub fn start(settings: Settings, config_path: PathBuf, args: Args) {
     let Some(mtm) = MainThreadMarker::new() else {
         fatal("Baskul doit démarrer sur le thread principal");
     };
@@ -2308,7 +2301,6 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
         let _ = BUBBLE_NAME.set(settings.name.clone());
     }
     let controller = Controller::new(mtm);
-    app.setDelegate(Some(ProtocolObject::from_ref(&*controller)));
     let item = NSStatusBar::systemStatusBar().statusItemWithLength(-1.0);
     item.setAutosaveName(Some(&NSString::from_str(STATUS_AUTOSAVE)));
     let menu = NSMenu::new(mtm);
@@ -2361,7 +2353,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
         forget_permissions(&missing_permissions(settings.role));
     }
     let permissions_ok;
-    let _services: Services = match settings.role {
+    let services: Services = match settings.role {
         Role::Secondary => {
             permissions_ok = post_access();
             if !permissions_ok {
@@ -2488,7 +2480,11 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
             true,
         );
     }
-    app.run();
-    shutdown();
-    std::process::exit(0)
+    // Les services (réseau, presse-papiers) vivent jusqu'à la fin du
+    // processus.
+    SERVICES.with(|s| *s.borrow_mut() = Some(services));
+}
+
+thread_local! {
+    static SERVICES: RefCell<Option<Services>> = const { RefCell::new(None) };
 }

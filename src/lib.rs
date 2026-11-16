@@ -1,8 +1,14 @@
-//! Baskul — un clavier, une souris et un presse-papiers partagés entre
-//! plusieurs ordinateurs : une machine principale et des machines pilotées.
+//! Baskul sur le poste de travail : la couche de chaque système (capture et
+//! injection du clavier et de la souris, icône, fenêtres), l'API locale, la
+//! ligne de commande, les journaux et les mises à jour, autour du cœur
+//! (`baskul-core`).
+//!
+//! L'app (`app/src-tauri`, Tauri) l'héberge : [`prepare`] avant de démarrer
+//! Tauri (ligne de commande, instance unique, configuration, journaux), puis
+//! [`start`] une fois Tauri prêt. La couche système tourne dans ses propres
+//! threads (Windows, Linux) ou sur la boucle principale de macOS, et n'attend
+//! jamais l'interface.
 
-// Pas de fenêtre console sous Windows (les journaux vont dans un fichier).
-#![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
 // La vérification croisée (feature `xcheck`) compile le code des deux
 // plateformes sur Linux sans pouvoir l'exécuter.
 #![cfg_attr(feature = "xcheck", allow(dead_code, unused_imports, unused_variables))]
@@ -11,11 +17,11 @@
 #![cfg_attr(all(not(any(windows, target_os = "macos")), not(feature = "xcheck")), allow(dead_code))]
 #![allow(clippy::collapsible_if, clippy::too_many_arguments)]
 
-mod api;
+pub mod api;
 mod cli;
 mod icon;
-mod logging;
-mod platform;
+pub mod logging;
+pub mod platform;
 mod update;
 
 // Le cœur (crate `baskul-core`) : ses modules sont accessibles ici sous les
@@ -29,6 +35,7 @@ use baskul_core::{
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 pub use baskul_core::VERSION;
@@ -39,7 +46,8 @@ pub struct Args {
     pub config: Option<PathBuf>,
     /// Journaux aussi sur la sortie d'erreur (Windows : console attachée).
     pub console: bool,
-    /// Ouvre seulement l'app de réglages.
+    /// Ouvre la fenêtre de réglages au démarrage (ou celle de l'instance
+    /// déjà lancée).
     pub settings: bool,
     /// Lancé par un redémarrage : attend la fin de l'instance précédente.
     pub relaunched: bool,
@@ -81,7 +89,7 @@ impl Args {
                          baskul [--config FICHIER] status\n\n  \
                          --config FICHIER  fichier de configuration (défaut : {})\n  \
                          --console         affiche aussi le journal dans le terminal\n  \
-                         --settings        ouvre l'app de réglages\n  \
+                         --settings        ouvre la fenêtre de réglages\n  \
                          --print-config    affiche une configuration par défaut\n  \
                          switch CIBLE      le clavier et la souris passent sur la machine principale\n                    \
                          (primary), la dernière pilotée (secondary), celle-ci (here),\n                    \
@@ -153,7 +161,40 @@ fn acquire_instance_lock(relaunched: bool) -> Result<File, LockError> {
     }
 }
 
-fn main() {
+/// Verrou d'instance, gardé jusqu'à la fin du processus.
+static INSTANCE_LOCK: OnceLock<File> = OnceLock::new();
+
+/// Baskul prêt à démarrer, une fois [`prepare`] passé.
+pub struct Prepared {
+    path: PathBuf,
+    args: Args,
+    state: State,
+}
+
+enum State {
+    Ready {
+        settings: Box<config::Settings>,
+        created: bool,
+        reopen_settings: bool,
+    },
+    /// Configuration illisible ou invalide : seule la fenêtre de réglages
+    /// s'ouvre, pour la corriger.
+    ConfigError(String),
+}
+
+impl Prepared {
+    /// Configuration invalide : Baskul ne tourne pas, l'app doit se fermer
+    /// avec la fenêtre de réglages.
+    pub fn config_error(&self) -> bool {
+        matches!(self.state, State::ConfigError(_))
+    }
+}
+
+/// Avant de démarrer l'interface : ligne de commande (les commandes
+/// `switch` et `status` se terminent ici), instance unique (une instance déjà
+/// lancée ouvre sa fenêtre de réglages, et ce processus se termine),
+/// configuration, journaux, API locale.
+pub fn prepare() -> Prepared {
     let args = match Args::parse() {
         Ok(a) => a,
         // Commande lancée par une autre application : erreur dans le
@@ -167,25 +208,25 @@ fn main() {
     if let Some(cmd) = &args.command {
         std::process::exit(cli::run(cmd, &path));
     }
-    if args.settings {
-        platform::open_settings(&path, false);
-        std::process::exit(0);
-    }
     // Ancien nom (Bascule) : ses réglages sont repris.
     match config::migrate_old_config_dir() {
         Ok(true) => eprintln!("Baskul : réglages de {} repris", config::OLD_NAME),
         Ok(false) => {}
         Err(e) => platform::fatal(&e),
     }
-    let _lock = match acquire_instance_lock(args.relaunched) {
-        Ok(f) => f,
-        // Baskul tourne déjà : on ouvre ses réglages.
+    match acquire_instance_lock(args.relaunched) {
+        Ok(f) => {
+            let _ = INSTANCE_LOCK.set(f);
+        }
+        // Baskul tourne déjà : il ouvre sa fenêtre de réglages.
         Err(LockError::Running) => {
-            platform::open_settings(&path, false);
+            if let Err(e) = api::call(&path, "POST", "/api/show-settings", None) {
+                eprintln!("Baskul : {e}");
+            }
             std::process::exit(0);
         }
         Err(LockError::Other(e)) => platform::fatal(&e),
-    };
+    }
 
     let loaded = config::load_or_create(&path);
     let level = match &loaded {
@@ -198,13 +239,10 @@ fn main() {
         log::error!("{e}");
     }
 
-    let (cfg, created) = match loaded {
+    let checked = loaded.and_then(|(cfg, created)| cfg.validate().map(|s| (s, created)));
+    let (settings, created) = match checked {
         Ok(x) => x,
-        Err(e) => config_error(&path, &args, &e),
-    };
-    let settings = match cfg.validate() {
-        Ok(s) => s,
-        Err(e) => config_error(&path, &args, &e),
+        Err(e) => return Prepared { path, args, state: State::ConfigError(e) },
     };
     i18n::init(settings.ui.language);
     update::cleanup();
@@ -221,54 +259,54 @@ fn main() {
             (_, None) => "recherche de la machine principale".into(),
         }
     );
+    let reopen_settings = update::take_reopen_settings();
+    Prepared { path, args, state: State::Ready { settings: Box::new(settings), created, reopen_settings } }
+}
 
+/// Démarre Baskul, une fois l'interface prête (et la fonction d'ouverture de
+/// la fenêtre de réglages donnée à [`platform::set_settings_opener`]). Sur
+/// macOS, à appeler sur le thread principal : la couche système s'installe
+/// sur sa boucle. Ailleurs, elle tourne dans son propre thread.
+pub fn start(prepared: Prepared) {
+    let Prepared { path, args, state } = prepared;
+    let (settings, created, reopen_settings) = match state {
+        State::Ready { settings, created, reopen_settings } => (settings, created, reopen_settings),
+        State::ConfigError(e) => return start_config_error(&path, args, &e),
+    };
     if created {
         log::info!("configuration créée : {}", path.display());
         platform::first_run(&path);
-    } else if update::take_reopen_settings() {
-        log::info!("mise à jour installée : réouverture de l'app de réglages");
-        let p = path.clone();
-        let _ = std::thread::Builder::new().name("baskul-reopen".into()).spawn(move || {
-            std::thread::sleep(Duration::from_millis(1500));
-            platform::open_settings(&p, false);
-        });
+    } else if reopen_settings {
+        log::info!("mise à jour installée : réouverture des réglages");
+        platform::open_settings(&path, false);
+    } else if args.settings {
+        platform::open_settings(&path, false);
     }
-
-    platform::run(settings, path, args);
+    platform::start(*settings, path, args);
 }
 
-/// Configuration illisible ou invalide : l'app de réglages s'ouvre pour la
-/// corriger, puis Baskul redémarre. Sans elle, le fichier s'ouvre dans
-/// l'éditeur de texte.
-fn config_error(path: &Path, args: &Args, e: &str) -> ! {
+/// Configuration illisible ou invalide : la fenêtre de réglages s'ouvre pour
+/// la corriger, puis Baskul redémarre.
+fn start_config_error(path: &Path, args: Args, e: &str) {
     log::error!("{e}");
     i18n::init(config::Language::System);
     status::set_conn(status::Conn::Error(i18n::tf("status.configInvalid", &[("error", e)])));
     api::set_restart_handler(platform::request_restart);
-    match api::launch_settings_app(path, false) {
-        Ok(mut child) => {
-            let launched = Instant::now();
-            loop {
-                if platform::take_restart_request() {
-                    platform::relaunch(args);
-                }
-                // Réglages fermés sans correction. (Une sortie immédiate
-                // signifie qu'une fenêtre de réglages était déjà ouverte.)
-                if !matches!(child.try_wait(), Ok(None)) && launched.elapsed() > Duration::from_secs(3) {
-                    log::info!("configuration toujours invalide : arrêt");
-                    logging::flush();
-                    std::process::exit(1);
-                }
-                std::thread::sleep(Duration::from_millis(200));
+    let spawned = std::thread::Builder::new().name("baskul-restart".into()).spawn(move || {
+        loop {
+            if platform::take_restart_request() {
+                platform::relaunch(&args);
             }
+            std::thread::sleep(Duration::from_millis(200));
         }
-        Err(err) => {
-            log::warn!("{err}");
-            platform::open_in_editor(path);
-            platform::fatal(&format!(
-                "Erreur dans la configuration :\n{e}\n\nFichier : {}\n\nCorrigez-la puis relancez Baskul.",
-                path.display()
-            ));
-        }
+    });
+    if let Err(err) = spawned {
+        log::error!("surveillance du redémarrage impossible : {err}");
+    }
+    if !platform::open_settings(path, false) {
+        platform::fatal(&format!(
+            "Erreur dans la configuration :\n{e}\n\nFichier : {}\n\nCorrigez-la puis relancez Baskul.",
+            path.display()
+        ));
     }
 }

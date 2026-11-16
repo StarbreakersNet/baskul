@@ -1,5 +1,7 @@
-//! API locale du daemon, utilisée par l'app de réglages (`baskul-settings`,
-//! en Tauri + Vue, dans `app/`).
+//! API locale de Baskul. La fenêtre de réglages (Tauri + Vue, dans `app/`)
+//! l'appelle directement, dans le même processus ([`call_local`]) ; les
+//! commandes `baskul switch`, `baskul status` et un second lancement de
+//! Baskul passent par HTTP ([`call`]).
 //!
 //! Un petit serveur HTTP écoute sur 127.0.0.1 (port aléatoire). Son port et un
 //! jeton aléatoire sont écrits dans `api.json`, à côté du fichier de
@@ -15,7 +17,6 @@ use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -36,6 +37,9 @@ struct Server {
 
 static RESTART: OnceLock<fn()> = OnceLock::new();
 
+/// L'API de ce processus, une fois démarrée.
+static SERVER: OnceLock<Arc<Server>> = OnceLock::new();
+
 /// Fonction appelée pour redémarrer Baskul (après un enregistrement…).
 /// Elle est appelée depuis un thread du serveur : elle doit seulement
 /// prévenir la boucle principale.
@@ -53,6 +57,7 @@ pub fn request_restart() {
 /// Démarre l'API et écrit son fichier de découverte.
 pub fn start(config_path: &Path) -> Result<(), String> {
     let server = spawn(config_path.to_path_buf())?;
+    let _ = SERVER.set(server.clone());
     let file = api_file(config_path);
     write_api_file(&file, server.port, &server.token)?;
     log::info!("API locale sur 127.0.0.1:{} ({})", server.port, file.display());
@@ -62,29 +67,6 @@ pub fn start(config_path: &Path) -> Result<(), String> {
 /// Fichier de découverte de l'API, à côté du fichier de configuration.
 pub fn api_file(config_path: &Path) -> PathBuf {
     config_path.parent().unwrap_or(Path::new(".")).join(API_FILE)
-}
-
-/// Lance l'app de réglages, installée à côté de Baskul.
-pub fn launch_settings_app(config_path: &Path, welcome: bool) -> Result<Child, String> {
-    let exe = settings_exe().ok_or("app de réglages introuvable")?;
-    let mut cmd = Command::new(&exe);
-    // Pour joindre l'API, et relancer Baskul avec la même configuration.
-    cmd.env("BASKUL_API_FILE", api_file(config_path)).env("BASKUL_CONFIG", config_path);
-    if welcome {
-        cmd.arg("--bienvenue");
-    }
-    cmd.spawn().map_err(|e| format!("lancement de {} impossible : {e}", exe.display()))
-}
-
-fn settings_exe() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    let dir = exe.parent()?;
-    let name = if cfg!(windows) { "baskul-settings.exe" } else { "baskul-settings" };
-    // À côté de Baskul (Windows, Linux, développement) ; sur macOS, dans
-    // Baskul.app/Contents/Helpers.
-    [dir.join(name), dir.join("../Helpers/BaskulSettings.app/Contents/MacOS").join(name)]
-        .into_iter()
-        .find(|p| p.is_file())
 }
 
 fn spawn(path: PathBuf) -> Result<Arc<Server>, String> {
@@ -265,18 +247,49 @@ fn route(req: &Request, server: &Server) -> Response {
         }
     }
     let path = req.target.split('?').next().unwrap_or_default();
+    dispatch(&req.method, path, &req.body, server)
+}
+
+/// Appel de l'API dans ce processus (fenêtre de réglages), sans HTTP.
+/// Renvoie le JSON de la réponse, ou le message d'erreur.
+pub fn call_local(method: &str, path: &str, body: Option<&Value>) -> Result<Value, String> {
+    let server = SERVER.get().ok_or("Baskul n'est pas encore prêt")?;
+    let body = body.map(|b| b.to_string().into_bytes()).unwrap_or_default();
+    let resp = dispatch(method, path, &body, server);
+    if resp.restart {
+        // Après la réponse : la fenêtre reçoit d'abord le résultat.
+        let _ = std::thread::Builder::new().name("baskul-restart".into()).spawn(|| {
+            std::thread::sleep(Duration::from_millis(300));
+            if let Some(restart) = RESTART.get() {
+                log::info!("redémarrage demandé par les réglages");
+                restart();
+            }
+        });
+    }
+    match resp.status {
+        200 => Ok(resp.body),
+        _ => Err(resp.body["error"].as_str().unwrap_or("erreur inconnue").to_string()),
+    }
+}
+
+fn dispatch(method: &str, path: &str, body: &[u8], server: &Server) -> Response {
     let can_restart = RESTART.get().is_some();
-    match (req.method.as_str(), path) {
+    match (method, path) {
         ("GET", "/api/status") => Response::json(200, status_info(server)),
         ("GET", "/api/config") => Response::json(200, config_info(&server.path)),
-        ("POST", "/api/config") => match save(&server.path, &req.body) {
+        ("POST", "/api/config") => match save(&server.path, body) {
             Ok(()) => Response { restart: can_restart, ..Response::json(200, json!({ "restart": can_restart })) },
             Err(e) => Response::error(422, &e),
         },
         ("POST", "/api/restart") => {
             Response { restart: can_restart, ..Response::json(200, json!({ "restart": can_restart })) }
         }
-        ("POST", "/api/switch") => switch(&req.body),
+        ("POST", "/api/switch") => switch(body),
+        // Second lancement de Baskul : la fenêtre de réglages s'ouvre ici.
+        ("POST", "/api/show-settings") => {
+            crate::platform::open_settings(&server.path, false);
+            Response::json(200, json!({}))
+        }
         ("GET", "/api/network") => Response::json(200, network_info()),
         ("GET", "/api/update") => Response::json(200, crate::update::info()),
         ("POST", "/api/update/check") => {
@@ -325,6 +338,7 @@ fn route(req: &Request, server: &Server) -> Response {
             | "/api/config"
             | "/api/restart"
             | "/api/switch"
+            | "/api/show-settings"
             | "/api/network"
             | "/api/open-file"
             | "/api/log"
