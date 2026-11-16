@@ -1,6 +1,5 @@
 //! Assemblage commun : réseau + presse-papiers + routage des messages.
 
-use crate::api;
 use crate::clipboard::{self, ClipEvent, ClipboardHandle, SystemBackend};
 use crate::config::Settings;
 use crate::crypto;
@@ -10,12 +9,30 @@ use crate::iface;
 use crate::net::{self, LinkEvent, LinkHandle, NetSettings};
 use crate::primary::{ACTIVITY_INTERVAL, PeerEvent, RECONNECT_GRACE};
 use crate::protocol::{ClipHeader, ClipImage};
-use crate::protocol::{DEFAULT_PORT, Message, Role};
+use crate::protocol::{DEFAULT_PORT, Message, Role, SwitchTo};
 use crate::secondary::{self, Emulator, SecondaryCore};
 use crossbeam_channel::{Receiver, unbounded};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
+
+/// Fonction de la commande `baskul switch`, une fois la machine visée connue.
+pub type SwitchFn = Box<dyn Fn(SwitchTo) -> Result<(), String> + Send + Sync>;
+
+/// Rôle de cette machine et fonction de la commande `baskul switch`.
+static SWITCH: Mutex<Option<(Role, SwitchFn)>> = Mutex::new(None);
+
+/// Enregistre la fonction de la commande `baskul switch` (appelée depuis un
+/// autre thread, celui de l'API locale par exemple).
+pub fn set_switch_handler(role: Role, f: impl Fn(SwitchTo) -> Result<(), String> + Send + Sync + 'static) {
+    *SWITCH.lock().unwrap_or_else(|e| e.into_inner()) = Some((role, Box::new(f)));
+}
+
+/// Rôle de cette machine et fonction de la commande `baskul switch`, une
+/// fois les services démarrés.
+pub fn switch_handler() -> MutexGuard<'static, Option<(Role, SwitchFn)>> {
+    SWITCH.lock().unwrap_or_else(|e| e.into_inner())
+}
 
 /// Fonctions du presse-papiers propres à la plateforme.
 #[derive(Clone, Copy)]
@@ -132,7 +149,7 @@ pub fn start_primary(
     let wake = Arc::new(wake);
     // Commande `baskul switch`, traitée comme un événement des pilotées.
     let (switch_tx, switch_wake) = (tx.clone(), wake.clone());
-    api::set_switch_handler(Role::Primary, move |to| {
+    set_switch_handler(Role::Primary, move |to| {
         let _ = switch_tx.send(PeerEvent::Switch { from: None, to });
         switch_wake();
         Ok(())
@@ -205,7 +222,7 @@ pub fn start_secondary<E: Emulator + Send + 'static>(
     let _ = link_cell.set(services.link.clone());
     // Commande `baskul switch` : transmise à la machine principale.
     let link = services.link.clone();
-    api::set_switch_handler(Role::Secondary, move |to| {
+    set_switch_handler(Role::Secondary, move |to| {
         let Some(primary) = link.primary() else {
             return Err(i18n::t("status.noPrimary"));
         };

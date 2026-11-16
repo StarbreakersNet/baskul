@@ -338,11 +338,11 @@ cargo run                # à la racine : lance Baskul (le daemon)
 cd app && yarn tauri dev # fenêtre de réglages, avec rechargement à chaud
 ```
 
-- `src/types.ts` reprend la configuration de `src/config.rs`. Pour un nouveau réglage : `config.rs` (structure, modèle commenté, validation), puis `types.ts` et la section concernée dans `src/sections/`.
+- `src/types.ts` reprend la configuration de `core/src/config.rs`. Pour un nouveau réglage : `config.rs` (structure, modèle commenté, validation), puis `types.ts` et la section concernée dans `src/sections/`.
 - `src/composables/useSettings.ts` gère l'état : chargement, état en direct, enregistrement, attente du redémarrage. `useUpdate.ts` gère les mises à jour.
 - `src/components/LayoutEditor.vue` : la grille des machines (glisser-déposer au pointeur, ou sélection puis clic).
 - Pages (`src/pages/`) et menu latéral (`src/layouts/AppLayout.vue`) : vue-router. Icônes : [Tabler Icons](https://tabler.io/icons) (`@tabler/icons-vue`).
-- **Traductions** : `locales/fr.json` et `locales/en.json`, à la racine du dépôt. La section `app` est lue par [vue-i18n](https://vue-i18n.intlify.dev) (`$t("…")` dans les composants), la section `daemon` par Baskul (`src/i18n.rs`, menus et état de la connexion). Pour une nouvelle langue : un fichier de plus, avec les mêmes clés.
+- **Traductions** : `locales/fr.json` et `locales/en.json`, à la racine du dépôt. La section `app` est lue par [vue-i18n](https://vue-i18n.intlify.dev) (`$t("…")` dans les composants), la section `daemon` par Baskul (`core/src/i18n.rs`, menus et état de la connexion). Pour une nouvelle langue : un fichier de plus, avec les mêmes clés.
 - `yarn build` vérifie les types (`vue-tsc`) puis construit le front, qui est intégré à l'exécutable par `cargo build -p baskul-settings --features custom-protocol`.
 
 ---
@@ -361,9 +361,12 @@ Deux détails de Windows sont gérés :
 
 ## Architecture
 
+Le **cœur** (`core/`, crate `baskul-core`) ne dépend d'aucun système ni d'aucune interface : il tourne dans ses propres threads et n'attend jamais l'interface. Le **daemon** (`src/`, crate `baskul`) l'héberge : capture et injection du clavier et de la souris, icône, fenêtres, API locale, mises à jour.
+
 ```
-src/
-  main.rs          démarrage, arguments, instance unique, reprise des réglages de Bascule
+core/src/          cœur (baskul-core)
+  lib.rs           liste des modules, version
+  services.rs      assemblage : réseau + presse-papiers + routage, commande `switch`
   config.rs        configuration TOML commentée (créée au 1er lancement)
   protocol.rs      messages (postcard)
   crypto.rs        chiffrement Noise NNpsk0 (clé dérivée du secret)
@@ -378,9 +381,13 @@ src/
   hotkey.rs        raccourcis
   capture.rs       saisie d'un raccourci pour l'app (crochet clavier)
   smooth.rs        défilement fluide (algorithme de Mac Mouse Fix, simulation du trackpad)
+  status.rs        état de la connexion, partagé avec l'icône et l'app
+  i18n.rs          traductions des menus et de l'état (locales/*.json)
+src/               daemon (baskul)
+  main.rs          démarrage, arguments, instance unique, reprise des réglages de Bascule
   update.rs        mises à jour (Releases GitHub, SHA-256, installation, redémarrage)
   icon.rs          icône (couleur ou monochrome)
-  i18n.rs          traductions des menus et de l'état (locales/*.json)
+  logging.rs       journaux
   api.rs           API locale (127.0.0.1 + jeton) pour l'app de réglages et les commandes
   cli.rs           commandes `baskul switch …` et `baskul status`
   platform/
@@ -393,4 +400,4 @@ app/               app de Baskul : Tauri 2 + Vue 3 + Naive UI
   src-tauri/       commandes Tauri, client de l'API du daemon
 ```
 
-Tests : `cargo test` (dont des tests de bout en bout sur de vraies connexions TCP, avec plusieurs pilotées). Le code Windows et macOS se vérifie aussi depuis Linux avec `./scripts/xcheck.sh`.
+Tests : `cargo test -p baskul-core -p baskul` (dont des tests de bout en bout sur de vraies connexions TCP, avec plusieurs pilotées). Le code Windows et macOS se vérifie aussi depuis Linux avec `./scripts/xcheck.sh`.

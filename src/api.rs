@@ -9,13 +9,14 @@
 
 use crate::config::{self, Config};
 use crate::protocol::{Role, SwitchTo};
+use crate::services;
 use crate::status::{self, Conn};
 use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const API_FILE: &str = "api.json";
@@ -34,16 +35,6 @@ struct Server {
 }
 
 static RESTART: OnceLock<fn()> = OnceLock::new();
-
-type SwitchFn = Box<dyn Fn(SwitchTo) -> Result<(), String> + Send + Sync>;
-/// Rôle de cette machine et fonction de la commande `baskul switch`.
-static SWITCH: Mutex<Option<(Role, SwitchFn)>> = Mutex::new(None);
-
-/// Fonction appelée par la commande `baskul switch` (depuis un thread du
-/// serveur), une fois la machine visée connue.
-pub fn set_switch_handler(role: Role, f: impl Fn(SwitchTo) -> Result<(), String> + Send + Sync + 'static) {
-    *SWITCH.lock().unwrap_or_else(|e| e.into_inner()) = Some((role, Box::new(f)));
-}
 
 /// Fonction appelée pour redémarrer Baskul (après un enregistrement…).
 /// Elle est appelée depuis un thread du serveur : elle doit seulement
@@ -350,7 +341,7 @@ fn route(req: &Request, server: &Server) -> Response {
 /// Commande `baskul switch` : `{"to": "primary" | "secondary" | "toggle" |
 /// "here" | "other" | "next" | nom d'une pilotée}`.
 fn switch(body: &[u8]) -> Response {
-    let guard = SWITCH.lock().unwrap_or_else(|e| e.into_inner());
+    let guard = services::switch_handler();
     let Some((role, handler)) = guard.as_ref() else {
         return Response::error(503, "Baskul n'est pas encore prêt");
     };
@@ -451,7 +442,7 @@ fn status_info(server: &Server) -> Value {
         "warning": s.warning,
         "peers": s.peers.iter().map(|p| json!({ "name": p.name, "os": p.os, "since": p.since })).collect::<Vec<_>>(),
         "active_peer": s.active_peer,
-        "role": SWITCH.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|(r, _)| match r {
+        "role": services::switch_handler().as_ref().map(|(r, _)| match r {
             Role::Primary => "primary",
             Role::Secondary => "secondary",
         }),

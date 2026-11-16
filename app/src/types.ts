@@ -1,4 +1,4 @@
-// Types partagés avec le daemon (voir `src/config.rs` et `src/api.rs`).
+// Types partagés avec le daemon (voir `core/src/config.rs` et `src/api.rs`).
 
 export type Role = "primary" | "secondary";
 export type Edge = "left" | "right" | "top" | "bottom";

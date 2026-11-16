@@ -7,8 +7,8 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-const FR: &str = include_str!("../locales/fr.json");
-const EN: &str = include_str!("../locales/en.json");
+const FR: &str = include_str!("../../locales/fr.json");
+const EN: &str = include_str!("../../locales/en.json");
 
 static TEXTS: OnceLock<HashMap<String, String>> = OnceLock::new();
 

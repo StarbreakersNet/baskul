@@ -3,11 +3,11 @@
 //! utile pour tester l'app de réglages et la liaison avec l'autre machine.
 
 use crate::Args;
-use crate::app::{self, ClipboardHooks};
 use crate::config::Settings;
 use crate::geometry::{Layout, Point, Rect};
 use crate::protocol::{MouseButton, Role};
 use crate::secondary::Emulator;
+use crate::services::{self, ClipboardHooks};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -49,8 +49,8 @@ pub fn run(settings: Settings, _config_path: PathBuf, args: Args) -> ! {
     crate::api::set_restart_handler(super::request_restart);
     let hooks = ClipboardHooks::NONE;
     let _services = match settings.role {
-        Role::Primary => app::start_primary(&settings, hooks, || {}).0,
-        Role::Secondary => app::start_secondary(&settings, hooks, NullEmulator, || None),
+        Role::Primary => services::start_primary(&settings, hooks, || {}).0,
+        Role::Secondary => services::start_secondary(&settings, hooks, NullEmulator, || None),
     };
     loop {
         if super::take_restart_request() {

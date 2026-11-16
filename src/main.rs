@@ -12,35 +12,26 @@
 #![allow(clippy::collapsible_if, clippy::too_many_arguments)]
 
 mod api;
-mod app;
-mod capture;
 mod cli;
-mod clipboard;
-mod config;
-mod crypto;
-mod discovery;
-mod geometry;
-mod hotkey;
-mod i18n;
 mod icon;
-mod iface;
-mod keymap;
 mod logging;
-mod net;
 mod platform;
-mod primary;
-mod protocol;
-mod secondary;
-#[cfg(any(target_os = "macos", test, feature = "xcheck"))]
-mod smooth;
-mod status;
 mod update;
+
+// Le cœur (crate `baskul-core`) : ses modules sont accessibles ici sous les
+// mêmes chemins qu'avant (`crate::config`…). Selon le système, la couche
+// plateforme n'en utilise qu'une partie.
+#[allow(unused_imports)]
+use baskul_core::{
+    capture, clipboard, config, crypto, discovery, geometry, hotkey, i18n, iface, keymap, net, primary, protocol,
+    secondary, services, smooth, status,
+};
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub use baskul_core::VERSION;
 
 /// Options de la ligne de commande.
 #[derive(Debug, Default, Clone)]

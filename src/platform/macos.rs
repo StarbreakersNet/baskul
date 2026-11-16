@@ -8,7 +8,6 @@
 //! - Icône dans la barre des menus.
 
 use crate::Args;
-use crate::app::{self, ClipboardHooks, Services};
 use crate::config::MachineCfg;
 use crate::config::{IsoSwap, ScrollCfg, ScrollMode, Settings, SideButtonsMode, Smoothness, TrayIcon};
 use crate::geometry::{Layout, Point, Rect};
@@ -20,6 +19,7 @@ use crate::net::PeerId;
 use crate::primary::{Decision, Host, PeerEvent, PrimaryCore, PrimaryOptions};
 use crate::protocol::{ClipHeader, ClipImage, ImageFormat, Message, MouseButton, Role, SwitchTo};
 use crate::secondary::Emulator;
+use crate::services::{self, ClipboardHooks, Services};
 use crate::smooth;
 use crate::status::{self, Conn, Snapshot};
 use crossbeam_channel::Receiver;
@@ -1260,7 +1260,7 @@ impl Host for MacHost {
     }
 
     fn save_layout(&mut self, machines: Vec<MachineCfg>) {
-        app::save_layout(&self.config_path, machines);
+        services::save_layout(&self.config_path, machines);
     }
 
     fn arrived(&mut self, _pos: Point) {
@@ -2370,7 +2370,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
                 unsafe { CGRequestPostEventAccess() };
                 status::set_warning(Some(i18n::t("status.needAccessibility")));
             }
-            app::start_secondary(&settings, hooks, MacEmulator::new(&settings), idle_time)
+            services::start_secondary(&settings, hooks, MacEmulator::new(&settings), idle_time)
         }
         Role::Primary => {
             // Source de réveil de la boucle principale pour les événements réseau.
@@ -2395,7 +2395,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
                 PEER_SOURCE.store(src as usize, Ordering::Release);
                 MAIN_LOOP.store(rl as usize, Ordering::Release);
             }
-            let (services, rx) = app::start_primary(&settings, hooks, wake_main);
+            let (services, rx) = services::start_primary(&settings, hooks, wake_main);
             let (iso, _) = keyboard_is_iso();
             let iso_active = match settings.iso_swap {
                 IsoSwap::On => true,

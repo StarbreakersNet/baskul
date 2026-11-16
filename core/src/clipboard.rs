@@ -12,10 +12,10 @@
 //! n'est pas renvoyé. La machine principale relaie ce qu'elle reçoit d'une
 //! pilotée aux autres pilotées.
 
-use crate::app::ClipboardHooks;
 use crate::config::ClipboardCfg;
 use crate::net::{LinkHandle, PeerId};
 use crate::protocol::{CLIP_CHUNK, ClipFile, ClipHeader, ClipImage, ImageFormat, Message};
+use crate::services::ClipboardHooks;
 use crossbeam_channel::{Receiver, Sender, select, unbounded};
 use std::collections::HashMap;
 use std::fs::File;

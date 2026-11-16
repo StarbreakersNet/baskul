@@ -13,7 +13,6 @@
 //! l'état des touches mortes de Windows n'est donc jamais perturbé.
 
 use crate::Args;
-use crate::app::{self, ClipboardHooks, Services};
 use crate::config::{MachineCfg, ScrollCfg, Settings, TrayIcon};
 use crate::geometry::{Layout, Point, Rect};
 use crate::i18n;
@@ -23,6 +22,7 @@ use crate::net::{LinkHandle, PeerId};
 use crate::primary::{Decision, HookWatch, Host, PeerEvent, PrimaryCore, PrimaryOptions};
 use crate::protocol::{ClipHeader, ClipImage, ImageFormat, Message, MouseButton, Role, SwitchTo};
 use crate::secondary::Emulator;
+use crate::services::{self, ClipboardHooks, Services};
 use crate::status::{self, Conn};
 use crossbeam_channel::Receiver;
 use std::cell::RefCell;
@@ -546,7 +546,7 @@ impl Host for WinHost {
     }
 
     fn save_layout(&mut self, machines: Vec<MachineCfg>) {
-        app::save_layout(&self.config_path, machines);
+        services::save_layout(&self.config_path, machines);
     }
 
     fn arrived(&mut self, _pos: Point) {
@@ -1923,7 +1923,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
     };
     let _services: Services = match settings.role {
         Role::Primary => {
-            let (services, rx) = app::start_primary(&settings, hooks, || post(WM_APP_NET, 0, 0));
+            let (services, rx) = services::start_primary(&settings, hooks, || post(WM_APP_NET, 0, 0));
             let layout = monitors();
             log::info!("écrans : {:?}", layout.displays);
             let opts = PrimaryOptions {
@@ -1965,7 +1965,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
         }
         Role::Secondary => {
             let emu = WinEmulator { keys_down: HashSet::new(), buttons: [false; 5], scroll: settings.scroll.clone() };
-            app::start_secondary(&settings, hooks, emu, idle_time)
+            services::start_secondary(&settings, hooks, emu, idle_time)
         }
     };
 
