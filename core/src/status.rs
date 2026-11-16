@@ -1,7 +1,7 @@
 //! État partagé affiché par l'icône (barre des tâches / barre des menus), le
 //! menu et l'app de réglages.
 
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Conn {
@@ -81,7 +81,7 @@ static STATE: Mutex<State> = Mutex::new(State {
 });
 
 type Listener = Box<dyn Fn() + Send + Sync>;
-static LISTENER: OnceLock<Listener> = OnceLock::new();
+static LISTENERS: Mutex<Vec<Listener>> = Mutex::new(Vec::new());
 
 fn update(f: impl FnOnce(&mut State)) {
     let changed = {
@@ -96,7 +96,7 @@ fn update(f: impl FnOnce(&mut State)) {
         s.snap != before
     };
     if changed {
-        if let Some(l) = LISTENER.get() {
+        for l in LISTENERS.lock().unwrap_or_else(|e| e.into_inner()).iter() {
             l();
         }
     }
@@ -146,7 +146,7 @@ pub fn snapshot() -> Snapshot {
     STATE.lock().unwrap_or_else(|e| e.into_inner()).snap.clone()
 }
 
-/// Enregistre la fonction appelée à chaque changement (une seule fois).
+/// Ajoute une fonction appelée à chaque changement.
 pub fn on_change(f: impl Fn() + Send + Sync + 'static) {
-    let _ = LISTENER.set(Box::new(f));
+    LISTENERS.lock().unwrap_or_else(|e| e.into_inner()).push(Box::new(f));
 }

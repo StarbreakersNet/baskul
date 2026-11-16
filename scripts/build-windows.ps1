@@ -1,5 +1,5 @@
-# Construit dist\Baskul (baskul.exe + baskul-settings.exe) et
-# dist\Baskul-Windows.zip. Nécessite Rust et Node.js.
+# Construit dist\Baskul (baskul.exe : Baskul et sa fenêtre de réglages, avec
+# Tauri) et dist\Baskul-Windows.zip. Nécessite Rust et Node.js.
 #   powershell -ExecutionPolicy Bypass -File scripts\build-windows.ps1
 $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
@@ -9,19 +9,16 @@ function Run($exe) {
   if ($LASTEXITCODE -ne 0) { throw "échec : $exe $args" }
 }
 
-# Interface de réglages, intégrée ensuite à l'exécutable Tauri.
+# Front construit par beforeBuildCommand, puis intégré à l'exécutable.
 Push-Location app
 Run corepack yarn install --immutable
-Run corepack yarn build
+Run corepack yarn tauri build --no-bundle
 Pop-Location
-
-Run cargo build --release -p baskul
-Run cargo build --release -p baskul-settings --features custom-protocol
 
 $out = "dist\Baskul"
 if (Test-Path dist) { Remove-Item -Recurse -Force dist }
 New-Item -ItemType Directory -Force $out | Out-Null
-Copy-Item target\release\baskul.exe, target\release\baskul-settings.exe $out
+Copy-Item target\release\baskul.exe $out
 Compress-Archive -Path $out -DestinationPath dist\Baskul-Windows.zip -Force
 Write-Host ""
-Write-Host "OK : $out (baskul.exe + baskul-settings.exe) et dist\Baskul-Windows.zip"
+Write-Host "OK : $out (baskul.exe) et dist\Baskul-Windows.zip"

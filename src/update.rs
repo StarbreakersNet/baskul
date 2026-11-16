@@ -482,7 +482,7 @@ fn install_files(archive: &Path) -> Result<(), String> {
     std::fs::create_dir_all(&work).map_err(|e| e.to_string())?;
     let tar = if cfg!(windows) { "tar.exe" } else { "tar" };
     run(tar, &["-xf".as_ref(), archive.as_os_str(), "-C".as_ref(), work.as_os_str()])?;
-    // Archive : un dossier (Baskul\ ou baskul/) avec les deux programmes.
+    // Archive : un dossier (Baskul\ ou baskul/) avec le programme.
     let ext = std::env::consts::EXE_SUFFIX;
     let main = format!("baskul{ext}");
     let src = std::fs::read_dir(&work)
@@ -490,8 +490,12 @@ fn install_files(archive: &Path) -> Result<(), String> {
         .filter_map(|e| e.ok().map(|e| e.path()))
         .find(|p| p.join(&main).is_file())
         .ok_or("archive inattendue (programme absent)")?;
-    let settings = format!("baskul-settings{ext}");
-    replace_programs(&[(src.join(&main), exe.clone()), (src.join(&settings), dir.join(&settings))])?;
+    replace_programs(&[(src.join(&main), exe.clone())])?;
+    // Ancienne app de réglages séparée (avant la 0.8) : devenue inutile.
+    let settings = dir.join(format!("baskul-settings{ext}"));
+    if settings.is_file() && std::fs::rename(&settings, old_path(&settings)).is_err() {
+        log::warn!("{} : ancienne app de réglages laissée en place", settings.display());
+    }
     let _ = std::fs::remove_dir_all(&work);
     Ok(())
 }

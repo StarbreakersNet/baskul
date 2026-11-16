@@ -1,46 +1,37 @@
 [workspace]
-members = [".", "app/src-tauri"]
+members = [".", "core", "app/src-tauri"]
 resolver = "3"
 
-# Version commune au daemon et à l'app de réglages.
+# Version commune au cœur, à la couche système et à l'app.
 [workspace.package]
-version = "0.7.2"
+version = "0.8.0"
 edition = "2024"
 license = "MIT"
 
+# Couche système de Baskul (capture, injection, icône, fenêtres), API locale,
+# ligne de commande, journaux, mises à jour. L'app (app/src-tauri) l'héberge.
 [package]
-name = "baskul"
+name = "baskul-desktop"
 version.workspace = true
 edition.workspace = true
-description = "Un clavier, une souris et un presse-papiers partagés entre plusieurs ordinateurs"
+description = "Baskul sur le poste de travail : couche système, API locale, mises à jour"
 license.workspace = true
 publish = false
 
-[[bin]]
-name = "baskul"
-path = "src/main.rs"
+[lib]
+name = "baskul_desktop"
+path = "src/lib.rs"
 
 [dependencies]
-arboard = "3.7.0"
-blake2 = "0.11.0"
+baskul-core = { path = "core" }
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 crossbeam-channel = "0.5.17"
 dirs = "7.0.0"
 getrandom = "0.4.3"
-if-addrs = "0.15.0"
-image = { version = "0.25.10", default-features = false, features = ["bmp", "gif", "jpeg", "png", "tiff", "webp"] }
 log = "0.4.34"
-mdns-sd = { version = "0.21.6", default-features = false, features = ["logging"] }
-png = "0.18.1"
-postcard = { version = "1.1.3", features = ["use-std"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.10.9"
-snow = "0.10.0"
-socket2 = "0.6.1"
-sys-locale = "0.3.2"
-toml = "1.1.8"
-toml_edit = "0.25.17"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = [

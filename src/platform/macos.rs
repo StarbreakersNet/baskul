@@ -5,37 +5,38 @@
 //!   disposition clavier du Mac qui produit les caractères et compose les
 //!   touches mortes, exactement comme avec un clavier branché sur le Mac.
 //! - Machine principale : capture par `CGEventTap`.
-//! - Icône dans la barre des menus.
+//! - Icône dans la barre des menus : dessinée par l'app (Tauri), à partir de
+//!   `crate::tray` ; ses choix sont exécutés ici, sur le thread principal.
 
 use crate::Args;
-use crate::app::{self, ClipboardHooks, Services};
 use crate::config::MachineCfg;
 use crate::config::{IsoSwap, ScrollCfg, ScrollMode, Settings, SideButtonsMode, Smoothness, TrayIcon};
 use crate::geometry::{Layout, Point, Rect};
 use crate::i18n;
-use crate::icon::{self, Tone};
+use crate::icon;
 use crate::keymap::{self, *};
 use crate::net::LinkHandle;
 use crate::net::PeerId;
 use crate::primary::{Decision, Host, PeerEvent, PrimaryCore, PrimaryOptions};
 use crate::protocol::{ClipHeader, ClipImage, ImageFormat, Message, MouseButton, Role, SwitchTo};
 use crate::secondary::Emulator;
+use crate::services::{self, ClipboardHooks, Services};
 use crate::smooth;
-use crate::status::{self, Conn, Snapshot};
+use crate::status;
+use crate::tray::{self, Action, IconStyle};
 use crossbeam_channel::Receiver;
 use objc2::rc::{Retained, autoreleasepool};
 use objc2::runtime::{AnyObject, NSObject, ProtocolObject};
-use objc2::{AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
+use objc2::{MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
     NSAnimatablePropertyContainer, NSAnimationContext, NSBackingStoreType, NSBox, NSBoxType, NSColor, NSFont, NSPanel,
     NSPopUpMenuWindowLevel, NSScreen, NSTextField, NSTitlePosition, NSView, NSWindowCollectionBehavior,
     NSWindowStyleMask,
 };
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationPolicy, NSApplicationDelegate, NSBitmapImageFileType, NSBitmapImageRep,
-    NSControlStateValueOff, NSControlStateValueOn, NSEvent, NSEventModifierFlags, NSEventType, NSImage, NSMenu,
-    NSMenuItem, NSPasteboard, NSPasteboardItem, NSPasteboardTypeFileURL, NSPasteboardTypeHTML, NSPasteboardTypeString,
-    NSPasteboardTypeTIFF, NSPasteboardWriting, NSStatusBar, NSStatusItem, NSWindowOcclusionState,
+    NSApplication, NSApplicationActivationPolicy, NSBitmapImageFileType, NSBitmapImageRep, NSEvent,
+    NSEventModifierFlags, NSEventType, NSPasteboard, NSPasteboardItem, NSPasteboardTypeFileURL, NSPasteboardTypeHTML,
+    NSPasteboardTypeString, NSPasteboardTypeTIFF, NSPasteboardWriting,
 };
 use objc2_foundation::{
     NSActivityOptions, NSArray, NSData, NSDictionary, NSObjectProtocol, NSPoint, NSProcessInfo, NSRect, NSSize,
@@ -46,8 +47,8 @@ use std::collections::HashSet;
 use std::ffi::{c_char, c_void};
 use std::path::{Path, PathBuf};
 use std::ptr::{null, null_mut};
-use std::sync::OnceLock;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 // ---------------------------------------------------------------------------
@@ -1260,7 +1261,7 @@ impl Host for MacHost {
     }
 
     fn save_layout(&mut self, machines: Vec<MachineCfg>) {
-        app::save_layout(&self.config_path, machines);
+        services::save_layout(&self.config_path, machines);
     }
 
     fn arrived(&mut self, _pos: Point) {
@@ -1597,33 +1598,124 @@ fn new_version_started() -> bool {
 // ---------------------------------------------------------------------------
 
 struct MacUi {
-    item: Retained<NSStatusItem>,
-    status_line: Retained<NSMenuItem>,
-    access_item: Retained<NSMenuItem>,
-    /// « Redémarrer pour mettre à jour », visible quand une version est prête.
-    update_item: Retained<NSMenuItem>,
-    update_ready: Option<String>,
-    return_item: Option<Retained<NSMenuItem>>,
-    lock_item: Option<Retained<NSMenuItem>>,
-    /// Entrées « Aller sur… », une par pilotée connectée.
-    goto_items: Vec<Retained<NSMenuItem>>,
-    goto_names: Vec<String>,
-    login_item: Retained<NSMenuItem>,
     _controller: Retained<Controller>,
-    last: Option<Snapshot>,
-    menu: Retained<NSMenu>,
-    /// Création de l'icône (elle met un instant à apparaître).
-    created_at: Instant,
-    /// Depuis quand l'icône n'est plus à l'écran.
-    hidden_since: Option<Instant>,
-    recreated_at: Option<Instant>,
-    tray_icon: TrayIcon,
     role: Role,
     config_path: PathBuf,
     args: Args,
     permissions_ok: bool,
     /// Autorisation « Accessibilité » au dernier contrôle.
     ax_trusted: bool,
+}
+
+/// Autorisations macOS manquantes (lu par l'icône, depuis un autre thread).
+static PERMISSIONS_MISSING: AtomicBool = AtomicBool::new(false);
+
+/// Choix du menu de l'icône reçus hors du thread principal : exécutés à la
+/// prochaine vérification périodique.
+static TRAY_ACTIONS: Mutex<Vec<Action>> = Mutex::new(Vec::new());
+
+/// Ce que l'icône (dessinée par l'app) demande à macOS.
+struct MacTray {
+    role: Role,
+    tray_icon: TrayIcon,
+}
+
+impl tray::Backend for MacTray {
+    fn role(&self) -> Role {
+        self.role
+    }
+
+    /// La même icône que sous Windows (voir `icon.rs`), en 36 pixels pour
+    /// 18 points (écrans Retina). En monochrome, c'est une image « modèle » :
+    /// macOS la colore comme les autres icônes de la barre des menus.
+    fn icon_style(&self) -> IconStyle {
+        let mono = self.tray_icon == TrayIcon::Mono;
+        IconStyle {
+            style: if mono { icon::Style::Mono([0, 0, 0]) } else { icon::Style::Color },
+            size: 36,
+            template: mono,
+        }
+    }
+
+    fn login_item(&self) -> Option<(String, bool)> {
+        Some((i18n::t("menu.openAtLogin"), login_item_enabled()))
+    }
+
+    fn needs_accessibility(&self) -> bool {
+        PERMISSIONS_MISSING.load(Ordering::Acquire)
+    }
+
+    fn perform(&self, action: Action) {
+        if MainThreadMarker::new().is_some() {
+            handle_action(action);
+        } else {
+            TRAY_ACTIONS.lock().unwrap_or_else(|e| e.into_inner()).push(action);
+        }
+    }
+}
+
+/// Exécute un choix du menu de l'icône (thread principal).
+fn handle_action(action: Action) {
+    let Some((role, path, args)) = ui_value(|u| (u.role, u.config_path.clone(), u.args.clone())) else { return };
+    let with_core = |f: &dyn Fn(&mut MacPrimary)| {
+        MAC_PRIMARY.with(|p| {
+            if let Ok(mut g) = p.try_borrow_mut() {
+                if let Some(s) = g.as_mut() {
+                    f(s);
+                }
+            }
+        })
+    };
+    match action {
+        Action::ReturnHere => with_core(&|s| s.core.return_home(&mut s.host)),
+        Action::GoTo(name) => with_core(&|s| s.core.switch_to(&mut s.host, None, SwitchTo::Client(name.clone()))),
+        Action::ToggleLock => with_core(&|s| {
+            s.core.toggle_lock();
+        }),
+        Action::Settings => {
+            super::open_settings(&path, false);
+        }
+        Action::OpenLog => {
+            crate::logging::flush();
+            if let Some(p) = crate::logging::log_path() {
+                let _ = std::process::Command::new("/usr/bin/open").arg("-a").arg("Console").arg(&p).spawn();
+            }
+        }
+        Action::OpenFolder => {
+            if let Some(dir) = path.parent() {
+                let _ = std::process::Command::new("/usr/bin/open").arg(dir).spawn();
+            }
+        }
+        Action::AllowAccessibility => {
+            // L'entrée déjà présente dans les Réglages peut être celle d'une
+            // ancienne version (cochée, mais sans effet) : on la fait oublier,
+            // puis Baskul redémarre et redemande l'autorisation.
+            forget_permissions(&missing_permissions(role));
+            let _ = std::process::Command::new("/usr/bin/open")
+                .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+                .spawn();
+            super::request_restart();
+        }
+        Action::ToggleLogin => {
+            set_login_item(!login_item_enabled());
+            tray::changed();
+        }
+        Action::InstallUpdate => {
+            if let Err(e) = crate::update::install(None) {
+                log::warn!("{e}");
+            }
+        }
+        Action::Restart => {
+            shutdown();
+            super::relaunch(&args);
+        }
+        Action::Quit => {
+            shutdown();
+            log::info!("arrêt demandé");
+            crate::logging::flush();
+            std::process::exit(0);
+        }
+    }
 }
 
 define_class!(
@@ -1636,130 +1728,15 @@ define_class!(
 
     unsafe impl NSObjectProtocol for Controller {}
 
-    unsafe impl NSApplicationDelegate for Controller {
-        /// Double-clic sur Baskul.app alors qu'il tourne déjà : réglages.
-        #[unsafe(method(applicationShouldHandleReopen:hasVisibleWindows:))]
-        fn should_handle_reopen(&self, _app: &NSApplication, _visible: bool) -> bool {
-            if let Some(p) = ui_value(|u| u.config_path.clone()) {
-                super::open_settings(&p, false);
-            }
-            false
-        }
-    }
-
     impl Controller {
         #[unsafe(method(tick:))]
         fn tick(&self, _sender: Option<&AnyObject>) {
             ui_tick(self.mtm());
         }
 
-        #[unsafe(method(openSettings:))]
-        fn open_settings(&self, _sender: Option<&AnyObject>) {
-            if let Some(p) = ui_value(|u| u.config_path.clone()) {
-                super::open_settings(&p, false);
-            }
-        }
-
-        #[unsafe(method(openLog:))]
-        fn open_log(&self, _sender: Option<&AnyObject>) {
-            crate::logging::flush();
-            if let Some(p) = crate::logging::log_path() {
-                let _ = std::process::Command::new("/usr/bin/open").arg("-a").arg("Console").arg(&p).spawn();
-            }
-        }
-
-        #[unsafe(method(openFolder:))]
-        fn open_folder(&self, _sender: Option<&AnyObject>) {
-            if let Some(p) = ui_value(|u| u.config_path.clone()) {
-                if let Some(dir) = p.parent() {
-                    let _ = std::process::Command::new("/usr/bin/open").arg(dir).spawn();
-                }
-            }
-        }
-
-        #[unsafe(method(openAccessibility:))]
-        fn open_accessibility(&self, _sender: Option<&AnyObject>) {
-            // L'entrée déjà présente dans les Réglages peut être celle d'une
-            // ancienne version (cochée, mais sans effet) : on la fait oublier,
-            // puis Baskul redémarre et redemande l'autorisation.
-            if let Some(role) = ui_value(|u| u.role) {
-                forget_permissions(&missing_permissions(role));
-            }
-            let _ = std::process::Command::new("/usr/bin/open")
-                .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-                .spawn();
-            super::request_restart();
-        }
-
-        #[unsafe(method(toggleLogin:))]
-        fn toggle_login(&self, _sender: Option<&AnyObject>) {
-            set_login_item(!login_item_enabled());
-            ui_force_refresh(self.mtm());
-        }
-
-        #[unsafe(method(returnHere:))]
-        fn return_here(&self, _sender: Option<&AnyObject>) {
-            MAC_PRIMARY.with(|p| {
-                if let Ok(mut g) = p.try_borrow_mut() {
-                    if let Some(s) = g.as_mut() {
-                        s.core.return_home(&mut s.host);
-                    }
-                }
-            });
-        }
-
-        #[unsafe(method(installUpdate:))]
-        fn install_update(&self, _sender: Option<&AnyObject>) {
-            if let Err(e) = crate::update::install(None) {
-                log::warn!("{e}");
-            }
-        }
-
         #[unsafe(method(bubbleTick:))]
         fn bubble_tick(&self, _sender: Option<&AnyObject>) {
             bubble_tick();
-        }
-
-        #[unsafe(method(goTo:))]
-        fn go_to(&self, sender: Option<&AnyObject>) {
-            let Some(sender) = sender else { return };
-            // SAFETY: l'expéditeur est une entrée de menu (NSMenuItem).
-            let tag: isize = unsafe { msg_send![sender, tag] };
-            let Some(name) = ui_value(|u| u.goto_names.get(tag as usize).cloned()).flatten() else { return };
-            MAC_PRIMARY.with(|p| {
-                if let Ok(mut g) = p.try_borrow_mut() {
-                    if let Some(s) = g.as_mut() {
-                        s.core.switch_to(&mut s.host, None, SwitchTo::Client(name));
-                    }
-                }
-            });
-        }
-
-        #[unsafe(method(toggleLock:))]
-        fn toggle_lock(&self, _sender: Option<&AnyObject>) {
-            MAC_PRIMARY.with(|p| {
-                if let Ok(mut g) = p.try_borrow_mut() {
-                    if let Some(s) = g.as_mut() {
-                        s.core.toggle_lock();
-                    }
-                }
-            });
-            ui_force_refresh(self.mtm());
-        }
-
-        #[unsafe(method(restart:))]
-        fn restart(&self, _sender: Option<&AnyObject>) {
-            let args = ui_value(|u| u.args.clone()).unwrap_or_default();
-            shutdown();
-            super::relaunch(&args);
-        }
-
-        #[unsafe(method(quit:))]
-        fn quit(&self, _sender: Option<&AnyObject>) {
-            shutdown();
-            log::info!("arrêt demandé");
-            crate::logging::flush();
-            std::process::exit(0);
         }
     }
 );
@@ -1776,97 +1753,7 @@ fn ui_value<R>(f: impl FnOnce(&MacUi) -> R) -> Option<R> {
     MAC_UI.with(|u| u.try_borrow().ok().and_then(|g| g.as_ref().map(f)))
 }
 
-fn menu_item(
-    mtm: MainThreadMarker,
-    title: &str,
-    action: Option<objc2::runtime::Sel>,
-    target: &Controller,
-) -> Retained<NSMenuItem> {
-    // SAFETY: sélecteurs définis sur Controller ; cible conservée par MacUi.
-    unsafe {
-        let item = NSMenuItem::initWithTitle_action_keyEquivalent(
-            NSMenuItem::alloc(mtm),
-            &NSString::from_str(title),
-            action,
-            &NSString::from_str(""),
-        );
-        if action.is_some() {
-            item.setTarget(Some(target));
-        }
-        item
-    }
-}
-
-/// Nom de sauvegarde de l'icône : macOS garde sa place (déplaçable avec
-/// ⌘ + glisser), y compris après un redémarrage de Baskul.
-const STATUS_AUTOSAVE: &str = "fr.baskul.status";
-
-/// Image de la barre des menus : la même icône que sous Windows (voir
-/// `icon.rs`), dessinée en 36 pixels pour 18 points (écrans Retina). En
-/// monochrome, c'est une image « modèle » : macOS la colore comme les autres
-/// icônes de la barre des menus (claire ou sombre, sélectionnée…).
-fn status_image(snap: &Snapshot, style: TrayIcon) -> Option<Retained<NSImage>> {
-    const PX: u32 = 36;
-    let mono = style == TrayIcon::Mono;
-    let rgba = icon::render(
-        PX,
-        Tone::of(&snap.conn),
-        snap.remote_active,
-        if mono { icon::Style::Mono([0, 0, 0]) } else { icon::Style::Color },
-    );
-    let png = crate::clipboard::encode_png(PX, PX, &rgba)?;
-    let img = NSImage::initWithData(NSImage::alloc(), &NSData::with_bytes(&png))?;
-    img.setSize(NSSize::new(18.0, 18.0));
-    img.setTemplate(mono);
-    Some(img)
-}
-
-fn update_status_item(ui: &MacUi, mtm: MainThreadMarker, snap: &Snapshot) {
-    if let Some(button) = ui.item.button(mtm) {
-        match status_image(snap, ui.tray_icon) {
-            Some(img) => {
-                button.setImage(Some(&img));
-                button.setTitle(&NSString::from_str(""));
-            }
-            None => {
-                button.setImage(None);
-                button.setTitle(&NSString::from_str("⌨︎"));
-            }
-        }
-        button.setToolTip(Some(&NSString::from_str(&format!("Baskul — {}", snap.summary()))));
-    }
-    ui.status_line.setTitle(&NSString::from_str(&snap.summary()));
-}
-
-/// Remplace l'icône de la barre des menus par une nouvelle (même menu, même
-/// place).
-fn recreate_status_item(ui: &mut MacUi, mtm: MainThreadMarker) {
-    let bar = NSStatusBar::systemStatusBar();
-    bar.removeStatusItem(&ui.item);
-    let item = bar.statusItemWithLength(-1.0);
-    item.setAutosaveName(Some(&NSString::from_str(STATUS_AUTOSAVE)));
-    item.setMenu(Some(&ui.menu));
-    ui.item = item;
-    ui.created_at = Instant::now();
-    ui.recreated_at = Some(ui.created_at);
-    ui.hidden_since = None;
-    let snap = status::snapshot();
-    update_status_item(ui, mtm, &snap);
-    ui.last = Some(snap);
-}
-
-fn ui_force_refresh(mtm: MainThreadMarker) {
-    MAC_UI.with(|u| {
-        if let Ok(mut g) = u.try_borrow_mut() {
-            if let Some(ui) = g.as_mut() {
-                ui.last = None;
-            }
-        }
-    });
-    ui_tick(mtm);
-}
-
-fn ui_tick(mtm: MainThreadMarker) {
+fn ui_tick(_mtm: MainThreadMarker) {
     // Redémarrage demandé par l'app de réglages.
     if super::take_restart_request() {
         let args = ui_value(|u| u.args.clone()).unwrap_or_default();
@@ -1908,6 +1795,8 @@ fn ui_tick(mtm: MainThreadMarker) {
                 }
             }
         });
+        PERMISSIONS_MISSING.store(!ok, Ordering::Release);
+        tray::changed();
         if ok {
             log::info!("autorisations macOS accordées");
             status::set_warning(None);
@@ -1921,89 +1810,10 @@ fn ui_tick(mtm: MainThreadMarker) {
     if role == Role::Primary {
         drain_peer_events();
     }
-    let snap = status::snapshot();
-    let locked = MAC_PRIMARY.with(|p| p.try_borrow().ok().and_then(|g| g.as_ref().map(|s| s.core.is_locked())));
-    MAC_UI.with(|u| {
-        let Ok(mut g) = u.try_borrow_mut() else { return };
-        let Some(ui) = g.as_mut() else { return };
-        if ui.last.as_ref() != Some(&snap) {
-            update_status_item(ui, mtm, &snap);
-            ui.last = Some(snap);
-        }
-        if !ui.item.isVisible() {
-            log::warn!("icône de la barre des menus masquée : réaffichage");
-            ui.item.setVisible(true);
-        }
-        // Image perdue (bouton vide) : on la redessine.
-        if ui.item.button(mtm).is_some_and(|b| b.image().is_none() && b.title().length() == 0) && ui.last.is_some() {
-            log::warn!("icône de la barre des menus sans image : nouveau dessin");
-            update_status_item(ui, mtm, &status::snapshot());
-        }
-        // Icône absente de l'écran (cachée par macOS, ou disparue) : notée
-        // dans le journal, puis recréée si cela dure.
-        let on_screen = ui.created_at.elapsed() < Duration::from_secs(5)
-            || ui
-                .item
-                .button(mtm)
-                .and_then(|b| b.window())
-                .is_some_and(|w| w.occlusionState().contains(NSWindowOcclusionState::Visible));
-        match (on_screen, ui.hidden_since) {
-            (true, Some(_)) => {
-                log::info!("icône de la barre des menus de nouveau visible");
-                ui.hidden_since = None;
-            }
-            (false, None) => {
-                log::info!("icône de la barre des menus absente de l'écran");
-                ui.hidden_since = Some(Instant::now());
-            }
-            (false, Some(since)) => {
-                let due = ui.recreated_at.is_none_or(|t| t.elapsed() > Duration::from_secs(120));
-                if since.elapsed() > Duration::from_secs(10) && due {
-                    log::warn!("icône de la barre des menus toujours absente : recréation");
-                    recreate_status_item(ui, mtm);
-                }
-            }
-            (true, None) => {}
-        }
-        ui.access_item.setHidden(ui.permissions_ok);
-        let ready = crate::update::ready_version();
-        if ready != ui.update_ready {
-            if let Some(v) = &ready {
-                ui.update_item.setTitle(&NSString::from_str(&i18n::tf("menu.updateReady", &[("version", v)])));
-            }
-            ui.update_item.setHidden(ready.is_none());
-            ui.update_ready = ready;
-        }
-        ui.login_item.setState(if login_item_enabled() { NSControlStateValueOn } else { NSControlStateValueOff });
-        if let (Some(item), Some(l)) = (&ui.lock_item, locked) {
-            item.setState(if l { NSControlStateValueOn } else { NSControlStateValueOff });
-        }
-        update_goto_items(ui, mtm);
-    });
-}
-
-/// Entrées « Aller sur… » : une par pilotée connectée, cochée pour celle où
-/// agissent le clavier et la souris.
-fn update_goto_items(ui: &mut MacUi, mtm: MainThreadMarker) {
-    let Some(anchor) = &ui.return_item else { return };
-    let snap = status::snapshot();
-    let names: Vec<String> = snap.peers.iter().map(|p| p.name.clone()).collect();
-    if names != ui.goto_names {
-        for item in ui.goto_items.drain(..) {
-            ui.menu.removeItem(&item);
-        }
-        let at = ui.menu.indexOfItem(anchor) + 1;
-        for (i, name) in names.iter().enumerate() {
-            let item = menu_item(mtm, &i18n::tf("menu.goTo", &[("name", name)]), Some(sel!(goTo:)), &ui._controller);
-            item.setTag(i as isize);
-            ui.menu.insertItem_atIndex(&item, at + i as isize);
-            ui.goto_items.push(item);
-        }
-        ui.goto_names = names;
-    }
-    for (item, name) in ui.goto_items.iter().zip(&ui.goto_names) {
-        let on = snap.active_peer.as_deref() == Some(name.as_str());
-        item.setState(if on { NSControlStateValueOn } else { NSControlStateValueOff });
+    // Choix du menu de l'icône reçus hors du thread principal.
+    let actions = std::mem::take(&mut *TRAY_ACTIONS.lock().unwrap_or_else(|e| e.into_inner()));
+    for a in actions {
+        handle_action(a);
     }
 }
 
@@ -2287,7 +2097,11 @@ pub fn open_in_editor(path: &Path) {
     let _ = std::process::Command::new("/usr/bin/open").arg("-t").arg(path).spawn();
 }
 
-pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
+/// Démarre la couche macOS sur la boucle principale de l'app (thread
+/// principal), sans la faire tourner : c'est l'app (Tauri) qui la fait
+/// tourner. Un double-clic sur Baskul.app déjà lancée ouvre les réglages :
+/// c'est l'app qui le reçoit.
+pub fn start(settings: Settings, config_path: PathBuf, args: Args) {
     let Some(mtm) = MainThreadMarker::new() else {
         fatal("Baskul doit démarrer sur le thread principal");
     };
@@ -2308,43 +2122,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
         let _ = BUBBLE_NAME.set(settings.name.clone());
     }
     let controller = Controller::new(mtm);
-    app.setDelegate(Some(ProtocolObject::from_ref(&*controller)));
-    let item = NSStatusBar::systemStatusBar().statusItemWithLength(-1.0);
-    item.setAutosaveName(Some(&NSString::from_str(STATUS_AUTOSAVE)));
-    let menu = NSMenu::new(mtm);
-    menu.setAutoenablesItems(false);
-
-    let status_line = menu_item(mtm, "Baskul", None, &controller);
-    status_line.setEnabled(false);
-    menu.addItem(&status_line);
-    let access_item = menu_item(mtm, &i18n::t("menu.allowAccessibility"), Some(sel!(openAccessibility:)), &controller);
-    access_item.setHidden(true);
-    menu.addItem(&access_item);
-    let update_item = menu_item(mtm, "", Some(sel!(installUpdate:)), &controller);
-    update_item.setHidden(true);
-    menu.addItem(&update_item);
-    menu.addItem(&NSMenuItem::separatorItem(mtm));
-    let (return_item, lock_item) = if settings.role == Role::Primary {
-        let r = menu_item(mtm, &i18n::t("menu.returnHere"), Some(sel!(returnHere:)), &controller);
-        menu.addItem(&r);
-        // Les entrées « Aller sur… » des pilotées connectées s'insèrent ici.
-        let l = menu_item(mtm, &i18n::t("menu.lock"), Some(sel!(toggleLock:)), &controller);
-        menu.addItem(&l);
-        menu.addItem(&NSMenuItem::separatorItem(mtm));
-        (Some(r), Some(l))
-    } else {
-        (None, None)
-    };
-    menu.addItem(&menu_item(mtm, &i18n::t("menu.settings"), Some(sel!(openSettings:)), &controller));
-    menu.addItem(&menu_item(mtm, &i18n::t("menu.openLog"), Some(sel!(openLog:)), &controller));
-    menu.addItem(&menu_item(mtm, &i18n::t("menu.openFolder"), Some(sel!(openFolder:)), &controller));
-    menu.addItem(&NSMenuItem::separatorItem(mtm));
-    let login_item = menu_item(mtm, &i18n::t("menu.openAtLogin"), Some(sel!(toggleLogin:)), &controller);
-    menu.addItem(&login_item);
-    menu.addItem(&NSMenuItem::separatorItem(mtm));
-    menu.addItem(&menu_item(mtm, &i18n::t("menu.restart"), Some(sel!(restart:)), &controller));
-    menu.addItem(&menu_item(mtm, &i18n::t("menu.quit"), Some(sel!(quit:)), &controller));
-    item.setMenu(Some(&menu));
+    tray::set_backend(MacTray { role: settings.role, tray_icon: settings.ui.tray_icon });
 
     let hooks = ClipboardHooks {
         sequence: clip_sequence,
@@ -2361,7 +2139,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
         forget_permissions(&missing_permissions(settings.role));
     }
     let permissions_ok;
-    let _services: Services = match settings.role {
+    let services: Services = match settings.role {
         Role::Secondary => {
             permissions_ok = post_access();
             if !permissions_ok {
@@ -2370,7 +2148,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
                 unsafe { CGRequestPostEventAccess() };
                 status::set_warning(Some(i18n::t("status.needAccessibility")));
             }
-            app::start_secondary(&settings, hooks, MacEmulator::new(&settings), idle_time)
+            services::start_secondary(&settings, hooks, MacEmulator::new(&settings), idle_time)
         }
         Role::Primary => {
             // Source de réveil de la boucle principale pour les événements réseau.
@@ -2395,7 +2173,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
                 PEER_SOURCE.store(src as usize, Ordering::Release);
                 MAIN_LOOP.store(rl as usize, Ordering::Release);
             }
-            let (services, rx) = app::start_primary(&settings, hooks, wake_main);
+            let (services, rx) = services::start_primary(&settings, hooks, wake_main);
             let (iso, _) = keyboard_is_iso();
             let iso_active = match settings.iso_swap {
                 IsoSwap::On => true,
@@ -2452,23 +2230,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
 
     MAC_UI.with(|u| {
         *u.borrow_mut() = Some(MacUi {
-            item,
-            status_line,
-            access_item,
-            update_item,
-            update_ready: None,
-            return_item,
-            lock_item,
-            goto_items: Vec::new(),
-            goto_names: Vec::new(),
-            login_item,
             _controller: controller.clone(),
-            last: None,
-            menu: menu.clone(),
-            created_at: Instant::now(),
-            hidden_since: None,
-            recreated_at: None,
-            tray_icon: settings.ui.tray_icon,
             role: settings.role,
             config_path,
             args,
@@ -2477,6 +2239,8 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
             ax_trusted: unsafe { AXIsProcessTrusted() },
         })
     });
+    PERMISSIONS_MISSING.store(!permissions_ok, Ordering::Release);
+    tray::changed();
     ui_tick(mtm);
     // SAFETY: minuterie répétée ciblant `tick:` sur notre contrôleur.
     unsafe {
@@ -2488,7 +2252,11 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
             true,
         );
     }
-    app.run();
-    shutdown();
-    std::process::exit(0)
+    // Les services (réseau, presse-papiers) vivent jusqu'à la fin du
+    // processus.
+    SERVICES.with(|s| *s.borrow_mut() = Some(services));
+}
+
+thread_local! {
+    static SERVICES: RefCell<Option<Services>> = const { RefCell::new(None) };
 }
