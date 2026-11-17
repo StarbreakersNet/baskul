@@ -61,12 +61,9 @@ async function handleSwitch() {
 <style lang="scss" scoped>
 @use "@/assets/variables";
 
-.peer-card {
-  border-radius: variables.$radius;
-}
-
 .peer-card-subtitle {
   margin-top: 8px;
+  font-size: variables.$font-size-help;
 }
 </style>
 ```

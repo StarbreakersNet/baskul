@@ -17,6 +17,7 @@ import HProgress from "@/components/c/hProgress.vue";
 import HSkeleton from "@/components/c/hSkeleton.vue";
 import HText from "@/components/c/hText.vue";
 import HTime from "@/components/c/hTime.vue";
+import BrandName from "@/components/BrandName.vue";
 import ExpandTransition from "@/components/ExpandTransition.vue";
 import logo from "@/assets/logo.svg";
 import { useCopy } from "@/composables/useCopy";
@@ -96,7 +97,7 @@ onMounted(async () => {
     <h-card>
       <h-flex align="center" class="about-header" :size="6" vertical>
         <h-avatar color="transparent" :size="80" :src="logo" />
-        <h-h2 class="about-name brand-wordmark">Baskul</h-h2>
+        <h-h2 class="about-name"><brand-name /></h-h2>
         <h-text depth="3">
           {{ $t("common.version", { version: settings.info?.version ?? appVersion }) }}
         </h-text>
@@ -172,7 +173,7 @@ onMounted(async () => {
           <h-text>{{ updateView.text }}</h-text>
           <expand-transition>
             <h-text v-if="update.info?.checkedAt" class="small-text" depth="3" tag="div">
-              <i18n-t keypath="update.checkedAt" tag="span">
+              <i18n-t keypath="update.checkedAt" scope="global" tag="span">
                 <template #ago><h-time :time="update.info.checkedAt" type="relative" /></template>
               </i18n-t>
             </h-text>

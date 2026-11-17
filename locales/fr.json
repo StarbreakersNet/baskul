@@ -340,7 +340,22 @@
         "bubble": "Bulle d'arrivée",
         "bubbleHelp": "Le nom de la machine s'affiche un instant près du curseur quand le clavier et la souris arrivent sur elle.",
         "notifications": "Notifications",
-        "notificationsHelp": "Une notification du système quand une autre machine se connecte ou se déconnecte."
+        "notificationsHelp": "Une notification du système quand une autre machine se connecte ou se déconnecte.",
+        "background": "Fond animé",
+        "backgroundHelp": "Grille de points qui ondule derrière les panneaux de cette fenêtre.",
+        "backgroundNone": "Aucun",
+        "backgroundCurrent": "Courant",
+        "backgroundWave": "Vague",
+        "backgroundBreathing": "Respiration",
+        "backgroundRipple": "Onde",
+        "tuningHelp": "Réglage d'essai : propre à cette fenêtre, appliqué tout de suite.",
+        "tuningSpeed": "Vitesse du fond",
+        "tuningOpacity": "Opacité du cadre",
+        "tuningBlur": "Flou sous le cadre",
+        "tuningSpacing": "Pas de la grille",
+        "tuningReset": "Valeurs d'essai par défaut",
+        "valuePercent": "{value} %",
+        "valuePx": "{value} px"
       },
       "advanced": {
         "isoSwap": "Touches \"²\" et \"< >\"",

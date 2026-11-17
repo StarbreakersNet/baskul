@@ -16,6 +16,7 @@ Les règles marquées **`lint`** sont vérifiées par `yarn lint`.
 | `types/` | Types partagés, un fichier par sujet ; `types/components/` pour les types publics des composants (`HLogInst`) | PascalCase : `Daemon.ts` |
 | `models/` | Données statiques et leur type, s'il en faut. Pas de fonction : elles vont dans `utils/` **`lint`** | PascalCase, au nom du type. Constantes en UPPER_SNAKE_CASE **`lint`** |
 | `assets/` | Styles globaux (`variables.scss`, `main.scss`), logo | |
+| `mocks/` | Faux backend pour `yarn dev:mock` (le front seul dans un navigateur), chargé par `main.ts` dans ce mode seulement et absent du build | camelCase : `tauri.ts` |
 | `router/` | Routes | |
 
 Les traductions sont hors de `app/`, dans `locales/` à la racine du dépôt : la section `app` est celle de la fenêtre, la section `daemon` celle des menus de Baskul (Rust). On les importe par l'alias `@locales/`.

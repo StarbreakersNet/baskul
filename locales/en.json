@@ -340,7 +340,22 @@
         "bubble": "Arrival bubble",
         "bubbleHelp": "The computer's name shows briefly next to the cursor when the keyboard and mouse arrive on it.",
         "notifications": "Notifications",
-        "notificationsHelp": "A system notification when another computer connects or disconnects."
+        "notificationsHelp": "A system notification when another computer connects or disconnects.",
+        "background": "Animated background",
+        "backgroundHelp": "Dot grid that ripples behind the panels of this window.",
+        "backgroundNone": "None",
+        "backgroundCurrent": "Current",
+        "backgroundWave": "Wave",
+        "backgroundBreathing": "Breathing",
+        "backgroundRipple": "Ripple",
+        "tuningHelp": "Trial setting: local to this window, applied right away.",
+        "tuningSpeed": "Background speed",
+        "tuningOpacity": "Frame opacity",
+        "tuningBlur": "Blur under the frame",
+        "tuningSpacing": "Grid spacing",
+        "tuningReset": "Reset trial values",
+        "valuePercent": "{value}%",
+        "valuePx": "{value} px"
       },
       "advanced": {
         "isoSwap": "“²” and “< >” keys",

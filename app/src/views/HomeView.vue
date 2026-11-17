@@ -101,11 +101,6 @@ const connection = computed<ConnectionSummary>(() => {
 
 const machines = computed<MachineEntry[]>(() => [selfEntry(), ...peers.value.map(peerEntry)]);
 
-const activeTileStyle = computed(() => ({
-  boxShadow: `inset 0 0 0 1.5px ${themeVars.value.primaryColor}`,
-  background: "var(--brand-tint)",
-}));
-
 const connectionText = computed(() => {
   const network = config.value?.network;
   if (isPrimary.value) {
@@ -258,10 +253,9 @@ function openLog() {
             v-for="machine in machines"
             :key="machine.key"
             :bordered="false"
-            class="home-tile"
+            :class="['home-tile', { 'home-tile--active': machine.isActive }]"
             embedded
-            size="small"
-            :style="machine.isActive ? activeTileStyle : {}">
+            size="small">
             <h-flex align="center" :size="4" vertical>
               <h-icon
                 :color="machine.isActive ? themeVars.primaryColor : undefined"
@@ -272,7 +266,7 @@ function openLog() {
               <h-text strong>{{ machine.name }}</h-text>
               <h-text class="small-text" depth="3">{{ machine.subtitle }}</h-text>
               <h-text v-if="machine.since" class="home-since" depth="3">
-                <i18n-t keypath="home.since" tag="span">
+                <i18n-t keypath="home.since" scope="global" tag="span">
                   <template #time><h-time format="HH:mm" :time="machine.since" /></template>
                   <template #ago>
                     <h-time :time="machine.since" :to="now" type="relative" />
@@ -423,6 +417,8 @@ function openLog() {
 </template>
 
 <style lang="scss" scoped>
+@use "@/assets/variables";
+
 .home-title {
   font-size: 18px;
 }
@@ -458,6 +454,15 @@ function openLog() {
 
 .home-tile {
   height: 100%;
+}
+
+.home-tile--active {
+  box-shadow: inset 0 0 0 1.5px v-bind("themeVars.primaryColor");
+  background: color-mix(
+    in srgb,
+    v-bind("themeVars.primaryColor") variables.$accent-tint,
+    transparent
+  );
 }
 
 .home-since {

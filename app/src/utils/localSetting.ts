@@ -16,3 +16,19 @@ export function writeLocalFlag(key: string, value: boolean) {
     // Stockage indisponible : la préférence ne survivra pas à la fermeture de la fenêtre
   }
 }
+
+export function readLocalJson<T extends object>(key: string, fallback: T): T {
+  try {
+    return { ...fallback, ...(JSON.parse(localStorage.getItem(key) ?? "{}") as Partial<T>) };
+  } catch {
+    return fallback;
+  }
+}
+
+export function writeLocalJson(key: string, value: object) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Stockage indisponible : la préférence ne survivra pas à la fermeture de la fenêtre
+  }
+}

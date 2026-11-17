@@ -69,7 +69,7 @@ const colors = computed(() => ({
   text-align: left;
   cursor: pointer;
   padding: 12px 14px;
-  border-radius: variables.$radius-large;
+  border-radius: v-bind("themeVars.borderRadius");
   border: 1.5px solid v-bind("colors.border");
   background: transparent;
 }

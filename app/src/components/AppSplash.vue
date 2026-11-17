@@ -3,17 +3,19 @@ import { computed } from "vue";
 import { useThemeVars } from "naive-ui";
 import HFlex from "@/components/c/hFlex.vue";
 import HText from "@/components/c/hText.vue";
+import BrandName from "@/components/BrandName.vue";
 import logo from "@/assets/logo.svg";
 
 const themeVars = useThemeVars();
 
 const background = computed(() => themeVars.value.bodyColor);
+const accent = computed(() => themeVars.value.primaryColor);
 </script>
 
 <template>
   <h-flex align="center" class="app-splash" justify="center" vertical>
     <img alt="" class="app-splash-logo" :src="logo" />
-    <h-text class="brand-wordmark app-splash-name">Baskul</h-text>
+    <brand-name class="app-splash-name" />
     <h-text depth="3">{{ $t("splash.connecting") }}</h-text>
   </h-flex>
 </template>
@@ -40,12 +42,12 @@ const background = computed(() => themeVars.value.bodyColor);
   0%,
   100% {
     transform: scale(1);
-    filter: drop-shadow(0 8px 24px rgba(76, 95, 239, 0.25));
+    filter: drop-shadow(0 8px 24px color-mix(in srgb, v-bind(accent) 25%, transparent));
   }
 
   50% {
     transform: scale(1.05);
-    filter: drop-shadow(0 12px 32px rgba(76, 95, 239, 0.45));
+    filter: drop-shadow(0 12px 32px color-mix(in srgb, v-bind(accent) 45%, transparent));
   }
 }
 
