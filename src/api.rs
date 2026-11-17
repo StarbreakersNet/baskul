@@ -331,6 +331,25 @@ fn dispatch(method: &str, path: &str, body: &[u8], server: &Server) -> Response 
             Ok(()) => Response { restart: can_restart, ..Response::json(200, json!({ "restart": can_restart })) },
             Err(e) => Response::error(422, &e),
         },
+        ("GET", "/api/pairing") => Response::json(200, json!(crate::pair::state())),
+        ("POST", "/api/pairing") => match crate::pair::start(&server.path) {
+            Ok(state) => Response::json(200, json!(state)),
+            Err(e) => Response::error(422, &e),
+        },
+        ("DELETE", "/api/pairing") => {
+            crate::pair::cancel();
+            Response::json(200, json!(crate::pair::state()))
+        }
+        ("POST", "/api/pairing/join") => match join_request(body) {
+            Ok((address, code)) => match crate::pair::join(&server.path, &address, &code) {
+                Ok(name) => Response {
+                    restart: can_restart,
+                    ..Response::json(200, json!({ "restart": can_restart, "primary": name }))
+                },
+                Err(e) => Response::error(422, &e),
+            },
+            Err(e) => Response::error(400, &e),
+        },
         ("GET", "/api/latency") => Response::json(200, latency_info()),
         ("GET", "/api/activity") => Response::json(200, json!({ "events": crate::activity::list() })),
         ("DELETE", "/api/activity") => {
@@ -376,6 +395,8 @@ fn dispatch(method: &str, path: &str, body: &[u8], server: &Server) -> Response 
             | "/api/log"
             | "/api/activity"
             | "/api/latency"
+            | "/api/pairing"
+            | "/api/pairing/join"
             | "/api/profiles"
             | "/api/profiles/apply"
             | "/api/export"
@@ -394,6 +415,15 @@ fn dispatch(method: &str, path: &str, body: &[u8], server: &Server) -> Response 
 fn file_path(body: &[u8]) -> Result<PathBuf, String> {
     let v: Value = serde_json::from_slice(body).map_err(|e| format!("données reçues invalides : {e}"))?;
     v["path"].as_str().map(PathBuf::from).ok_or_else(|| "fichier manquant".into())
+}
+
+/// Corps `{"address": "…", "code": "…"}` d'un appairage, côté pilotée.
+fn join_request(body: &[u8]) -> Result<(String, String), String> {
+    let v: Value = serde_json::from_slice(body).map_err(|e| format!("données reçues invalides : {e}"))?;
+    match (v["address"].as_str(), v["code"].as_str()) {
+        (Some(address), Some(code)) => Ok((address.to_string(), code.to_string())),
+        _ => Err("adresse ou code manquant".into()),
+    }
 }
 
 /// Corps `{"name": "…"}` des requêtes sur les profils.

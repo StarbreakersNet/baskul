@@ -27,6 +27,7 @@ const LABELS: Record<ActivityKind, { key: string; runKey: string; color: Activit
   warning: { key: "eventWarning", runKey: "eventWarnings", color: "error" },
   edgesPaused: { key: "eventEdgesPaused", runKey: "eventEdgesRuns", color: "warning" },
   edgesResumed: { key: "eventEdgesResumed", runKey: "eventEdgesRuns", color: "default" },
+  paired: { key: "eventPaired", runKey: "eventPaired", color: "success" },
 };
 
 function singleKey(event: ActivityEvent) {

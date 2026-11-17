@@ -15,6 +15,7 @@ const KINDS: ActivityKind[] = [
   "warning",
   "edgesPaused",
   "edgesResumed",
+  "paired",
 ];
 
 function event(kind: ActivityKind, extra: Partial<ActivityEvent> = {}): ActivityEvent {

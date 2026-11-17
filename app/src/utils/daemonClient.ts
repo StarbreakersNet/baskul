@@ -4,6 +4,7 @@ import type { BaskulConfig } from "@/types/Config";
 import type { CommandError, DaemonInfo, DaemonStatus, LogTail } from "@/types/Daemon";
 import type { CaptureState } from "@/types/Hotkey";
 import type { LatencyInfo } from "@/types/Latency";
+import type { PairingState } from "@/types/Pairing";
 import type { ProfilesInfo } from "@/types/Profiles";
 import type { NetworkInfo } from "@/types/Network";
 import type { UpdateInfo } from "@/types/Update";
@@ -23,6 +24,9 @@ export const daemonClient = {
   readActivity: () => invoke<{ events: ActivityEvent[] }>("read_activity"),
   clearActivity: () => invoke("clear_activity"),
   readLatency: () => invoke<LatencyInfo>("read_latency"),
+  pairing: (action: "start" | "poll" | "cancel") => invoke<PairingState>("pairing", { action }),
+  joinPrimary: (address: string, code: string) =>
+    invoke<RestartResult & { primary: string }>("join_primary", { address, code }),
   profiles: () => invoke<ProfilesInfo>("list_profiles"),
   saveProfile: (name: string) => invoke<ProfilesInfo>("save_profile", { name }),
   deleteProfile: (name: string) => invoke<ProfilesInfo>("delete_profile", { name }),

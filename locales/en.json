@@ -179,7 +179,8 @@
       "eventEdgesResumed": "Edge switching resumed",
       "edgesPausedTitle": "Edge switching paused",
       "edgesPausedText": "\"{program}\" is in the foreground. Keyboard shortcuts still work.",
-      "eventEdgesRuns": "Edge switching paused {count} times ({names})"
+      "eventEdgesRuns": "Edge switching paused {count} times ({names})",
+      "eventPaired": "\"{name}\" joined with a code"
     },
     "settings": {
       "restarting": "Restarting Baskul…",
@@ -467,6 +468,17 @@
       "summary": "average {average} ms · peak {max} ms",
       "ms": "{ms} ms",
       "help": "Round-trip time with each computer, measured every two seconds over the last three minutes. Above 30 ms the cursor may feel laggy: an Ethernet cable helps, or another network adapter (Connection tab)."
+    },
+    "pairing": {
+      "primaryText": "On the other computer, install Baskul as a controlled computer, then enter the code shown here: it receives the shared secret and connects.",
+      "showCode": "Show a code",
+      "validFor": "Valid for {time}",
+      "paired": "\"{name}\" received the secret: it connects after restarting.",
+      "manual": "Or by hand: address and secret",
+      "secondaryText": "On the main computer, open Home then \"Show a code\", and enter it here.",
+      "addressPlaceholder": "Main computer address (192.168.1.20)",
+      "join": "Join",
+      "joined": "Secret received from \"{name}\""
     }
   }
 }

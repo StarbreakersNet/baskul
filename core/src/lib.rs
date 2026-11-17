@@ -23,6 +23,7 @@ pub mod iface;
 pub mod keymap;
 pub mod latency;
 pub mod net;
+pub mod pairing;
 pub mod primary;
 pub mod protocol;
 pub mod secondary;
