@@ -191,8 +191,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("baskul-profiles-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.toml");
-        std::fs::write(&path, crate::config::default_config_text("primary", "secret-assez-long-pour-valider"))
-            .unwrap();
+        std::fs::write(&path, crate::config::default_config_text("primary", "secret-assez-long-pour-valider")).unwrap();
         save_current(&path, "Bureau").unwrap();
         let mut cfg = load_config(&path).unwrap();
         cfg.screen.edge_switching = false;
