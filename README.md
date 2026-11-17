@@ -352,11 +352,25 @@ L'API écoute aussi en HTTP sur 127.0.0.1, pour les commandes `baskul switch` / 
 corepack enable          # une fois : active Yarn 4 (champ packageManager)
 cd app && yarn install
 yarn tauri dev           # Baskul complet, fenêtre de réglages avec rechargement à chaud
+yarn dev:mock            # le front seul, dans un navigateur, avec un faux Baskul (http://localhost:5173)
 yarn format              # Prettier
 yarn lint                # oxlint, ESLint et noms de fichiers
 yarn type-check          # vue-tsc
 yarn test                # tests (utils, traductions)
 ```
+
+`yarn dev:mock` remplace Baskul par un faux backend (`src/mocks/tauri.ts`, absent du build) : une machine principale, deux pilotées connectées, la configuration par défaut. L'enregistrement, le redémarrage, la bascule, la saisie d'un raccourci et le démarrage fonctionnent. L'état se choisit dans l'adresse, avant le `#` :
+
+| Adresse | État |
+|---|---|
+| `http://localhost:5173/` | Principale, deux pilotées connectées |
+| `?state=waiting` | En attente des pilotées (ou de la principale) |
+| `?state=error` | Erreur de connexion (secret incorrect) |
+| `?state=offline` | Baskul n'est pas lancé ; le bouton "Démarrer" le lance |
+| `?role=secondary` | Machine pilotée |
+| `?welcome` | Premier lancement, ouvre les réglages |
+
+Les paramètres se combinent (`?role=secondary&state=waiting`). Pour juger les performances ou le rendu de la WebView de chaque système, `yarn tauri dev` reste la référence.
 
 Le code suit les conventions de [`AGENTS.md`](AGENTS.md) et de [`docs/conventions/`](docs/conventions/README.md) (les mêmes que le site des Starbreakers) : wrappers `h-*` autour de Naive UI, stores Pinia seuls à appeler Baskul, props typées, commentaires réduits à l'indispensable. La CI vérifie le format, le lint, les types et les tests, ainsi que les messages de commit : [Conventional Commits](docs/conventions/commits.md) (`feat(front): …`, `fix(windows): …`).
 
