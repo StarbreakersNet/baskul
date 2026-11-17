@@ -1,13 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Fen\u00eatre des r\u00e9glages",
+  "description": "Fenêtre des réglages",
   "windows": [
     "main"
   ],
   "permissions": [
     "core:default",
     "core:window:allow-destroy",
-    "opener:default"
+    "opener:default",
+    "dialog:default"
   ]
 }

@@ -451,6 +451,16 @@
       "delete": "Delete profile \"{name}\"",
       "deleteText": "Current settings do not change.",
       "deleteConfirm": "Delete"
+    },
+    "transfer": {
+      "label": "Export or import",
+      "help": "A JSON file with the settings and profiles, to reuse them on another computer. On import, this computer keeps its role, name, addresses, network adapter and grid; the shared secret comes from the file.",
+      "export": "Export…",
+      "import": "Import…",
+      "exported": "Settings exported",
+      "imported": "Settings imported",
+      "confirmTitle": "Import these settings?",
+      "confirmText": "Current settings are replaced (except the role, name, addresses, network adapter and grid), then Baskul restarts. Unsaved changes are lost."
     }
   }
 }
