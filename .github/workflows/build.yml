@@ -17,7 +17,7 @@ env:
 jobs:
   # Les builds (longs, surtout sur macOS) ne démarrent que si les tests passent.
   tests:
-    name: Tests (Linux) + vérification du code Windows/macOS
+    name: Tests, lint et vérification du code Windows/macOS
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,6 +28,28 @@ jobs:
       - run: cargo test -p baskul-core -p baskul-desktop
       - run: cargo clippy -p baskul-core -p baskul-desktop --all-targets -- -D warnings
       - run: ./scripts/xcheck.sh
+      # Front (docs/conventions/) : vérifie sans corriger, contrairement à yarn lint
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Front - dépendances
+        working-directory: app
+        run: corepack yarn install --immutable
+      - name: Front - format (Prettier)
+        working-directory: app
+        run: corepack yarn prettier --check src/
+      - name: Front - lint (oxlint)
+        working-directory: app
+        run: corepack yarn oxlint src -D correctness --import-plugin -D import/first
+      - name: Front - lint (ESLint)
+        working-directory: app
+        run: corepack yarn eslint .
+      - name: Front - noms de fichiers
+        working-directory: app
+        run: corepack yarn lint:names
+      - name: Front - types
+        working-directory: app
+        run: corepack yarn type-check
 
   linux:
     name: Linux

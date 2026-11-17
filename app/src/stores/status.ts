@@ -136,13 +136,16 @@ export const useStatusStore = defineStore("status", () => {
     }
   }
 
-  /** `to` : "primary", "here" ou le nom d'une pilotée */
+  /** `to` : "primary", "here" ou le nom d'une pilotée. Renvoie `true` si Baskul a basculé */
   async function switchTo(to: string) {
+    let hasSwitched = false;
     try {
       await daemonClient.switchTo(to);
+      hasSwitched = true;
     } catch (error) {
       message.error(errorMessage(error));
     }
+    return hasSwitched;
   }
 
   return { phase, status, init, waitForRestart, restart, start, switchTo };

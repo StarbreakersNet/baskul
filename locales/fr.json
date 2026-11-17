@@ -11,21 +11,21 @@
       "allowAccessibility": "Autoriser Baskul (Accessibilité)…",
       "returnHere": "Ramener le curseur sur cette machine",
       "lock": "Verrouiller le curseur sur cette machine",
-      "goTo": "Aller sur « {name} »",
+      "goTo": "Aller sur \"{name}\"",
       "updateReady": "Redémarrer pour mettre à jour ({version})"
     },
     "status": {
       "connecting": "connexion à {address}…",
       "listenFailed": "impossible d'écouter sur {address} ({error})",
       "wrongSecret": "secret incorrect : vérifiez que le secret partagé est le même sur toutes les machines",
-      "versionMismatch": "versions incompatibles (ici {here}, chez « {name} » {there}) : installez la même version sur toutes les machines",
-      "sameRole": "« {name} » est aussi réglée en machine {role} : il faut une seule principale, les autres pilotées",
+      "versionMismatch": "versions incompatibles (ici {here}, chez \"{name}\" {there}) : installez la même version sur toutes les machines",
+      "sameRole": "\"{name}\" est aussi réglée en machine {role} : il faut une seule principale, les autres pilotées",
       "unexpectedReply": "réponse inattendue de l'autre machine",
       "connected": "Connecté à {peer}",
       "error": "Erreur : {error}",
       "locked": "curseur verrouillé",
       "configInvalid": "configuration invalide : {error}",
-      "needAccessibility": "autorisation « Accessibilité » requise",
+      "needAccessibility": "autorisation \"Accessibilité\" requise",
       "captureFailed": "capture du clavier et de la souris impossible : vérifiez les autorisations",
       "rolePrimary": "principale",
       "roleSecondary": "pilotée",
@@ -33,7 +33,7 @@
       "searching": "recherche de la machine principale sur le réseau…",
       "noAddress": "adresse de la machine principale manquante (découverte automatique désactivée)",
       "noPrimary": "pas de connexion avec la machine principale",
-      "nameTaken": "une autre machine pilotée porte déjà le nom « {name} » : changez son « Nom affiché »"
+      "nameTaken": "une autre machine pilotée porte déjà le nom \"{name}\" : changez son \"Nom affiché\""
     }
   },
   "app": {
@@ -79,7 +79,7 @@
     },
     "home": {
       "starting": "Démarrage…",
-      "connectedTo": "Connectée à « {peer} »",
+      "connectedTo": "Connectée à \"{peer}\"",
       "noConnection": "Pas de connexion",
       "waiting": "En attente des autres machines",
       "since": "depuis {time} ({ago})",
@@ -115,7 +115,7 @@
       "settings": "Réglages",
       "log": "Journal",
       "connectedMany": "{n} pilotées connectées",
-      "connectedToPrimary": "Connectée à la machine principale « {peer} »",
+      "connectedToPrimary": "Connectée à la machine principale \"{peer}\"",
       "waitingClientsHelp": "Lancez Baskul sur les machines à piloter, avec le même secret.",
       "waitingPrimaryHelp": "Vérifiez que Baskul est lancé sur la machine principale, avec le même secret.",
       "client": "Pilotée",
@@ -135,7 +135,7 @@
       "welcomeIntro": "Pour relier vos machines :",
       "welcomeStep1": "Choisissez le rôle de cette machine : la principale est celle qui a le clavier et la souris, les autres sont pilotées.",
       "welcomeStep2": "Le secret doit être identique sur toutes les machines : copiez celui de la principale dans les réglages des pilotées.",
-      "welcomeStep3": "Les pilotées trouvent la principale toutes seules sur le réseau local. Sinon, indiquez son adresse dans « Se connecter à ».",
+      "welcomeStep3": "Les pilotées trouvent la principale toutes seules sur le réseau local. Sinon, indiquez son adresse dans \"Se connecter à\".",
       "welcomeEnd": "Enregistrez : Baskul redémarre avec ces réglages.",
       "configUnreadable": "Le fichier de configuration ne peut pas être lu",
       "tabs": {
@@ -160,7 +160,7 @@
       "connection": {
         "intro": "La machine principale attend les pilotées ; chaque pilotée s'y connecte.",
         "address": "Adresse de cette machine",
-        "addressHelp": "Les pilotées la trouvent seules sur le réseau local ; sinon, indiquez cette adresse dans leur « Se connecter à ».",
+        "addressHelp": "Les pilotées la trouvent seules sur le réseau local ; sinon, indiquez cette adresse dans leur \"Se connecter à\".",
         "connect": "Se connecter à",
         "connectHelp": "Adresse IP ou nom .local de la machine principale. Vide : trouvée automatiquement.",
         "connectPlaceholder": "Adresse de la machine principale",
@@ -172,13 +172,13 @@
         "listen": "Adresse d'écoute",
         "listenHelp": "Adresse et port où se connectent les pilotées. Rarement à changer.",
         "activity": "Activité partagée",
-        "activityHelp": "Cette machine reste active tant que vous l'êtes sur une autre : pas de veille de l'écran ni d'économiseur, statut « actif » dans Teams, Discord… Quand vous vous absentez, elle le voit aussi. À activer sur chaque machine.",
+        "activityHelp": "Cette machine reste active tant que vous l'êtes sur une autre : pas de veille de l'écran ni d'économiseur, statut \"actif\" dans Teams, Discord… Quand vous vous absentez, elle le voit aussi. À activer sur chaque machine.",
         "announce": "Annoncer sur le réseau local",
         "announceHelp": "Découverte automatique (Bonjour) : les pilotées trouvent cette machine sans adresse à saisir.",
         "discovery": "Recherche automatique",
         "discoveryHelp": "Trouve la machine principale sur le réseau local (Bonjour).",
         "found": "Machines principales trouvées",
-        "foundHelp": "« Choisir » fixe son adresse ci-dessous. Sinon, Baskul se connecte à celle qui a le même secret.",
+        "foundHelp": "\"Choisir\" fixe son adresse ci-dessous. Sinon, Baskul se connecte à celle qui a le même secret.",
         "searching": "Recherche en cours…",
         "otherVersion": "Autre version de Baskul",
         "pin": "Choisir",
@@ -243,7 +243,7 @@
         "invertVertical": "Inverser le défilement vertical",
         "invertHorizontal": "Inverser le défilement horizontal",
         "sideButtons": "Boutons latéraux (4 et 5)",
-        "sideButtonsHelp": "Boutons pour Chrome, Firefox, VS Code… Geste « balayage » pour Safari, le Finder, Xcode…",
+        "sideButtonsHelp": "Boutons pour Chrome, Firefox, VS Code… Geste \"balayage\" pour Safari, le Finder, Xcode…",
         "buttons": "Boutons",
         "swipe": "Geste balayage"
       },
@@ -288,8 +288,8 @@
         "bubbleHelp": "Le nom de la machine s'affiche un instant près du curseur quand le clavier et la souris arrivent sur elle."
       },
       "advanced": {
-        "isoSwap": "Touches « ² » et « < > »",
-        "isoSwapHelp": "Les claviers européens (ISO) du Mac inversent ces deux touches par rapport à un clavier de PC. « Auto » corrige selon le clavier du Mac : à changer seulement si elles restent inversées.",
+        "isoSwap": "Touches \"²\" et \"< >\"",
+        "isoSwapHelp": "Les claviers européens (ISO) du Mac inversent ces deux touches par rapport à un clavier de PC. \"Auto\" corrige selon le clavier du Mac : à changer seulement si elles restent inversées.",
         "auto": "Auto",
         "swap": "Échanger",
         "noSwap": "Ne pas échanger",
@@ -303,7 +303,7 @@
         },
         "configFile": "Fichier de configuration",
         "commands": "Commandes",
-        "commandsHelp": "Pour d'autres applications (Keyboard Maestro, Raccourcis, AutoHotkey…) : le clavier et la souris passent sur cette machine (here), sur la principale (primary), sur la machine suivante (next) ou sur une pilotée par son nom (switch Atelier) ; toggle fait l'aller-retour. « status » donne l'état de Baskul. « Copier » donne la commande complète, avec le chemin de Baskul :",
+        "commandsHelp": "Pour d'autres applications (Keyboard Maestro, Raccourcis, AutoHotkey…) : le clavier et la souris passent sur cette machine (here), sur la principale (primary), sur la machine suivante (next) ou sur une pilotée par son nom (switch Atelier) ; toggle fait l'aller-retour. \"status\" donne l'état de Baskul. \"Copier\" donne la commande complète, avec le chemin de Baskul :",
         "updates": "Mises à jour automatiques",
         "updatesHelp": "Recherche les nouvelles versions et les télécharge ; un redémarrage les installe."
       },
@@ -321,7 +321,7 @@
         "remove": "Retirer de la grille",
         "hotkey": "Raccourci pour y aller",
         "hotkeyHelp": "Le clavier et la souris passent directement sur cette pilotée.",
-        "isolated": "« {names} » ne touche aucune autre machine : seul un raccourci y mène. | « {names} » ne touchent aucune autre machine : seuls des raccourcis y mènent."
+        "isolated": "\"{names}\" ne touche aucune autre machine : seul un raccourci y mène. | \"{names}\" ne touchent aucune autre machine : seuls des raccourcis y mènent."
       }
     },
     "log": {

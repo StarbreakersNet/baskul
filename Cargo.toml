@@ -3,6 +3,10 @@ members = [".", "core", "app/src-tauri"]
 resolver = "3"
 
 # Version commune au cœur, à la couche système et à l'app.
+# Règles communes aux crates (docs/conventions/rust.md).
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "warn"
+
 [workspace.package]
 version = "0.8.0"
 edition = "2024"
@@ -17,6 +21,9 @@ edition.workspace = true
 description = "Baskul sur le poste de travail : couche système, API locale, mises à jour"
 license.workspace = true
 publish = false
+
+[lints]
+workspace = true
 
 [lib]
 name = "baskul_desktop"

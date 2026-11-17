@@ -6,6 +6,9 @@ description = "Cœur de Baskul : réseau, protocole, logique de la principale et
 license.workspace = true
 publish = false
 
+[lints]
+workspace = true
+
 [lib]
 name = "baskul_core"
 path = "src/lib.rs"
