@@ -19,6 +19,8 @@ pub enum Action {
     ReturnHere,
     /// Le clavier et la souris passent sur cette pilotée.
     GoTo(String),
+    /// Applique un profil de réglages (Baskul redémarre).
+    ApplyProfile(String),
     ToggleLock,
     Settings,
     OpenLog,
@@ -38,6 +40,7 @@ impl Action {
         match self {
             Action::ReturnHere => "return".into(),
             Action::GoTo(name) => format!("goto:{name}"),
+            Action::ApplyProfile(name) => format!("profile:{name}"),
             Action::ToggleLock => "lock".into(),
             Action::Settings => "settings".into(),
             Action::OpenLog => "log".into(),
@@ -53,6 +56,9 @@ impl Action {
     pub fn from_id(id: &str) -> Option<Action> {
         if let Some(name) = id.strip_prefix("goto:") {
             return Some(Action::GoTo(name.to_string()));
+        }
+        if let Some(name) = id.strip_prefix("profile:") {
+            return Some(Action::ApplyProfile(name.to_string()));
         }
         Some(match id {
             "return" => Action::ReturnHere,
@@ -158,7 +164,7 @@ pub fn changed() {
 /// (configuration invalide).
 pub fn model() -> Option<Model> {
     let backend = BACKEND.get()?;
-    Some(build(backend.as_ref(), &status::snapshot(), crate::update::ready_version()))
+    Some(build(backend.as_ref(), &status::snapshot(), crate::update::ready_version(), &crate::profiles::menu()))
 }
 
 /// Choix du menu, par son identifiant.
@@ -169,7 +175,12 @@ pub fn act(id: &str) {
     }
 }
 
-fn build(backend: &dyn Backend, snap: &status::Snapshot, update: Option<String>) -> Model {
+fn build(
+    backend: &dyn Backend,
+    snap: &status::Snapshot,
+    update: Option<String>,
+    (profiles, active): &(Vec<String>, Option<String>),
+) -> Model {
     let style = backend.icon_style();
     let image = Image {
         rgba: icon::render(style.size, Tone::of(&snap.conn), snap.remote_active, style.style),
@@ -192,6 +203,13 @@ fn build(backend: &dyn Backend, snap: &status::Snapshot, update: Option<String>)
             menu.push(item(Action::GoTo(p.name.clone()), i18n::tf("menu.goTo", &[("name", &p.name)]), Some(active)));
         }
         menu.push(item(Action::ToggleLock, i18n::t("menu.lock"), Some(snap.locked)));
+        menu.push(Entry::Separator);
+    }
+    for name in profiles {
+        let label = i18n::tf("menu.profile", &[("name", name)]);
+        menu.push(item(Action::ApplyProfile(name.clone()), label, Some(active.as_ref() == Some(name))));
+    }
+    if !profiles.is_empty() {
         menu.push(Entry::Separator);
     }
     menu.push(item(Action::Settings, i18n::t("menu.settings"), None));
@@ -270,8 +288,13 @@ mod tests {
     }
 
     #[test]
-    fn primary_menu_lists_peers_and_lock() {
-        let m = build(&Fake(Role::Primary), &snap(&["Atelier", "Salon"], Some("Salon")), Some("0.9.0".into()));
+    fn primary_menu_lists_peers_lock_and_profiles() {
+        let m = build(
+            &Fake(Role::Primary),
+            &snap(&["Atelier", "Salon"], Some("Salon")),
+            Some("0.9.0".into()),
+            &(vec!["Jeu".into()], Some("Jeu".into())),
+        );
         assert_eq!(m.image.rgba.len(), 16 * 16 * 4);
         assert!(matches!(&m.menu[0], Entry::Label(_)));
         assert_eq!(
@@ -282,6 +305,7 @@ mod tests {
                 (Action::GoTo("Atelier".into()), Some(false)),
                 (Action::GoTo("Salon".into()), Some(true)),
                 (Action::ToggleLock, Some(true)),
+                (Action::ApplyProfile("Jeu".into()), Some(true)),
                 (Action::Settings, None),
                 (Action::OpenLog, None),
                 (Action::OpenFolder, None),
@@ -294,7 +318,7 @@ mod tests {
 
     #[test]
     fn secondary_menu_has_no_switching() {
-        let m = build(&Fake(Role::Secondary), &snap(&["Principale"], None), None);
+        let m = build(&Fake(Role::Secondary), &snap(&["Principale"], None), None, &(Vec::new(), None));
         let a = actions(&m);
         assert!(!a.iter().any(|(a, _)| matches!(a, Action::ReturnHere | Action::GoTo(_) | Action::ToggleLock)));
         assert_eq!(a.first(), Some(&(Action::Settings, None)));
