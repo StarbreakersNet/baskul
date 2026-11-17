@@ -1,68 +1,56 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { createPinia, setActivePinia } from "pinia";
-import { useActivityStore } from "@/stores/activity";
-import type { DaemonStatus } from "@/types/Daemon";
+import { describe, expect, it } from "vitest";
+import fr from "@locales/fr.json";
+import { describeActivity, groupByDay } from "@/utils/activity";
+import type { ActivityEvent, ActivityKind } from "@/types/Activity";
 
-function status(overrides: Partial<DaemonStatus> = {}): DaemonStatus {
-  return {
-    state: "connected",
-    detail: "",
-    summary: "",
-    remote_active: false,
-    locked: false,
-    warning: null,
-    peers: [{ name: "Mac", os: "macos", since: 0 }],
-    active_peer: null,
-    role: "primary",
-    version: "0.8.0",
-    started: 1,
-    update: { state: "idle" } as DaemonStatus["update"],
-    ...overrides,
-  };
+const KINDS: ActivityKind[] = [
+  "started",
+  "connected",
+  "disconnected",
+  "reconnected",
+  "switchedTo",
+  "switchedHere",
+  "locked",
+  "unlocked",
+  "warning",
+];
+
+function event(kind: ActivityKind, extra: Partial<ActivityEvent> = {}): ActivityEvent {
+  return { id: 1, at: 0, until: 0, count: 1, kind, ...extra };
 }
 
 describe("activité récente", () => {
-  beforeEach(() => setActivePinia(createPinia()));
-
-  it("ne note rien au premier état", () => {
-    const activity = useActivityStore();
-    activity.observe(status());
-    expect(activity.events).toHaveLength(0);
+  it("a un texte pour chaque sorte d'événement, seul ou en suite", () => {
+    const home: Record<string, string> = fr.app.home;
+    for (const kind of KINDS) {
+      expect(home[describeActivity(event(kind)).key]).toBeTypeOf("string");
+      expect(home[describeActivity(event(kind, { count: 3 })).key]).toBeTypeOf("string");
+    }
   });
 
-  it("note les connexions, les bascules et le verrouillage, le plus récent d'abord", () => {
-    const activity = useActivityStore();
-    activity.observe(status());
-    activity.observe(
-      status({
-        peers: [
-          { name: "Mac", os: "macos", since: 0 },
-          { name: "Salon", os: "windows", since: 1 },
-        ],
-      })
-    );
-    activity.observe(status({ active_peer: "Mac" }));
-    activity.observe(status({ locked: true }));
-    expect(activity.events.map(event => [event.key, event.params?.name])).toEqual([
-      ["eventLocked", undefined],
-      ["eventSwitchedHere", undefined],
-      ["eventSwitchedTo", "Mac"],
-      ["eventDisconnected", "Salon"],
-      ["eventConnected", "Salon"],
+  it("résume une suite de bascules", () => {
+    const label = describeActivity(event("switchedTo", { count: 14, names: ["Mac", "Salon"] }));
+    expect(label.key).toBe("eventSwitches");
+    expect(label.params).toMatchObject({ count: 14, names: '"Mac" et "Salon"' });
+    expect(
+      describeActivity(event("switchedTo", { count: 2, names: ["A", "B"] }), "en").params.names
+    ).toBe('"A" and "B"');
+  });
+
+  it("distingue un redémarrage et donne la durée d'une coupure", () => {
+    expect(describeActivity(event("started", { restarted: true })).key).toBe("eventRestarted");
+    const reconnected = describeActivity(event("reconnected", { peer: "Mac", gap: 3_600 }));
+    expect(reconnected.params).toMatchObject({ name: "Mac", seconds: 4 });
+  });
+
+  it("regroupe par jour de la dernière occurrence", () => {
+    const day = new Date(2026, 10, 17, 12).getTime();
+    const hour = 60 * 60 * 1000;
+    const days = groupByDay([
+      event("locked", { id: 3, at: day, until: day + hour }),
+      event("connected", { id: 2, at: day - 2 * hour, until: day - 2 * hour }),
+      event("started", { id: 1, at: day - 24 * hour, until: day - 24 * hour }),
     ]);
-  });
-
-  it("sur une pilotée, suit remote_active", () => {
-    const activity = useActivityStore();
-    activity.observe(status({ role: "secondary" }));
-    activity.observe(status({ role: "secondary", remote_active: true }));
-    expect(activity.events[0].key).toBe("eventSwitchedHere");
-  });
-
-  it("un redémarrage remplace les autres changements", () => {
-    const activity = useActivityStore();
-    activity.observe(status());
-    activity.observe(status({ started: 2, peers: [] }));
-    expect(activity.events.map(event => event.key)).toEqual(["eventRestarted"]);
+    expect(days.map(group => group.events.map(e => e.id))).toEqual([[3, 2], [1]]);
   });
 });

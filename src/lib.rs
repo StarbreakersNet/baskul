@@ -19,6 +19,7 @@
 
 pub mod api;
 mod cli;
+mod history;
 mod icon;
 pub mod logging;
 pub mod platform;
@@ -30,8 +31,8 @@ mod update;
 // plateforme n'en utilise qu'une partie.
 #[allow(unused_imports)]
 use baskul_core::{
-    capture, clipboard, config, crypto, discovery, geometry, hotkey, i18n, iface, keymap, net, primary, protocol,
-    secondary, services, smooth, status,
+    capture, clipboard, config, crypto, discovery, geometry, hotkey, iface, keymap, net, primary, protocol, secondary,
+    services, smooth, status,
 };
 
 use std::fs::File;
@@ -39,7 +40,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
-pub use baskul_core::VERSION;
+pub use baskul_core::{VERSION, activity, i18n};
 
 #[derive(Debug, Default, Clone)]
 pub struct Args {
@@ -188,6 +189,11 @@ impl Prepared {
     pub fn config_error(&self) -> bool {
         matches!(self.state, State::ConfigError(_))
     }
+
+    /// Notifications du système à la connexion et à la déconnexion d'une machine.
+    pub fn notifications(&self) -> bool {
+        matches!(&self.state, State::Ready { settings, .. } if settings.ui.notifications)
+    }
 }
 
 /// Avant de démarrer l'interface : ligne de commande (les commandes
@@ -238,6 +244,8 @@ pub fn prepare() -> Prepared {
     if let Err(e) = api::start(&path) {
         log::error!("{e}");
     }
+    history::start(&path);
+    activity::record(activity::Kind::Started { restarted: args.relaunched });
 
     let checked = loaded.and_then(|(cfg, created)| cfg.validate().map(|s| (s, created)));
     let (settings, created) = match checked {

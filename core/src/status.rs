@@ -82,7 +82,7 @@ type Listener = Box<dyn Fn() + Send + Sync>;
 static LISTENERS: Mutex<Vec<Listener>> = Mutex::new(Vec::new());
 
 fn update(f: impl FnOnce(&mut State)) {
-    let changed = {
+    let (before, after) = {
         let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let before = s.snap.clone();
         f(&mut s);
@@ -91,9 +91,12 @@ fn update(f: impl FnOnce(&mut State)) {
         } else {
             Conn::Connected(s.snap.peers.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", "))
         };
-        s.snap != before
+        (before, s.snap.clone())
     };
-    if changed {
+    if before != after {
+        for kind in crate::activity::changes(&before, &after) {
+            crate::activity::record(kind);
+        }
         for l in LISTENERS.lock().unwrap_or_else(|e| e.into_inner()).iter() {
             l();
         }

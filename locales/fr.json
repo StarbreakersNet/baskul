@@ -34,6 +34,10 @@
       "noAddress": "adresse de la machine principale manquante (découverte automatique désactivée)",
       "noPrimary": "pas de connexion avec la machine principale",
       "nameTaken": "une autre machine pilotée porte déjà le nom \"{name}\" : changez son \"Nom affiché\""
+    },
+    "notify": {
+      "connected": "\"{peer}\" est connectée",
+      "disconnected": "\"{peer}\" s'est déconnectée"
     }
   },
   "app": {
@@ -144,7 +148,6 @@
       "eventSwitchedHere": "Clavier et souris sur cette machine",
       "eventLocked": "Curseur verrouillé sur cette machine",
       "eventUnlocked": "Curseur déverrouillé",
-      "eventRestarted": "Baskul a redémarré",
       "eventWarning": "Avertissement : {text}",
       "pairing": "Ajouter une machine",
       "pairingText": "Sur l'autre ordinateur, installez Baskul en machine pilotée avec le même secret. Il trouve cette machine tout seul sur le réseau local ; sinon, donnez-lui l'adresse.",
@@ -157,7 +160,17 @@
       "pairingCheck": "Vérifier la connexion",
       "activityClear": "Effacer",
       "pairingShowSecret": "Afficher le secret",
-      "pairingHideSecret": "Masquer le secret"
+      "pairingHideSecret": "Masquer le secret",
+      "eventStarted": "Baskul a démarré",
+      "eventRestarted": "Baskul a redémarré",
+      "eventRestarts": "Baskul a redémarré {count} fois",
+      "eventReconnected": "\"{name}\" : connexion perdue {seconds} s",
+      "eventReconnects": "\"{name}\" : connexion perdue {count} fois",
+      "eventSwitches": "{count} bascules entre cette machine et {names}",
+      "eventLocks": "Curseur verrouillé et déverrouillé {count} fois",
+      "eventWarnings": "Avertissement ({count} fois) : {text}",
+      "today": "Aujourd'hui",
+      "yesterday": "Hier"
     },
     "settings": {
       "restarting": "Redémarrage de Baskul…",
@@ -315,7 +328,9 @@
         "color": "Couleur",
         "mono": "Monochrome",
         "bubble": "Bulle d'arrivée",
-        "bubbleHelp": "Le nom de la machine s'affiche un instant près du curseur quand le clavier et la souris arrivent sur elle."
+        "bubbleHelp": "Le nom de la machine s'affiche un instant près du curseur quand le clavier et la souris arrivent sur elle.",
+        "notifications": "Notifications",
+        "notificationsHelp": "Une notification du système quand une autre machine se connecte ou se déconnecte."
       },
       "advanced": {
         "isoSwap": "Touches \"²\" et \"< >\"",

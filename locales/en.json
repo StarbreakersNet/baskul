@@ -34,6 +34,10 @@
       "noAddress": "main computer address missing (automatic discovery is off)",
       "noPrimary": "not connected to the main computer",
       "nameTaken": "another controlled computer is already named “{name}”: change its “Display name”"
+    },
+    "notify": {
+      "connected": "\"{peer}\" connected",
+      "disconnected": "\"{peer}\" disconnected"
     }
   },
   "app": {
@@ -144,7 +148,6 @@
       "eventSwitchedHere": "Keyboard and mouse on this computer",
       "eventLocked": "Cursor locked on this computer",
       "eventUnlocked": "Cursor unlocked",
-      "eventRestarted": "Baskul restarted",
       "eventWarning": "Warning: {text}",
       "pairing": "Add a computer",
       "pairingText": "On the other computer, install Baskul as a controlled computer with the same secret. It finds this computer on its own on the local network; otherwise, give it the address.",
@@ -157,7 +160,17 @@
       "pairingCheck": "Check the connection",
       "activityClear": "Clear",
       "pairingShowSecret": "Show secret",
-      "pairingHideSecret": "Hide secret"
+      "pairingHideSecret": "Hide secret",
+      "eventStarted": "Baskul started",
+      "eventRestarted": "Baskul restarted",
+      "eventRestarts": "Baskul restarted {count} times",
+      "eventReconnected": "\"{name}\": connection lost for {seconds} s",
+      "eventReconnects": "\"{name}\": connection lost {count} times",
+      "eventSwitches": "{count} switches between this computer and {names}",
+      "eventLocks": "Cursor locked and unlocked {count} times",
+      "eventWarnings": "Warning ({count} times): {text}",
+      "today": "Today",
+      "yesterday": "Yesterday"
     },
     "settings": {
       "restarting": "Restarting Baskul…",
@@ -315,7 +328,9 @@
         "color": "Color",
         "mono": "Monochrome",
         "bubble": "Arrival bubble",
-        "bubbleHelp": "The computer's name shows briefly next to the cursor when the keyboard and mouse arrive on it."
+        "bubbleHelp": "The computer's name shows briefly next to the cursor when the keyboard and mouse arrive on it.",
+        "notifications": "Notifications",
+        "notificationsHelp": "A system notification when another computer connects or disconnects."
       },
       "advanced": {
         "isoSwap": "“²” and “< >” keys",

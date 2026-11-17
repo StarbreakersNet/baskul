@@ -16,7 +16,6 @@ import HButton from "@/components/c/hButton.vue";
 import HCard from "@/components/c/hCard.vue";
 import HDescriptions from "@/components/c/hDescriptions.vue";
 import HDescriptionsItem from "@/components/c/hDescriptionsItem.vue";
-import HEmpty from "@/components/c/hEmpty.vue";
 import HFlex from "@/components/c/hFlex.vue";
 import HGrid from "@/components/c/hGrid.vue";
 import HGridItem from "@/components/c/hGridItem.vue";
@@ -24,12 +23,10 @@ import HIcon from "@/components/c/hIcon.vue";
 import HTag from "@/components/c/hTag.vue";
 import HText from "@/components/c/hText.vue";
 import HTime from "@/components/c/hTime.vue";
-import HTimeline from "@/components/c/hTimeline.vue";
-import HTimelineItem from "@/components/c/hTimelineItem.vue";
+import ActivityCard from "@/components/ActivityCard.vue";
 import { useCopy } from "@/composables/useCopy";
 import { useCurrentTime } from "@/composables/useCurrentTime";
 import { useLoader } from "@/composables/useLoader";
-import { useActivityStore, type ActivityType } from "@/stores/activity";
 import { useSettingsStore } from "@/stores/settings";
 import { useStatusStore } from "@/stores/status";
 import { formatHotkey, hotkeyParts } from "@/utils/hotkey";
@@ -57,19 +54,9 @@ interface MachineEntry {
 }
 
 const CLOCK_MS = 15_000;
-const ACTIVITY_COLORS: Record<ActivityType, "success" | "warning" | "info" | "default" | "error"> =
-  {
-    connection: "success",
-    disconnection: "warning",
-    switch: "info",
-    lock: "default",
-    restart: "info",
-    warning: "error",
-  };
 
 const settings = useSettingsStore();
 const statusStore = useStatusStore();
-const activity = useActivityStore();
 const { copy } = useCopy();
 const router = useRouter();
 const themeVars = useThemeVars();
@@ -402,25 +389,7 @@ function openLog() {
 
     <h-grid v-if="config" cols="1 640:2" responsive="self" :x-gap="16" :y-gap="16">
       <h-grid-item>
-        <h-card class="home-tile" size="small" :title="$t('home.activity')">
-          <template v-if="activity.events.length" #header-extra>
-            <h-button text type="primary" @click="activity.clear()">
-              {{ $t("home.activityClear") }}
-            </h-button>
-          </template>
-          <h-timeline v-if="activity.events.length" class="home-activity">
-            <h-timeline-item
-              v-for="event in activity.events"
-              :key="event.id"
-              :type="ACTIVITY_COLORS[event.type]">
-              <template #header>{{ $t(`home.${event.key}`, event.params ?? {}) }}</template>
-              <template #footer>
-                <h-time :time="event.at" :to="Math.max(now, event.at)" type="relative" />
-              </template>
-            </h-timeline-item>
-          </h-timeline>
-          <h-empty v-else class="home-activity-empty" :description="$t('home.activityEmpty')" />
-        </h-card>
+        <activity-card class="home-tile" />
       </h-grid-item>
       <h-grid-item v-if="isPrimary || !isConnected">
         <h-card class="home-tile" size="small" :title="$t('home.pairing')">
@@ -491,16 +460,6 @@ function openLog() {
 
 .home-since {
   font-size: 12px;
-}
-
-.home-activity {
-  max-height: 260px;
-  overflow-y: auto;
-  padding: 4px 4px 0 2px;
-}
-
-.home-activity-empty {
-  padding: 16px 0;
 }
 
 .home-empty {

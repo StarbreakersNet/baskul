@@ -10,6 +10,7 @@
 
 #![allow(clippy::collapsible_if, clippy::too_many_arguments)]
 
+pub mod activity;
 pub mod capture;
 pub mod clipboard;
 pub mod config;
