@@ -15,11 +15,13 @@ Lire d'abord le fichier de [`docs/conventions/`](docs/conventions/README.md) qui
 | Un wrapper de `app/src/components/c/`, ou un composant Naive UI sans wrapper | [`wrappers.md`](docs/conventions/wrappers.md) |
 | Des styles : bloc `<style>`, `app/src/assets/` | [`styles.md`](docs/conventions/styles.md) |
 | Un store, un composable, `app/src/utils/`, ou un nouveau fichier du front | [`organisation.md`](docs/conventions/organisation.md) |
+| Un message de commit, un titre de PR | [`commits.md`](docs/conventions/commits.md) |
 
 ## Avant de rendre la main
 
 - **Front**, dans `app/` : `yarn format`, `yarn lint`, `yarn type-check` et `yarn test`, sans nouvelle erreur ni nouvel avertissement dans les fichiers touchés.
 - **Rust** : `cargo fmt --all`, `cargo clippy -p baskul-core -p baskul-desktop --all-targets -- -D warnings`, `cargo test -p baskul-core -p baskul-desktop` et `./scripts/xcheck.sh` (code Windows et macOS vérifié depuis Linux).
+- **Commits** : [Conventional Commits](docs/conventions/commits.md), type et portée en anglais, description en français : `feat(front): activité récente sur l'accueil`. Le titre de la PR suit le même format.
 - Si une règle de la charte semble inadaptée, le signaler plutôt que la contourner.
 
 ## Nommage

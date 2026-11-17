@@ -1,6 +1,7 @@
 name: checks
 
-# Format, lint, tests et types, pour le Rust et le front (docs/conventions/).
+# Format, lint, tests et types, pour le Rust et le front (docs/conventions/),
+# et messages des commits d'une PR (docs/conventions/commits.md).
 # À chaque PR et sur main ; build et release les reprennent.
 on:
   pull_request:
@@ -20,6 +21,21 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  commits:
+    name: Commits
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Titre passé par l'environnement : il vient de l'auteur de la PR
+      - env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: node scripts/check-commits.mjs "$BASE" "$HEAD" "$TITLE"
+
   rust:
     name: Rust
     runs-on: ubuntu-latest
