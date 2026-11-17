@@ -23,6 +23,7 @@ mod history;
 mod icon;
 pub mod logging;
 pub mod platform;
+mod profiles;
 mod programs;
 pub mod tray;
 mod update;
@@ -292,6 +293,7 @@ pub fn start(prepared: Prepared) {
         platform::open_settings(&path, false);
     }
     programs::start(settings.pause_edges_for.clone());
+    profiles::refresh_menu(&path);
     platform::start(*settings, path, args);
 }
 

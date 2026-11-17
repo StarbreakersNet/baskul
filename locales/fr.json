@@ -12,7 +12,8 @@
       "returnHere": "Ramener le curseur sur cette machine",
       "lock": "Verrouiller le curseur sur cette machine",
       "goTo": "Aller sur \"{name}\"",
-      "updateReady": "Redémarrer pour mettre à jour ({version})"
+      "updateReady": "Redémarrer pour mettre à jour ({version})",
+      "profile": "Profil \"{name}\""
     },
     "status": {
       "connecting": "connexion à {address}…",
@@ -435,6 +436,21 @@
     },
     "splash": {
       "connecting": "Connexion à Baskul…"
+    },
+    "profiles": {
+      "custom": "Réglages personnalisés",
+      "saveCurrent": "Enregistrer comme profil…",
+      "saveTitle": "Enregistrer les réglages comme profil",
+      "namePlaceholder": "Nom du profil (Jeu, Bureau…)",
+      "save": "Enregistrer",
+      "saved": "Profil \"{name}\" enregistré",
+      "apply": "Appliquer",
+      "applyTitle": "Appliquer le profil \"{name}\" ?",
+      "applyDirty": "Les modifications non enregistrées seront perdues.",
+      "applied": "Profil \"{name}\" appliqué",
+      "delete": "Supprimer le profil \"{name}\"",
+      "deleteText": "Les réglages actuels ne changent pas.",
+      "deleteConfirm": "Supprimer"
     }
   }
 }

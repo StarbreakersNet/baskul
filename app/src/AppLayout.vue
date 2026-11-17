@@ -20,6 +20,7 @@ import HResult from "@/components/c/hResult.vue";
 import HText from "@/components/c/hText.vue";
 import AppFooter from "@/components/AppFooter.vue";
 import AppSplash from "@/components/AppSplash.vue";
+import ProfileMenu from "@/components/ProfileMenu.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
 import UpdateBanner from "@/components/UpdateBanner.vue";
 import logo from "@/assets/logo.svg";
@@ -170,10 +171,10 @@ onMounted(async () => {
             <h-text class="app-subtitle" depth="3">{{ subtitle }}</h-text>
           </h-flex>
           <transition name="fade">
-            <status-badge
-              v-if="!isLoading"
-              :is-restarting="isRestarting"
-              :status="statusStore.status" />
+            <h-flex v-if="!isLoading" align="center" :size="10" :wrap="false">
+              <profile-menu v-if="settings.config" />
+              <status-badge :is-restarting="isRestarting" :status="statusStore.status" />
+            </h-flex>
           </transition>
         </h-flex>
       </h-layout-header>

@@ -93,6 +93,7 @@ impl tray::Backend for LinuxTray {
                     log::warn!("{e}");
                 }
             }
+            Action::ApplyProfile(name) => crate::profiles::apply_and_restart(&self.config_path, &name),
             Action::Restart => super::relaunch(&self.args),
             Action::Quit => {
                 log::info!("arrêt demandé");

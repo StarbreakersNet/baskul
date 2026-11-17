@@ -305,6 +305,24 @@ fn dispatch(method: &str, path: &str, body: &[u8], server: &Server) -> Response 
             Response::json(200, json!({}))
         }
         ("GET", "/api/log") => Response::json(200, log_tail()),
+        ("GET", "/api/profiles") => Response::json(200, crate::profiles::info(&server.path)),
+        ("POST", "/api/profiles") => {
+            match profile_name(body).and_then(|n| crate::profiles::save_current(&server.path, &n)) {
+                Ok(()) => Response::json(200, crate::profiles::info(&server.path)),
+                Err(e) => Response::error(422, &e),
+            }
+        }
+        ("DELETE", "/api/profiles") => match profile_name(body).and_then(|n| crate::profiles::delete(&server.path, &n))
+        {
+            Ok(()) => Response::json(200, crate::profiles::info(&server.path)),
+            Err(e) => Response::error(422, &e),
+        },
+        ("POST", "/api/profiles/apply") => {
+            match profile_name(body).and_then(|n| crate::profiles::apply(&server.path, &n)) {
+                Ok(()) => Response { restart: can_restart, ..Response::json(200, json!({ "restart": can_restart })) },
+                Err(e) => Response::error(422, &e),
+            }
+        }
         ("GET", "/api/activity") => Response::json(200, json!({ "events": crate::activity::list() })),
         ("DELETE", "/api/activity") => {
             crate::history::clear();
@@ -348,6 +366,8 @@ fn dispatch(method: &str, path: &str, body: &[u8], server: &Server) -> Response 
             | "/api/open-file"
             | "/api/log"
             | "/api/activity"
+            | "/api/profiles"
+            | "/api/profiles/apply"
             | "/api/open-log"
             | "/api/update"
             | "/api/update/check"
@@ -356,6 +376,12 @@ fn dispatch(method: &str, path: &str, body: &[u8], server: &Server) -> Response 
         ) => Response::error(405, "méthode non autorisée"),
         _ => Response::error(404, "introuvable"),
     }
+}
+
+/// Corps `{"name": "…"}` des requêtes sur les profils.
+fn profile_name(body: &[u8]) -> Result<String, String> {
+    let v: Value = serde_json::from_slice(body).map_err(|e| format!("données reçues invalides : {e}"))?;
+    v["name"].as_str().map(str::to_string).ok_or_else(|| "nom de profil manquant".into())
 }
 
 /// Commande `baskul switch` : `{"to": "primary" | "secondary" | "toggle" |

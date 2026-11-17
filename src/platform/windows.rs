@@ -1353,6 +1353,9 @@ fn handle_action(action: Action) {
         Action::ToggleLock => {
             with_primary(|s| s.core.toggle_lock());
         }
+        Action::ApplyProfile(name) => {
+            crate::profiles::apply_and_restart(&path, &name);
+        }
         Action::Settings => {
             super::open_settings(&path, false);
         }

@@ -86,6 +86,29 @@ async fn read_log() -> Result<Value, Error> {
     call("GET", "/api/log", None).await
 }
 
+/// Profils de réglages : liste et profil actif.
+#[tauri::command]
+async fn list_profiles() -> Result<Value, Error> {
+    call("GET", "/api/profiles", None).await
+}
+
+/// Enregistre les réglages actuels sous ce nom.
+#[tauri::command]
+async fn save_profile(name: String) -> Result<Value, Error> {
+    call("POST", "/api/profiles", Some(json!({ "name": name }))).await
+}
+
+#[tauri::command]
+async fn delete_profile(name: String) -> Result<Value, Error> {
+    call("DELETE", "/api/profiles", Some(json!({ "name": name }))).await
+}
+
+/// Applique un profil ; Baskul redémarre ensuite (la fenêtre se rouvre).
+#[tauri::command]
+async fn apply_profile(name: String) -> Result<Value, Error> {
+    call("POST", "/api/profiles/apply", Some(json!({ "name": name }))).await
+}
+
 /// Activité récente, de la plus ancienne à la plus récente.
 #[tauri::command]
 async fn read_activity() -> Result<Value, Error> {
@@ -258,6 +281,10 @@ fn main() {
             open_log_file,
             read_activity,
             clear_activity,
+            list_profiles,
+            save_profile,
+            delete_profile,
+            apply_profile,
             capture_hotkey,
             network_info,
             switch_to,

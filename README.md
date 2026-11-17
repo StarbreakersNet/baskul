@@ -149,6 +149,8 @@ Pour ne passer d'une machine à l'autre **qu'au clavier**, désactivez « Bascul
 
 Si la connexion avec la pilotée en cours tombe, Baskul attend quelques secondes qu'elle revienne (redémarrage de Baskul sur la pilotée…), puis le curseur revient tout seul sur la principale. Tout ce qui était enfoncé est relâché.
 
+**Profils de réglages.** Le bouton en haut de la fenêtre (« Réglages personnalisés » ou le nom du profil actif) enregistre les réglages actuels sous un nom (« Jeu », « Bureau »…) et passe d'un profil à l'autre ; le menu de l'icône les propose aussi. Un profil retient la souris, le défilement, les boutons, le clavier, le presse-papiers, les bords de l'écran et l'activité partagée ; le rôle, le nom, la connexion, la grille et les raccourcis ne changent pas. Les profils sont dans `profiles.json`, à côté de `config.toml`. Appliquer un profil redémarre Baskul (une ou deux secondes).
+
 **Programmes qui suspendent les bords.** Un jeu qui capture la souris (FPS, MMO…) peut faire passer le curseur sur une autre machine par erreur. Ajoutez-le à « Programmes qui suspendent les bords » (onglet Changer de machine, ou Souris sur une pilotée) : tant qu'il est au premier plan sur cette machine, la bascule par les bords est suspendue ; les raccourcis clavier marchent toujours. Baskul le signale dans l'info-bulle de l'icône, sur l'accueil et par une notification. La fenêtre propose d'ajouter le dernier programme utilisé. Windows et macOS.
 
 **Bulle d'arrivée.** Quand le clavier et la souris arrivent sur une machine, son nom s'affiche un instant près du curseur, avec le logo de son système, puis s'efface. Elle ne prend pas le focus et laisse passer les clics. Réglage « Bulle d'arrivée », onglet Interface, sur chaque machine.
@@ -357,7 +359,7 @@ yarn test                # tests (utils, traductions)
 Le code suit les conventions de [`AGENTS.md`](AGENTS.md) et de [`docs/conventions/`](docs/conventions/README.md) (les mêmes que le site des Starbreakers) : wrappers `h-*` autour de Naive UI, stores Pinia seuls à appeler Baskul, props typées, commentaires réduits à l'indispensable. La CI vérifie le format, le lint, les types et les tests, ainsi que les messages de commit : [Conventional Commits](docs/conventions/commits.md) (`feat(front): …`, `fix(windows): …`).
 
 - `src/types/Config.ts` reprend la configuration de `core/src/config.rs`. Pour un nouveau réglage : `config.rs` (structure, modèle commenté, validation), puis `types/Config.ts` et la section concernée dans `src/components/settings/`.
-- Les stores (`src/stores/`) tiennent l'état et parlent à Baskul : `status` (état en direct, redémarrage), `activity` (activité récente, lue chez Baskul quand elle change), `settings` (chargement, enregistrement), `update`, `log`, `network`, `hotkeyCapture`.
+- Les stores (`src/stores/`) tiennent l'état et parlent à Baskul : `status` (état en direct, redémarrage), `activity` (activité récente, lue chez Baskul quand elle change), `profiles` (profils de réglages), `settings` (chargement, enregistrement), `update`, `log`, `network`, `hotkeyCapture`.
 - `src/components/LayoutEditor.vue` : la grille des machines (glisser-déposer au pointeur, ou sélection puis clic), avec les calculs dans `src/utils/layoutGrid.ts`.
 - Pages (`src/views/`) et menu latéral (`src/AppLayout.vue`) : vue-router. Icônes : [Tabler Icons](https://tabler.io/icons) (`@tabler/icons-vue`).
 - **Identité visuelle** (logo, couleurs, thème Naive UI) : [`docs/identite.md`](docs/identite.md).
@@ -415,6 +417,7 @@ src/               couche système (baskul-desktop)
   logging.rs       journaux
   history.rs       activité récente gardée dans activity.json
   programs.rs      programmes au premier plan qui suspendent la bascule par les bords
+  profiles.rs      profils de réglages (profiles.json)
   api.rs           API : fenêtre de réglages (dans le processus) ; commandes et second lancement (127.0.0.1 + jeton)
   cli.rs           commandes `baskul switch …` et `baskul status`
   platform/
