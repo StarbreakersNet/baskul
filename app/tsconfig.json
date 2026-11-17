@@ -34,6 +34,7 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.vue",
+    "tests/**/*.ts",
     "vite.config.ts",
     "eslint.config.ts"
   ]

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { IconTag } from "@tabler/icons-vue";
 import { computed } from "vue";
 import { useThemeVars } from "naive-ui";
 import HCard from "@/components/c/hCard.vue";
@@ -49,7 +50,10 @@ const colors = computed(() => ({
         </button>
       </h-grid-item>
     </h-grid>
-    <setting-row :help="$t('settings.machine.nameHelp')" :label="$t('settings.machine.name')">
+    <setting-row
+      :icon="IconTag"
+      :help="$t('settings.machine.nameHelp')"
+      :label="$t('settings.machine.name')">
       <h-input v-model:value="config.name" :placeholder="info.hostname" />
     </setting-row>
   </h-card>

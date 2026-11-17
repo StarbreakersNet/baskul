@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { IconPlayerPlay, IconReplace } from "@tabler/icons-vue";
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import HButton from "@/components/c/hButton.vue";
@@ -27,12 +28,14 @@ const remapCount = computed(() => Object.keys(config.value.keyboard.remap).lengt
   <div>
     <linux-notice />
     <setting-row
+      :icon="IconPlayerPlay"
       :help="$t('settings.keyboard.mediaKeysHelp')"
       :label="$t('settings.keyboard.mediaKeys')"
       machine="primary">
       <choice-group v-model="config.keyboard.media_keys" :options="mediaKeyOptions" />
     </setting-row>
     <setting-row
+      :icon="IconReplace"
       :help="$t('settings.keyboard.remapHelp')"
       :label="$t('settings.keyboard.remap')"
       machine="secondary">

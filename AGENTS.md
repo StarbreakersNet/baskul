@@ -18,7 +18,7 @@ Lire d'abord le fichier de [`docs/conventions/`](docs/conventions/README.md) qui
 
 ## Avant de rendre la main
 
-- **Front**, dans `app/` : `yarn format`, `yarn lint` et `yarn type-check`, sans nouvelle erreur ni nouvel avertissement dans les fichiers touchés.
+- **Front**, dans `app/` : `yarn format`, `yarn lint`, `yarn type-check` et `yarn test`, sans nouvelle erreur ni nouvel avertissement dans les fichiers touchés.
 - **Rust** : `cargo fmt --all`, `cargo clippy -p baskul-core -p baskul-desktop --all-targets -- -D warnings`, `cargo test -p baskul-core -p baskul-desktop` et `./scripts/xcheck.sh` (code Windows et macOS vérifié depuis Linux).
 - Si une règle de la charte semble inadaptée, le signaler plutôt que la contourner.
 

@@ -1,7 +1,7 @@
 name: checks
 
 # Format, lint, tests et types, pour le Rust et le front (docs/conventions/).
-# À chaque PR et sur main ; le workflow build les reprend avant de compiler.
+# À chaque PR et sur main ; build et release les reprennent.
 on:
   pull_request:
   push:
@@ -12,44 +12,56 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-checks-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+  CARGO_TERM_COLOR: always
 
 jobs:
-  checks:
-    name: Rust et front
+  rust:
+    name: Rust
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: checks
       - run: cargo fmt --all --check
-      - run: cargo test -p baskul-core -p baskul-desktop
       - run: cargo clippy -p baskul-core -p baskul-desktop --all-targets -- -D warnings
+      - run: cargo test -p baskul-core -p baskul-desktop
+      # Code Windows et macOS, vérifié depuis Linux
       - run: ./scripts/xcheck.sh
-      # Front (docs/conventions/) : vérifie sans corriger, contrairement à yarn lint
+
+  front:
+    name: Front
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Front - dépendances
-        working-directory: app
-        run: corepack yarn install --immutable
-      - name: Front - format (Prettier)
-        working-directory: app
-        run: corepack yarn prettier --check src/
-      - name: Front - lint (oxlint)
-        working-directory: app
-        run: corepack yarn oxlint src -D correctness --import-plugin -D import/first
-      - name: Front - lint (ESLint)
-        working-directory: app
-        run: corepack yarn eslint .
-      - name: Front - noms de fichiers
-        working-directory: app
-        run: corepack yarn lint:names
-      - name: Front - types
-        working-directory: app
-        run: corepack yarn type-check
+          cache: yarn
+          cache-dependency-path: app/yarn.lock
+      - run: yarn install --immutable
+      # Vérifie sans corriger, contrairement à yarn lint
+      - name: Format (Prettier)
+        run: yarn prettier --check src/ tests/
+      - name: Lint (oxlint)
+        run: yarn oxlint src -D correctness --import-plugin -D import/first
+      - name: Lint (ESLint)
+        run: yarn eslint .
+      - name: Noms de fichiers
+        run: yarn lint:names
+      - name: Types
+        run: yarn type-check
+      - name: Tests (utils, traductions)
+        run: yarn test

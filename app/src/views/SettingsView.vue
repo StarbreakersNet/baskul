@@ -1,10 +1,20 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import {
+  IconAdjustments,
+  IconArrowsRightLeft,
+  IconClipboard,
+  IconKeyboard,
+  IconMouse,
+  IconPalette,
+  IconPlugConnected,
+} from "@tabler/icons-vue";
 import HAlert from "@/components/c/hAlert.vue";
 import HButton from "@/components/c/hButton.vue";
 import HCard from "@/components/c/hCard.vue";
 import HFlex from "@/components/c/hFlex.vue";
+import HIcon from "@/components/c/hIcon.vue";
 import HSpin from "@/components/c/hSpin.vue";
 import HTabPane from "@/components/c/hTabPane.vue";
 import HTabs from "@/components/c/hTabs.vue";
@@ -79,31 +89,70 @@ watch(role, value => {
         <machine-section v-model:config="settings.config" :info="settings.info" />
         <h-card size="small">
           <h-tabs v-model:value="tab" animated type="segment">
-            <h-tab-pane name="connexion" :tab="$t('settings.tabs.connection')">
+            <h-tab-pane name="connexion">
+              <template #tab>
+                <h-flex align="center" :size="6" :wrap="false">
+                  <h-icon :component="IconPlugConnected" :size="16" />
+                  {{ $t("settings.tabs.connection") }}
+                </h-flex>
+              </template>
               <connection-section v-model:config="settings.config" :info="settings.info" />
             </h-tab-pane>
-            <h-tab-pane
-              v-if="role === 'primary'"
-              name="baskul"
-              :tab="$t('settings.tabs.switching')">
+            <h-tab-pane v-if="role === 'primary'" name="baskul">
+              <template #tab>
+                <h-flex align="center" :size="6" :wrap="false">
+                  <h-icon :component="IconArrowsRightLeft" :size="16" />
+                  {{ $t("settings.tabs.switching") }}
+                </h-flex>
+              </template>
               <switching-section
                 v-model:config="settings.config"
                 :info="settings.info"
                 :peers="peers" />
             </h-tab-pane>
-            <h-tab-pane v-if="role === 'secondary'" name="souris" :tab="$t('settings.tabs.mouse')">
+            <h-tab-pane v-if="role === 'secondary'" name="souris">
+              <template #tab>
+                <h-flex align="center" :size="6" :wrap="false">
+                  <h-icon :component="IconMouse" :size="16" />
+                  {{ $t("settings.tabs.mouse") }}
+                </h-flex>
+              </template>
               <mouse-section v-model:config="settings.config" />
             </h-tab-pane>
-            <h-tab-pane name="clavier" :tab="$t('settings.tabs.keyboard')">
+            <h-tab-pane name="clavier">
+              <template #tab>
+                <h-flex align="center" :size="6" :wrap="false">
+                  <h-icon :component="IconKeyboard" :size="16" />
+                  {{ $t("settings.tabs.keyboard") }}
+                </h-flex>
+              </template>
               <keyboard-section v-model:config="settings.config" />
             </h-tab-pane>
-            <h-tab-pane name="presse-papiers" :tab="$t('settings.tabs.clipboard')">
+            <h-tab-pane name="presse-papiers">
+              <template #tab>
+                <h-flex align="center" :size="6" :wrap="false">
+                  <h-icon :component="IconClipboard" :size="16" />
+                  {{ $t("settings.tabs.clipboard") }}
+                </h-flex>
+              </template>
               <clipboard-section v-model:config="settings.config" />
             </h-tab-pane>
-            <h-tab-pane name="interface" :tab="$t('settings.tabs.interface')">
+            <h-tab-pane name="interface">
+              <template #tab>
+                <h-flex align="center" :size="6" :wrap="false">
+                  <h-icon :component="IconPalette" :size="16" />
+                  {{ $t("settings.tabs.interface") }}
+                </h-flex>
+              </template>
               <interface-section v-model:config="settings.config" />
             </h-tab-pane>
-            <h-tab-pane name="avance" :tab="$t('settings.tabs.advanced')">
+            <h-tab-pane name="avance">
+              <template #tab>
+                <h-flex align="center" :size="6" :wrap="false">
+                  <h-icon :component="IconAdjustments" :size="16" />
+                  {{ $t("settings.tabs.advanced") }}
+                </h-flex>
+              </template>
               <advanced-section v-model:config="settings.config" :info="settings.info" />
             </h-tab-pane>
           </h-tabs>

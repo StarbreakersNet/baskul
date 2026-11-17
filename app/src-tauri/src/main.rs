@@ -174,6 +174,7 @@ fn main() {
     CONFIG_ERROR.store(prepared.config_error(), Ordering::Release);
 
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .setup(move |app| {
             let handle = app.handle().clone();
             platform::set_settings_opener(move |welcome| show_settings(&handle, welcome));

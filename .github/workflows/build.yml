@@ -1,27 +1,65 @@
 name: build
 
-# Vérifications (checks.yml) puis compilation pour Windows, macOS et Linux ;
-# les programmes sont dans les "artifacts" de l'exécution. Se lance à la main (onglet Actions →
-# build → Run workflow) et sert aussi au workflow « release ».
+# Programmes de Windows, macOS et Linux, dans les "artifacts" de l'exécution.
+#
+# À la main (onglet Actions → build → Run workflow) : build de test, rapide.
+# Un seul système au choix, macOS pour Apple Silicon seulement, optimisations
+# allégées (sans LTO). Les vérifications (checks.yml) tournent en parallèle.
+#
+# Appelé par release.yml avec les réglages d'une version publiée : les trois
+# systèmes, macOS universel, optimisations complètes, tests sur chaque système.
 on:
   workflow_dispatch:
+    inputs:
+      platforms:
+        description: Systèmes à compiler
+        type: choice
+        options: [tous, windows, macos, linux]
+        default: tous
+      universal:
+        description: macOS universel (Apple Silicon et Intel, deux fois plus long)
+        type: boolean
+        default: false
+      release_profile:
+        description: Optimisations complètes, comme une version publiée (plus long)
+        type: boolean
+        default: false
   workflow_call:
+    inputs:
+      platforms:
+        type: string
+        default: tous
+      universal:
+        type: boolean
+        default: true
+      release_profile:
+        type: boolean
+        default: true
+      native_tests:
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
+
 env:
-  # Yarn 4 est installé par corepack (champ packageManager de app/package.json).
   COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+  CARGO_TERM_COLOR: always
+  # Build de test : sans LTO et compilé en parallèle, plusieurs fois plus rapide à produire
+  CARGO_PROFILE_RELEASE_LTO: ${{ inputs.release_profile && 'thin' || 'false' }}
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ inputs.release_profile && '1' || '16' }}
 
 jobs:
-  # Les builds (longs, surtout sur macOS) ne démarrent que si les vérifications passent.
-  tests:
+  checks:
     uses: ./.github/workflows/checks.yml
 
   linux:
     name: Linux
-    needs: tests
+    if: inputs.platforms == 'tous' || inputs.platforms == 'linux'
     # Ubuntu 22.04 : les binaires fonctionnent aussi sur les versions récentes.
     runs-on: ubuntu-22.04
     steps:
@@ -29,13 +67,21 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: build-linux-${{ inputs.release_profile }}
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: >
-          sudo apt-get update && sudo apt-get install -y
-          libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libxdo-dev libssl-dev libayatana-appindicator3-dev
+          cache: yarn
+          cache-dependency-path: app/yarn.lock
+      - uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libxdo-dev libssl-dev libayatana-appindicator3-dev
+          version: 1
       - run: ./scripts/build-linux.sh
+      # L'app Tauri n'est compilable que sur un système avec WebKitGTK : son lint est ici
       - run: cargo clippy -p baskul --features custom-protocol -- -D warnings
       - uses: actions/upload-artifact@v4
         with:
@@ -44,15 +90,31 @@ jobs:
 
   windows:
     name: Windows
-    needs: tests
+    if: inputs.platforms == 'tous' || inputs.platforms == 'windows'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: build-windows-${{ inputs.release_profile }}
+      # Le Yarn 1 global de l'image Windows passe devant celui de Corepack si
+      # Corepack est activé avant setup-node : le cache Yarn est donc fait à part.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: cargo test -p baskul-core -p baskul-desktop
+      - run: corepack enable
+      - id: yarn-cache
+        shell: bash
+        working-directory: app
+        run: echo "dir=$(yarn config get cacheFolder)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.yarn-cache.outputs.dir }}
+          key: yarn-windows-${{ hashFiles('app/yarn.lock') }}
+          restore-keys: yarn-windows-
+      - if: inputs.native_tests
+        run: cargo test -p baskul-core -p baskul-desktop
       - run: ./scripts/build-windows.ps1
       - uses: actions/upload-artifact@v4
         with:
@@ -60,18 +122,25 @@ jobs:
           path: dist/Baskul-Windows.zip
 
   macos:
-    name: macOS (universel)
-    needs: tests
+    name: macOS
+    if: inputs.platforms == 'tous' || inputs.platforms == 'macos'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: ${{ inputs.universal && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: build-macos-${{ inputs.universal }}-${{ inputs.release_profile }}
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: cargo test -p baskul-core -p baskul-desktop
+          cache: yarn
+          cache-dependency-path: app/yarn.lock
+      - if: inputs.native_tests
+        run: cargo test -p baskul-core -p baskul-desktop
       # Signature avec le certificat de Baskul (secrets MACOS_CERTIFICATE et
       # MACOS_CERTIFICATE_PASSWORD) : l'identité de l'app reste la même d'une
       # version à l'autre, et macOS conserve ses autorisations (Accessibilité,
@@ -105,7 +174,9 @@ jobs:
             exit 1
           fi
           echo "CODESIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
-      - run: UNIVERSAL=1 ./scripts/build-macos.sh
+      - run: ./scripts/build-macos.sh
+        env:
+          UNIVERSAL: ${{ inputs.universal && '1' || '0' }}
       - name: Signature
         run: codesign --display --requirements - dist/Baskul.app
       - uses: actions/upload-artifact@v4

@@ -1,4 +1,13 @@
 <script setup lang="ts">
+import {
+  IconArrowBarLeft,
+  IconArrowBarRight,
+  IconArrowsRightLeft,
+  IconBorderCorners,
+  IconBorderOuter,
+  IconLayoutGrid,
+  IconLock,
+} from "@tabler/icons-vue";
 import { computed } from "vue";
 import HAlert from "@/components/c/hAlert.vue";
 import HSwitch from "@/components/c/hSwitch.vue";
@@ -40,30 +49,40 @@ const isMissingHotkey = computed(
         :primary-name="config.name || info.hostname" />
     </div>
     <setting-row
+      :icon="IconArrowBarRight"
       :help="$t('settings.switching.goToSecondaryHelp')"
       :label="$t('settings.switching.goToSecondary')">
       <hotkey-input v-model="config.hotkeys.switch_to_secondary" :os="info.os" />
     </setting-row>
     <setting-row
+      :icon="IconArrowBarLeft"
       :help="$t('settings.switching.returnHereHelp')"
       :label="$t('settings.switching.returnHere')">
       <hotkey-input v-model="config.hotkeys.return_to_primary" :os="info.os" />
     </setting-row>
-    <setting-row :help="$t('settings.switching.nextHelp')" :label="$t('settings.switching.next')">
+    <setting-row
+      :icon="IconArrowsRightLeft"
+      :help="$t('settings.switching.nextHelp')"
+      :label="$t('settings.switching.next')">
       <hotkey-input v-model="config.hotkeys.next_machine" :os="info.os" />
     </setting-row>
     <h-alert v-if="!hasEdgeSwitching && isMissingHotkey" class="switching-alert" type="warning">
       {{ $t("settings.switching.hotkeysNeeded") }}
     </h-alert>
-    <setting-row :help="$t('settings.switching.edgesHelp')" :label="$t('settings.switching.edges')">
+    <setting-row
+      :icon="IconBorderOuter"
+      :help="$t('settings.switching.edgesHelp')"
+      :label="$t('settings.switching.edges')">
       <h-switch v-model:value="config.screen.edge_switching" />
     </setting-row>
     <setting-row
+      :icon="IconLayoutGrid"
       :help="$t('settings.switching.positionHelp')"
       :label="$t('settings.switching.position')">
       <position-picker v-model="config.screen.secondary_position" />
     </setting-row>
     <setting-row
+      :icon="IconBorderCorners"
       :disabled="!hasEdgeSwitching"
       :help="$t('settings.switching.cornersHelp')"
       :label="$t('settings.switching.corners')">
@@ -75,7 +94,10 @@ const isMissingHotkey = computed(
         :precision="0"
         suffix="px" />
     </setting-row>
-    <setting-row :help="$t('settings.switching.lockHelp')" :label="$t('settings.switching.lock')">
+    <setting-row
+      :icon="IconLock"
+      :help="$t('settings.switching.lockHelp')"
+      :label="$t('settings.switching.lock')">
       <hotkey-input v-model="config.hotkeys.toggle_lock" :os="info.os" />
     </setting-row>
   </div>

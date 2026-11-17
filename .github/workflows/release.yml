@@ -13,9 +13,14 @@ permissions:
   contents: read
 
 jobs:
-  # Tests et compilation : le workflow « build », partagé.
+  # Vérifications et compilation : le workflow build, avec les réglages d'une version publiée
   build:
     uses: ./.github/workflows/build.yml
+    with:
+      platforms: tous
+      universal: true
+      release_profile: true
+      native_tests: true
     # Certificat de signature macOS.
     secrets: inherit
 

@@ -1,4 +1,12 @@
 <script setup lang="ts">
+import {
+  IconArrowsExchange,
+  IconFileSettings,
+  IconFileText,
+  IconInfoCircle,
+  IconRefresh,
+  IconTerminal2,
+} from "@tabler/icons-vue";
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import HButton from "@/components/c/hButton.vue";
@@ -51,13 +59,14 @@ const commands = computed(() =>
 <template>
   <div>
     <setting-row
+      :icon="IconArrowsExchange"
       :help="$t('settings.advanced.isoSwapHelp')"
       :label="$t('settings.advanced.isoSwap')"
       machine="secondary"
       os="macos">
       <choice-group v-model="config.keyboard.iso_swap" :options="isoSwapOptions" />
     </setting-row>
-    <setting-row :label="$t('settings.advanced.commands')">
+    <setting-row :icon="IconTerminal2" :label="$t('settings.advanced.commands')">
       <template #help>
         {{ $t("settings.advanced.commandsHelp") }}
         <span v-if="info.exe" class="mono break-all advanced-path">{{ info.exe }}</span>
@@ -77,14 +86,15 @@ const commands = computed(() =>
       </h-flex>
     </setting-row>
     <setting-row
+      :icon="IconRefresh"
       :help="$t('settings.advanced.updatesHelp')"
       :label="$t('settings.advanced.updates')">
       <h-switch v-model:value="config.updates.check" />
     </setting-row>
-    <setting-row :label="$t('settings.advanced.logLevel')">
+    <setting-row :icon="IconFileText" :label="$t('settings.advanced.logLevel')">
       <h-select v-model:value="config.log.level" class="advanced-select" :options="levelOptions" />
     </setting-row>
-    <setting-row :label="$t('settings.advanced.configFile')">
+    <setting-row :icon="IconFileSettings" :label="$t('settings.advanced.configFile')">
       <template #help>
         <span class="mono break-all">{{ info.path }}</span>
       </template>
@@ -92,7 +102,10 @@ const commands = computed(() =>
         {{ $t("common.openFile") }}
       </h-button>
     </setting-row>
-    <setting-row :help="$t('common.version', { version: info.version })" label="Baskul">
+    <setting-row
+      :icon="IconInfoCircle"
+      :help="$t('common.version', { version: info.version })"
+      label="Baskul">
       <h-button :loading="isRestarting" size="small" @click="statusStore.restart()">
         {{ $t("common.restart") }}
       </h-button>

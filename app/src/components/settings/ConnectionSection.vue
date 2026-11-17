@@ -1,4 +1,15 @@
 <script setup lang="ts">
+import {
+  IconActivityHeartbeat,
+  IconBroadcast,
+  IconDeviceLaptop,
+  IconKey,
+  IconNetwork,
+  IconPlugConnected,
+  IconRadar,
+  IconRouter,
+  IconServer,
+} from "@tabler/icons-vue";
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import HButton from "@/components/c/hButton.vue";
@@ -105,6 +116,7 @@ onBeforeUnmount(stopRefreshing);
 
     <template v-if="isPrimary">
       <setting-row
+        :icon="IconServer"
         v-if="address"
         :help="$t('settings.connection.addressHelp')"
         :label="$t('settings.connection.address')">
@@ -112,6 +124,7 @@ onBeforeUnmount(stopRefreshing);
         <h-button size="small" @click="copy(address)">{{ $t("common.copy") }}</h-button>
       </setting-row>
       <setting-row
+        :icon="IconBroadcast"
         :help="$t('settings.connection.announceHelp')"
         :label="$t('settings.connection.announce')">
         <h-switch v-model:value="config.network.discovery" />
@@ -120,11 +133,13 @@ onBeforeUnmount(stopRefreshing);
 
     <template v-else>
       <setting-row
+        :icon="IconRadar"
         :help="$t('settings.connection.discoveryHelp')"
         :label="$t('settings.connection.discovery')">
         <h-switch v-model:value="config.network.discovery" />
       </setting-row>
       <setting-row
+        :icon="IconDeviceLaptop"
         v-if="config.network.discovery"
         :help="$t('settings.connection.foundHelp')"
         :label="$t('settings.connection.found')">
@@ -153,6 +168,7 @@ onBeforeUnmount(stopRefreshing);
         </h-flex>
       </setting-row>
       <setting-row
+        :icon="IconPlugConnected"
         :help="$t('settings.connection.connectHelp')"
         :label="$t('settings.connection.connect')">
         <h-input
@@ -169,6 +185,7 @@ onBeforeUnmount(stopRefreshing);
     </template>
 
     <setting-row
+      :icon="IconKey"
       :help="$t('settings.connection.secretHelp')"
       :label="$t('settings.connection.secret')">
       <h-input
@@ -188,6 +205,7 @@ onBeforeUnmount(stopRefreshing);
       </h-popconfirm>
     </setting-row>
     <setting-row
+      :icon="IconNetwork"
       :help="$t('settings.connection.interfaceHelp')"
       :label="$t('settings.connection.interface')">
       <h-select
@@ -196,6 +214,7 @@ onBeforeUnmount(stopRefreshing);
         :options="interfaceOptions" />
     </setting-row>
     <setting-row
+      :icon="IconRouter"
       v-if="isPrimary"
       :help="$t('settings.connection.listenHelp')"
       :label="$t('settings.connection.listen')">
@@ -205,6 +224,7 @@ onBeforeUnmount(stopRefreshing);
         :input-props="{ spellcheck: false }" />
     </setting-row>
     <setting-row
+      :icon="IconActivityHeartbeat"
       :help="$t('settings.connection.activityHelp')"
       :label="$t('settings.connection.activity')">
       <h-switch v-model:value="config.activity.mirror" />

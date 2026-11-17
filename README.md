@@ -41,7 +41,15 @@ Une fois installé, Baskul se met à jour tout seul (voir [Mises à jour](#5-mis
      ```
 2. À la fin, la **Release** contient les trois archives et `SHA256SUMS`.
 
-Pour compiler sans publier : onglet **Actions** → **build** → **Run workflow**. Les programmes sont alors dans les *artifacts*, en bas de la page de l'exécution. Le workflow **release** réutilise ce workflow **build** (tests puis compilation), puis publie.
+Pour compiler sans publier (**build de test**) : onglet **Actions** → **build** → **Run workflow**. Les programmes sont alors dans les *artifacts*, en bas de la page de l'exécution. Par défaut, c'est un build rapide :
+
+| Option | Par défaut | Effet |
+|---|---|---|
+| Systèmes à compiler | tous | Un seul système va plus vite : `windows`, `macos` ou `linux` |
+| macOS universel | non | Apple Silicon seulement ; universel (Intel en plus) prend deux fois plus de temps |
+| Optimisations complètes | non | Sans LTO, le programme se compile plusieurs fois plus vite, pour à peine moins de performances |
+
+Les vérifications (workflow **checks** : format, lint, tests, types) tournent en parallèle de la compilation, et aussi à chaque PR. Le workflow **release** réutilise **build** avec les réglages d'une version publiée (trois systèmes, macOS universel, optimisations complètes, tests sur chaque système), puis publie. Les compilations gardent un cache (Rust, Yarn, paquets Linux) d'une exécution à l'autre.
 
 #### Certificat de signature macOS
 
@@ -192,10 +200,12 @@ MetaLeft = "AltLeft"     # Windows du PC → ⌥
 
 Dans le menu de Baskul, choisissez **Réglages…** : la fenêtre de Baskul s'ouvre. Relancer Baskul alors qu'il tourne déjà (double-clic sur l'app) l'ouvre aussi. Le menu de gauche mène à :
 
-- **Accueil** : l'état de Baskul en direct (machines connectées, celle que pilotent le clavier et la souris, raccourcis), avec des boutons « Aller sur » / « Revenir ici » ;
-- **Réglages** : modifiez, puis cliquez sur **Enregistrer et redémarrer** ; Baskul redémarre et la fenêtre affiche aussitôt le nouvel état ;
-- **Journal** : les dernières lignes du journal de Baskul, en direct ;
-- **À propos** : versions, mises à jour, fichier de configuration, licence.
+- **Accueil** : l'état de Baskul en direct (machines connectées, celle que pilotent le clavier et la souris, raccourcis), avec des boutons « Aller sur » / « Revenir ici », l'activité récente (connexions, bascules, verrouillage du curseur) et, pour ajouter une machine, l'adresse et le secret à copier ;
+- **Réglages** : modifiez, puis cliquez sur **Enregistrer et redémarrer** (ou `Ctrl+S`, `⌘S` sur Mac), dans la barre du bas ; Baskul redémarre et la fenêtre affiche aussitôt le nouvel état ;
+- **Journal** : les dernières lignes du journal de Baskul, en direct et en couleurs, à filtrer par niveau ou par texte, et à copier ;
+- **À propos** : versions, mises à jour, fichier de configuration, licence, liens vers GitHub et les notes de version.
+
+`Ctrl+1` à `Ctrl+4` (`⌘1` à `⌘4` sur Mac) ouvrent ces pages. Le bouton en forme d'insecte, en bas, ouvre une issue GitHub avec la version et le système déjà remplis.
 
 Dans les réglages :
 
@@ -338,14 +348,16 @@ yarn tauri dev           # Baskul complet, fenêtre de réglages avec rechargeme
 yarn format              # Prettier
 yarn lint                # oxlint, ESLint et noms de fichiers
 yarn type-check          # vue-tsc
+yarn test                # tests (utils, traductions)
 ```
 
 Le code suit les conventions de [`AGENTS.md`](AGENTS.md) et de [`docs/conventions/`](docs/conventions/README.md) (les mêmes que le site des Starbreakers) : wrappers `h-*` autour de Naive UI, stores Pinia seuls à appeler Baskul, props typées, commentaires réduits à l'indispensable. La CI vérifie le format, le lint et les types.
 
 - `src/types/Config.ts` reprend la configuration de `core/src/config.rs`. Pour un nouveau réglage : `config.rs` (structure, modèle commenté, validation), puis `types/Config.ts` et la section concernée dans `src/components/settings/`.
-- Les stores (`src/stores/`) tiennent l'état et parlent à Baskul : `status` (état en direct, redémarrage), `settings` (chargement, enregistrement), `update`, `log`, `network`, `hotkeyCapture`.
+- Les stores (`src/stores/`) tiennent l'état et parlent à Baskul : `status` (état en direct, redémarrage), `activity` (activité récente, déduite de l'état), `settings` (chargement, enregistrement), `update`, `log`, `network`, `hotkeyCapture`.
 - `src/components/LayoutEditor.vue` : la grille des machines (glisser-déposer au pointeur, ou sélection puis clic), avec les calculs dans `src/utils/layoutGrid.ts`.
 - Pages (`src/views/`) et menu latéral (`src/AppLayout.vue`) : vue-router. Icônes : [Tabler Icons](https://tabler.io/icons) (`@tabler/icons-vue`).
+- **Identité visuelle** (logo, couleurs, thème Naive UI) : [`docs/identite.md`](docs/identite.md).
 - **Traductions** : `locales/fr.json` et `locales/en.json`, à la racine du dépôt. La section `app` est lue par [vue-i18n](https://vue-i18n.intlify.dev) (`$t("…")` dans les composants), la section `daemon` par Baskul (`core/src/i18n.rs`, menus et état de la connexion). Pour une nouvelle langue : un fichier de plus, avec les mêmes clés.
 - `yarn build` vérifie les types (`vue-tsc`) puis construit le front ; `yarn tauri build` l'intègre à l'exécutable (et, sur macOS, construit `Baskul.app`).
 
