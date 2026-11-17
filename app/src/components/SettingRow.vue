@@ -80,6 +80,8 @@ const primaryColor = computed(() => themeVars.value.primaryColor);
 </template>
 
 <style lang="scss" scoped>
+@use "@/assets/variables";
+
 .setting-row {
   padding: 12px 0;
   transition: opacity 0.15s;
@@ -97,7 +99,7 @@ const primaryColor = computed(() => themeVars.value.primaryColor);
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  background: var(--brand-tint);
+  background: color-mix(in srgb, v-bind(primaryColor) variables.$accent-tint, transparent);
   color: v-bind(primaryColor);
 }
 

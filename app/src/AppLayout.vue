@@ -134,8 +134,7 @@ onMounted(async () => {
   </transition>
   <h-layout has-sider position="absolute">
     <h-layout-sider
-      bordered
-      class="glass"
+      class="app-sider glass"
       :collapsed="isCollapsed"
       :collapsed-width="64"
       collapse-mode="width"
@@ -159,7 +158,7 @@ onMounted(async () => {
     </h-layout-sider>
 
     <h-layout>
-      <h-layout-header bordered class="app-bar glass" position="absolute">
+      <h-layout-header class="app-bar app-header glass" position="absolute">
         <h-flex align="center" class="app-bar-content" justify="space-between" :wrap="false">
           <h-flex :size="0" vertical>
             <h-text class="app-title" strong>
@@ -177,10 +176,10 @@ onMounted(async () => {
       <h-layout-content
         ref="contentRef"
         class="app-content"
-        content-style="padding: 24px"
+        content-style="padding: 0 24px"
         :native-scrollbar="false"
         position="absolute">
-        <div class="page-body">
+        <div class="page-body app-page">
           <update-banner v-if="!isWaitingForDaemon" />
           <h-result
             v-if="isWaitingForDaemon && !isLoading"
@@ -208,7 +207,7 @@ onMounted(async () => {
         </div>
       </h-layout-content>
 
-      <h-layout-footer bordered class="app-bar app-footer-bar glass" position="absolute">
+      <h-layout-footer class="app-bar app-footer-bar glass" position="absolute">
         <app-footer />
       </h-layout-footer>
     </h-layout>
@@ -220,6 +219,14 @@ onMounted(async () => {
 
 $page-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
 $footer-height: 52px;
+$gap: 12px;
+$bar-radius: 20px;
+
+.app-sider {
+  height: calc(100% - #{2 * $gap});
+  margin: $gap 0 $gap $gap;
+  border-radius: 24px;
+}
 
 .app-brand {
   height: variables.$bar-height;
@@ -231,13 +238,22 @@ $footer-height: 52px;
 }
 
 .app-bar {
+  z-index: 2;
+  right: $gap;
+  left: $gap;
+  border-radius: $bar-radius;
+  padding: 0 22px;
+}
+
+.app-header {
+  top: $gap;
   height: variables.$bar-height;
-  padding: 0 24px;
 }
 
 .app-footer-bar {
+  bottom: $gap;
   height: $footer-height;
-  padding: 0 16px 0 24px;
+  padding: 0 12px 0 22px;
 }
 
 .app-bar-content {
@@ -252,9 +268,9 @@ $footer-height: 52px;
   font-size: variables.$font-size-help;
 }
 
-.app-content {
-  top: variables.$bar-height;
-  bottom: $footer-height;
+// Le contenu défile sous l'en-tête et le pied de page en verre
+.app-page {
+  padding: calc(variables.$bar-height + #{2 * $gap}) 0 calc($footer-height + #{3 * $gap});
 }
 
 .app-offline {

@@ -1,6 +1,6 @@
 # Identité visuelle
 
-Baskul fait passer le clavier et la souris d'un écran à l'autre : le logo montre deux écrans reliés par une flèche, et l'interface reprend un dégradé bleu indigo, du verre dépoli et des coins arrondis.
+Baskul fait passer le clavier et la souris d'un écran à l'autre : le logo montre deux écrans reliés par une flèche, et l'interface, en verre façon *Liquid Glass*, laisse voir les couleurs de la marque.
 
 ## Logo
 
@@ -12,9 +12,18 @@ Baskul fait passer le clavier et la souris d'un écran à l'autre : le logo mont
 cd app && yarn tauri icon app-icon.svg
 ```
 
+## Style : Liquid Glass
+
+Les surfaces sont du verre : translucides, elles floutent et saturent ce qui passe dessous, avec un reflet clair sur le bord haut et une ombre douce.
+
+- **Fond** : quatre formes colorées de la marque (indigo, bleu ciel, violet), fixes, sous toute la fenêtre. Sans elles, le verre n'aurait rien à montrer.
+- **Panneaux flottants** : la barre latérale, l'en-tête et le pied de page sont détachés des bords de la fenêtre ; le contenu défile dessous.
+- **Formes** : cartes à 22 px de rayon, boutons, étiquettes et onglets en pilule, champs à 12 px.
+- Une carte posée dans une autre carte (`embedded`) ne refait pas le flou.
+
 ## Couleurs
 
-Le thème Naive UI est dans `app/src/utils/naiveTheme.ts` ; les couleurs que Naive UI ne dessine pas (fond, verre, dégradé) sont des variables CSS de `app/src/assets/brand.scss`.
+Tout passe par le thème Naive UI (`app/src/utils/naiveTheme.ts`) : surfaces translucides (`cardColor`, `modalColor`, `popoverColor`, barres de `Layout`…), couleurs d'état, bordures, rayons.
 
 | Rôle | Clair | Sombre |
 |---|---|---|
@@ -22,26 +31,25 @@ Le thème Naive UI est dans `app/src/utils/naiveTheme.ts` ; les couleurs que Nai
 | Succès | `#16a34a` | `#4ade80` |
 | Avertissement | `#d97706` | `#fbbf24` |
 | Erreur | `#dc2626` | `#f87171` |
-| Fond | `#f4f6fb` | `#0d1020` |
-| Cartes | `#ffffff` | `#151a2e` |
-| Texte | `#151a2d` | `rgba(236, 239, 255, 0.94)` |
+| Fond | `#eef1fa` | `#0a0d1c` |
+| Cartes (verre) | blanc à 52 % | `#222848` à 42 % |
+| Texte | `#151a2d` | blanc bleuté à 95 % |
 
-Variables CSS (`brand.scss`), redéfinies en thème sombre sur `:root[data-theme="dark"]` :
+`app/src/assets/brand.scss` ne contient que ce que Naive UI ne sait pas dessiner, sans variable CSS :
 
-| Variable | Usage |
+| Classe ou règle | Usage |
 |---|---|
-| `--brand-gradient` | Dégradé du logo, éclairci en thème sombre : nom "Baskul" (`.brand-wordmark`) |
-| `--brand-glow-start`, `--brand-glow-end` | Deux lueurs dans les coins du fond de la fenêtre |
-| `--glass`, `--glass-border` | Barre latérale, en-tête et pied de page (`.glass`, flou d'arrière-plan) |
-| `--brand-tint` | Fond teinté de l'accent : icônes des réglages, machine active |
+| `body` | Les formes colorées du fond |
+| `.glass` | Flou, saturation, reflet et ombre du verre : cartes (`h-card`), barre latérale, en-tête, pied de page |
+| `.brand-wordmark` | Nom "Baskul" en dégradé, éclairci en thème sombre |
 
 ## Formes et texte
 
 - Police du système (`system-ui`, San Francisco, Segoe UI) ; police à chasse fixe du système pour les adresses, les secrets et le journal.
-- Rayons : 14 px pour les cartes, 10 px par défaut, 8 px pour les boutons, 6 px pour les étiquettes.
-- Chaque réglage a son icône (Tabler), dans une pastille teintée de l'accent.
+- Chaque réglage a son icône (Tabler), dans une pastille teintée de l'accent (`color-mix` avec la couleur du thème).
 
 ## Dans le code
 
-- Une couleur passe par le thème (`useThemeVars()`) ou par une variable de `brand.scss`, jamais en dur.
-- Les fonds de `NLayout` sont transparents : les lueurs du fond passent sous le cadre.
+- Une couleur vient du thème (`useThemeVars()`), jamais en dur ni d'une variable CSS ajoutée.
+- Une nouvelle surface en verre prend la classe `.glass` et une couleur translucide du thème.
+- Les fonds de `NLayout` sont transparents : les formes du fond passent sous le cadre.

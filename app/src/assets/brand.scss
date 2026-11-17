@@ -1,42 +1,52 @@
-// Identité de Baskul (docs/identite.md) : variables CSS pour ce que Naive UI ne dessine pas
+// Identité de Baskul (docs/identite.md). Les couleurs sont dans le thème Naive UI
+// (utils/naiveTheme.ts) ; ici, seulement ce qu'il ne sait pas dessiner : le fond,
+// le flou du verre et le dégradé du nom.
 
-:root {
-  --brand-gradient: linear-gradient(135deg, #5b8cff 0%, #4338ca 100%);
-  --brand-glow-start: rgba(91, 140, 255, 0.16);
-  --brand-glow-end: rgba(67, 56, 202, 0.12);
-  --glass: rgba(255, 255, 255, 0.72);
-  --glass-border: rgba(21, 26, 45, 0.08);
-  --brand-tint: rgba(76, 95, 239, 0.1);
-}
-
-:root[data-theme="dark"] {
-  --brand-gradient: linear-gradient(135deg, #9ab6ff 0%, #8c9bff 100%);
-  --brand-glow-start: rgba(91, 140, 255, 0.2);
-  --brand-glow-end: rgba(67, 56, 202, 0.18);
-  --glass: rgba(13, 16, 32, 0.62);
-  --glass-border: rgba(160, 170, 255, 0.1);
-  --brand-tint: rgba(140, 155, 255, 0.14);
-}
-
-// Fond de la fenêtre : deux lueurs de la marque, sous le cadre transparent
+// Formes colorées sous le verre : sans elles, le flou n'a rien à montrer
 body {
   background-image:
-    radial-gradient(60rem 40rem at 0% 0%, var(--brand-glow-start), transparent 60%),
-    radial-gradient(50rem 40rem at 100% 100%, var(--brand-glow-end), transparent 60%);
+    radial-gradient(42rem 32rem at 8% 6%, rgba(91, 140, 255, 0.34), transparent 62%),
+    radial-gradient(36rem 30rem at 96% 18%, rgba(56, 189, 248, 0.22), transparent 60%),
+    radial-gradient(44rem 36rem at 78% 100%, rgba(124, 58, 237, 0.24), transparent 62%),
+    radial-gradient(30rem 26rem at 18% 92%, rgba(67, 56, 202, 0.18), transparent 60%);
   background-attachment: fixed;
 }
 
+:root[data-theme="dark"] body {
+  background-image:
+    radial-gradient(42rem 32rem at 8% 6%, rgba(91, 140, 255, 0.3), transparent 62%),
+    radial-gradient(36rem 30rem at 96% 18%, rgba(56, 189, 248, 0.14), transparent 60%),
+    radial-gradient(44rem 36rem at 78% 100%, rgba(124, 58, 237, 0.26), transparent 62%),
+    radial-gradient(30rem 26rem at 18% 92%, rgba(67, 56, 202, 0.22), transparent 60%);
+}
+
+// Verre : flou et saturation de ce qui passe dessous, reflet sur le bord haut
 .glass {
-  background: var(--glass);
-  backdrop-filter: blur(18px) saturate(1.4);
-  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.8);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.3),
+    0 10px 30px -12px rgba(30, 40, 110, 0.25);
+}
+
+:root[data-theme="dark"] .glass {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04),
+    0 16px 40px -12px rgba(0, 0, 0, 0.6);
 }
 
 .brand-wordmark {
-  background: var(--brand-gradient);
+  background: linear-gradient(135deg, #5b8cff 0%, #4338ca 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   font-weight: 700;
   letter-spacing: -0.01em;
+}
+
+:root[data-theme="dark"] .brand-wordmark {
+  background-image: linear-gradient(135deg, #9ab6ff 0%, #8c9bff 100%);
 }

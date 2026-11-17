@@ -122,7 +122,7 @@ const machines = computed<MachineEntry[]>(() => [selfEntry(), ...peers.value.map
 
 const activeTileStyle = computed(() => ({
   boxShadow: `inset 0 0 0 1.5px ${themeVars.value.primaryColor}`,
-  background: "var(--brand-tint)",
+  background: `color-mix(in srgb, ${themeVars.value.primaryColor} 14%, transparent)`,
 }));
 
 const connectionText = computed(() => {
