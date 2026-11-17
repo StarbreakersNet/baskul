@@ -67,8 +67,29 @@ Une branche se nomme `type/sujet`, avec les mêmes types que les commits et un s
 ## PR
 
 - **Une PR part de `main`**, pour être relue et fusionnée seule, dans n'importe quel ordre.
-- Elle n'est **empilée** sur une autre PR ouverte que si elle en dépend vraiment (elle utilise son code, ou modifie les mêmes lignes). Sa base est alors la branche dont elle dépend, et sa description commence par le dire, avec le lien de cette PR. Une fois la première fusionnée, la suivante repasse sur `main`.
-- Le titre de la PR suit le même format : la PR est fusionnée par un commit de fusion (*merge commit*), dont le message est le titre de la PR suivi de sa description.
+- Elle n'est **empilée** sur une autre PR ouverte que si elle en dépend vraiment (elle utilise son code, ou modifie les mêmes lignes). Sa base est alors la branche dont elle dépend, et sa description commence par le dire, avec le lien de cette PR : voir [PR empilées](#pr-empilées).
+- Le titre de la PR suit le même format : la PR est fusionnée par un commit de fusion (*merge commit*), dont le message est le titre de la PR suivi de sa description (pour une pile, voir plus bas).
+- **En retard sur `main` ou en conflit avec lui**, une PR qui n'est pas dans une pile reçoit `main` par un merge : bouton "Update branch", éditeur de conflits de GitHub, ou en local.
 - **Pas de mention de l'outil** qui a écrit le code : ni "Generated with…" ni lien vers une session, dans la description d'une PR comme dans un commentaire. Les commits parlent d'eux-mêmes ; seule la ligne `Co-Authored-By:` d'un agent de code est admise, à la fin du message de commit.
 - Un commit, un changement : un correctif glissé dans une nouvelle fonction a son propre commit.
 - Les commits de la PR restent tels quels dans l'historique de `main` : pas de commit "wip" ni "fix lint" dans une PR prête à relire, on les fusionne avant (`git commit --fixup`, puis `git rebase --autosquash`).
+
+## PR empilées
+
+Une pile est une suite de PR dont chacune part de la branche de la précédente : la première part de `main`, la dernière est celle sur laquelle rien n'est construit. Elle est déclarée comme pile sur GitHub (dans l'interface, ou avec `gh stack`).
+
+- **Trois PR au plus.** Au-delà, on regroupe des PR.
+- **Jamais de merge dans une branche de pile**, ni d'une autre branche de la pile ni de `main` : elle se met à jour par rebase, avec "Update with rebase" sur la PR. Un conflit résolu dans un commit de merge est perdu au rebase suivant, et revient.
+- **Un conflit de rebase se résout en local** (`gh stack rebase`, puis `gh stack rebase --continue`) : l'éditeur de conflits de GitHub ferait un merge. Les branches sont ensuite poussées avec `git push --force-with-lease`, permis sur les branches d'une pile, jamais sur `main`.
+- **Une branche où `main` a été fusionné ne sert pas de base à une pile** : elle est d'abord fusionnée dans `main`, et la suite part de `main`.
+- **Une pile se fusionne d'un coup**, avec "Merge stack" depuis sa dernière PR. Dans la fenêtre, le titre et la description pré-remplis, ceux de la dernière PR, sont remplacés par le message de la pile : un titre au même format qui la résume, avec les numéros des PR, puis une ligne par PR. Ce message est préparé à la fin de la description de la dernière PR, prêt à copier :
+
+  ```text
+  chore: ignorer les fichiers des systèmes et des éditeurs (#37, #38, #39)
+
+  - #37 ignorer les fichiers que Windows dépose dans les dossiers
+  - #38 séparer les fichiers du système et ceux des éditeurs
+  - #39 ignorer les fichiers temporaires de Vim et d'Emacs
+  ```
+
+- Une pile peut aussi se fusionner PR par PR, du bas vers le haut : GitHub rebase les suivantes, et chacune a son propre commit de fusion. On attend que la CI repasse après chaque rebase.
