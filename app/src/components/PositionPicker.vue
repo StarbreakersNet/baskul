@@ -54,7 +54,7 @@ const colors = computed(() => ({
   font-size: variables.$font-size-small;
   min-width: 76px;
   padding: 5px 8px;
-  border-radius: variables.$radius-small;
+  border-radius: v-bind("themeVars.borderRadiusSmall");
   border: 1px dashed v-bind("colors.border");
   background: transparent;
   color: v-bind("colors.muted");
@@ -99,7 +99,7 @@ const colors = computed(() => ({
   font-size: variables.$font-size-small;
   font-weight: 600;
   padding: 12px 8px;
-  border-radius: variables.$radius-small;
+  border-radius: v-bind("themeVars.borderRadiusSmall");
   background: v-bind("colors.screen");
 }
 </style>

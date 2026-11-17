@@ -19,13 +19,16 @@ function cachedUi(): Partial<UiConfig> {
 
 function cacheUi(ui: UiConfig) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ theme: ui.theme, language: ui.language }));
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ theme: ui.theme, language: ui.language, background: ui.background })
+    );
   } catch {
     // Stockage indisponible : la fenêtre s'ouvrira avec le thème du système
   }
 }
 
-/** Thème et langue des réglages, appliqués avant même l'enregistrement */
+/** Thème, langue et fond des réglages, appliqués avant même l'enregistrement */
 export function usePreferences() {
   const settings = useSettingsStore();
   const osTheme = useOsTheme();
@@ -37,19 +40,12 @@ export function usePreferences() {
     return theme === "system" ? osTheme.value === "dark" : theme === "dark";
   });
 
+  const background = computed(() => ui.value.background ?? "current");
+
   const locale = computed<Locale>(() => {
     const language = ui.value.language ?? "system";
     return language === "system" ? systemLocale() : language;
   });
-
-  // Pour les styles qui ne viennent pas de Naive UI (assets/brand.scss)
-  watch(
-    isDark,
-    value => {
-      document.documentElement.dataset.theme = value ? "dark" : "light";
-    },
-    { immediate: true }
-  );
 
   watch(
     locale,
@@ -70,5 +66,5 @@ export function usePreferences() {
     { deep: true, immediate: true }
   );
 
-  return { isDark, locale };
+  return { isDark, locale, background };
 }

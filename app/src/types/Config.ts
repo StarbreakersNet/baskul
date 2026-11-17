@@ -61,6 +61,7 @@ export interface BaskulConfig {
     tray_icon: "color" | "mono";
     arrival_bubble: boolean;
     notifications: boolean;
+    background: "none" | "wave" | "breathing" | "current" | "ripple";
   };
   updates: { check: boolean };
   log: { level: string };

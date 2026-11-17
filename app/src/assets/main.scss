@@ -1,14 +1,8 @@
 @use "@/assets/variables";
-@use "@/assets/brand";
 
 body {
   margin: 0;
   -webkit-font-smoothing: antialiased;
-}
-
-.page-body {
-  max-width: variables.$page-max-width;
-  margin: 0 auto;
 }
 
 .mono,

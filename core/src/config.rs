@@ -367,6 +367,18 @@ pub enum TrayIcon {
     Mono,
 }
 
+/// Fond animé de la fenêtre de réglages.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Background {
+    None,
+    Wave,
+    Breathing,
+    #[default]
+    Current,
+    Ripple,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct UiCfg {
@@ -379,6 +391,7 @@ pub struct UiCfg {
     /// Notification du système quand une autre machine se connecte ou se
     /// déconnecte.
     pub notifications: bool,
+    pub background: Background,
 }
 
 impl Default for UiCfg {
@@ -389,6 +402,7 @@ impl Default for UiCfg {
             tray_icon: TrayIcon::default(),
             arrival_bubble: true,
             notifications: true,
+            background: Background::default(),
         }
     }
 }
@@ -1061,6 +1075,9 @@ arrival_bubble = true
 # Notification du système quand une autre machine se connecte ou se
 # déconnecte.
 notifications = true
+# Fond animé de la fenêtre : "current" (courant), "wave" (vague colorée),
+# "breathing" (respiration), "ripple" (onde de connexion) ou "none" (aucun).
+background = "current"
 
 [updates]
 # Recherche les nouvelles versions de Baskul (au démarrage puis toutes les six
@@ -1109,6 +1126,7 @@ mod tests {
             assert_eq!(s.return_hotkey, Hotkey::parse("Shift+F11").unwrap());
             assert!(s.lock_hotkey.is_none());
             assert_eq!(s.scroll.mode, ScrollMode::Lines);
+            assert_eq!(cfg.ui.background, Background::Current);
         }
     }
 

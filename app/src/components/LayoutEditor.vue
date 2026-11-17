@@ -286,7 +286,7 @@ function tileClasses(name: string) {
 
 .layout-cell {
   height: 72px;
-  border-radius: variables.$radius;
+  border-radius: v-bind("themeVars.borderRadius");
 }
 
 .layout-cell--empty {
@@ -311,7 +311,7 @@ function tileClasses(name: string) {
   justify-content: center;
   gap: 2px;
   padding: 6px;
-  border-radius: variables.$radius;
+  border-radius: v-bind("themeVars.borderRadius");
   border: 1.5px solid v-bind("colors.border");
   background: v-bind("colors.tile");
   cursor: grab;

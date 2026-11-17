@@ -15,7 +15,7 @@ import AppLayout from "@/AppLayout.vue";
 import { usePreferences } from "@/composables/usePreferences";
 import { themeOverrides } from "@/utils/naiveTheme";
 
-const { isDark, locale } = usePreferences();
+const { isDark, locale, background } = usePreferences();
 
 const naiveLocale = computed(() => (locale.value === "fr" ? frFR : enUS));
 const naiveDateLocale = computed(() => (locale.value === "fr" ? dateFrFR : dateEnUS));
@@ -32,7 +32,7 @@ const overrides = computed(() => themeOverrides(isDark.value));
     <n-global-style />
     <n-message-provider placement="top">
       <n-dialog-provider>
-        <app-layout />
+        <app-layout :background="background" />
       </n-dialog-provider>
     </n-message-provider>
   </n-config-provider>

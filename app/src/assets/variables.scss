@@ -1,11 +1,9 @@
-$page-max-width: 920px;
 $bar-height: 64px;
 $sider-width: 220px;
 $sider-collapsed-width: 64px;
 
-$radius-small: 7px;
-$radius: 9px;
-$radius-large: 10px;
+// Écart entre les panneaux flottants (AppLayout.vue), et avec les bords de la fenêtre
+$panel-gap: 12px;
 
 $font-size-small: 12.5px;
 $font-size-help: 13px;

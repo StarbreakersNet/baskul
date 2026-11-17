@@ -1,4 +1,5 @@
 import type { GlobalThemeOverrides } from "naive-ui";
+import { withAlpha } from "@/utils/color";
 
 // Identité de Baskul : voir docs/identite.md
 
@@ -18,27 +19,34 @@ const COMMON: GlobalThemeOverrides["common"] = {
   scrollbarBorderRadius: "6px",
 };
 
+interface Shades {
+  color: string;
+  hover: string;
+  pressed: string;
+}
+
+type Family = "primary" | "info" | "success" | "warning" | "error";
+
+// Une famille de couleurs Naive UI depuis trois teintes : Suppl, l'accompagnement, reprend le survol
+function family(name: Family, { color, hover, pressed }: Shades): GlobalThemeOverrides["common"] {
+  return {
+    [`${name}Color`]: color,
+    [`${name}ColorHover`]: hover,
+    [`${name}ColorPressed`]: pressed,
+    [`${name}ColorSuppl`]: hover,
+  };
+}
+
+// Accent violet, teinte OKLCH 285° : choisi hors des couleurs d'état (docs/identite.md)
+const ACCENT_LIGHT: Shades = { color: "#745af4", hover: "#8472ff", pressed: "#6445df" };
+const ACCENT_DARK: Shades = { color: "#968cff", hover: "#a6a1ff", pressed: "#8477f1" };
+
 const LIGHT: GlobalThemeOverrides["common"] = {
-  primaryColor: "#4c5fef",
-  primaryColorHover: "#6878f5",
-  primaryColorPressed: "#3a4ad8",
-  primaryColorSuppl: "#6878f5",
-  infoColor: "#4c5fef",
-  infoColorHover: "#6878f5",
-  infoColorPressed: "#3a4ad8",
-  infoColorSuppl: "#6878f5",
-  successColor: "#16a34a",
-  successColorHover: "#22c55e",
-  successColorPressed: "#15803d",
-  successColorSuppl: "#22c55e",
-  warningColor: "#d97706",
-  warningColorHover: "#f59e0b",
-  warningColorPressed: "#b45309",
-  warningColorSuppl: "#f59e0b",
-  errorColor: "#dc2626",
-  errorColorHover: "#ef4444",
-  errorColorPressed: "#b91c1c",
-  errorColorSuppl: "#ef4444",
+  ...family("primary", ACCENT_LIGHT),
+  ...family("info", ACCENT_LIGHT),
+  ...family("success", { color: "#16a34a", hover: "#22c55e", pressed: "#15803d" }),
+  ...family("warning", { color: "#d97706", hover: "#f59e0b", pressed: "#b45309" }),
+  ...family("error", { color: "#dc2626", hover: "#ef4444", pressed: "#b91c1c" }),
   bodyColor: "#f4f6fb",
   cardColor: "#ffffff",
   modalColor: "#ffffff",
@@ -52,32 +60,17 @@ const LIGHT: GlobalThemeOverrides["common"] = {
   tagColor: "#eef0f8",
   actionColor: "#f7f8fc",
   tabColor: "#f1f3f9",
-  hoverColor: "rgba(76, 95, 239, 0.07)",
+  hoverColor: withAlpha(ACCENT_LIGHT.color, 0.07),
   scrollbarColor: "rgba(21, 26, 45, 0.22)",
   scrollbarColorHover: "rgba(21, 26, 45, 0.36)",
 };
 
 const DARK: GlobalThemeOverrides["common"] = {
-  primaryColor: "#8c9bff",
-  primaryColorHover: "#a5b1ff",
-  primaryColorPressed: "#7383f0",
-  primaryColorSuppl: "#a5b1ff",
-  infoColor: "#8c9bff",
-  infoColorHover: "#a5b1ff",
-  infoColorPressed: "#7383f0",
-  infoColorSuppl: "#a5b1ff",
-  successColor: "#4ade80",
-  successColorHover: "#6ee79a",
-  successColorPressed: "#3cc96f",
-  successColorSuppl: "#6ee79a",
-  warningColor: "#fbbf24",
-  warningColorHover: "#fcd34d",
-  warningColorPressed: "#f59e0b",
-  warningColorSuppl: "#fcd34d",
-  errorColor: "#f87171",
-  errorColorHover: "#fca5a5",
-  errorColorPressed: "#ef4444",
-  errorColorSuppl: "#fca5a5",
+  ...family("primary", ACCENT_DARK),
+  ...family("info", ACCENT_DARK),
+  ...family("success", { color: "#4ade80", hover: "#6ee79a", pressed: "#3cc96f" }),
+  ...family("warning", { color: "#fbbf24", hover: "#fcd34d", pressed: "#f59e0b" }),
+  ...family("error", { color: "#f87171", hover: "#fca5a5", pressed: "#ef4444" }),
   bodyColor: "#0d1020",
   cardColor: "#151a2e",
   modalColor: "#1a2036",
@@ -88,25 +81,25 @@ const DARK: GlobalThemeOverrides["common"] = {
   textColor3: "rgba(236, 239, 255, 0.54)",
   borderColor: "rgba(160, 170, 255, 0.16)",
   dividerColor: "rgba(160, 170, 255, 0.09)",
-  tagColor: "rgba(140, 155, 255, 0.12)",
+  tagColor: withAlpha(ACCENT_DARK.color, 0.12),
   actionColor: "rgba(255, 255, 255, 0.04)",
   tabColor: "rgba(255, 255, 255, 0.05)",
   inputColor: "rgba(255, 255, 255, 0.06)",
-  hoverColor: "rgba(140, 155, 255, 0.1)",
+  hoverColor: withAlpha(ACCENT_DARK.color, 0.1),
   scrollbarColor: "rgba(160, 170, 255, 0.24)",
   scrollbarColorHover: "rgba(160, 170, 255, 0.4)",
 };
 
-// Le fond de la fenêtre (dégradés de la marque, assets/brand.scss) doit transparaître sous le cadre
+/** Rayon des panneaux flottants : cartes et cadre de la fenêtre (AppLayout.vue) */
+export const PANEL_RADIUS = "16px";
+
+// Le fond de la fenêtre apparaît entre les panneaux ; la couleur du cadre est posée par AppLayout.vue
 const COMPONENTS: GlobalThemeOverrides = {
   Layout: {
     color: "transparent",
-    siderColor: "transparent",
-    headerColor: "transparent",
-    footerColor: "transparent",
   },
   Card: {
-    borderRadius: "14px",
+    borderRadius: PANEL_RADIUS,
   },
   Button: {
     borderRadiusTiny: "6px",
