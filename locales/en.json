@@ -12,7 +12,8 @@
       "returnHere": "Bring the Cursor Back to This Computer",
       "lock": "Lock the Cursor to This Computer",
       "updateReady": "Restart to update ({version})",
-      "goTo": "Go to “{name}”"
+      "goTo": "Go to “{name}”",
+      "profile": "Profile \"{name}\""
     },
     "status": {
       "connecting": "connecting to {address}…",
@@ -435,6 +436,21 @@
     },
     "splash": {
       "connecting": "Connecting to Baskul…"
+    },
+    "profiles": {
+      "custom": "Custom settings",
+      "saveCurrent": "Save as profile…",
+      "saveTitle": "Save settings as a profile",
+      "namePlaceholder": "Profile name (Gaming, Office…)",
+      "save": "Save",
+      "saved": "Profile \"{name}\" saved",
+      "apply": "Apply",
+      "applyTitle": "Apply profile \"{name}\"?",
+      "applyDirty": "Unsaved changes will be lost.",
+      "applied": "Profile \"{name}\" applied",
+      "delete": "Delete profile \"{name}\"",
+      "deleteText": "Current settings do not change.",
+      "deleteConfirm": "Delete"
     }
   }
 }
