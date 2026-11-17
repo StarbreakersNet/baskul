@@ -76,8 +76,8 @@ pub fn start_services(
     let bind = settings.interface.as_deref().and_then(|name| {
         let ip = iface::address_of(name);
         match ip {
-            Some(ip) => log::info!("carte réseau « {name} » ({ip})"),
-            None => log::warn!("carte réseau « {name} » introuvable ou sans adresse : choix automatique"),
+            Some(ip) => log::info!("carte réseau {name:?} ({ip})"),
+            None => log::warn!("carte réseau {name:?} introuvable ou sans adresse : choix automatique"),
         }
         ip
     });
@@ -393,7 +393,7 @@ mod tests {
         // Rien n'est arrivé sur Salon.
         assert!(salon_emu.0.lock().unwrap().is_empty());
 
-        // Retour vers la gauche : la machine principale reçoit « Leave ».
+        // Retour vers la gauche : la machine principale reçoit "Leave".
         link.send_input(id_a, Message::Motion { dx: -100, dy: 0 });
         match peer_rx.recv_timeout(Duration::from_secs(5)).unwrap() {
             PeerEvent::Leave { id, edge: Edge::Left, ratio } => {

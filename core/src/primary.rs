@@ -115,7 +115,6 @@ pub struct PrimaryOptions {
 pub trait Host {
     /// Écrans locaux (mis en cache par la plateforme).
     fn layout(&self) -> &Layout;
-    /// Position actuelle du curseur.
     fn cursor(&self) -> Point;
     /// Le curseur part sur une pilotée. `at` : position actuelle du curseur.
     /// La plateforme cache le curseur et peut le recentrer, puis appeler
@@ -123,11 +122,10 @@ pub trait Host {
     fn hide_cursor(&mut self, at: Point);
     /// Le curseur revient : le placer en `pos` et le réafficher.
     fn show_cursor(&mut self, pos: Point);
-    /// Envoie un message à une pilotée.
     fn send(&mut self, to: PeerId, msg: Message);
     /// L'utilisateur est actif sans que ce système le voie (clavier et souris
     /// envoyés à une pilotée, ou utilisés directement sur celle-ci) :
-    /// repousse la veille de l'écran, l'économiseur et le statut « absent ».
+    /// repousse la veille de l'écran, l'économiseur et le statut "absent".
     fn keep_active(&mut self) {}
     /// La grille a changé (pilotée placée d'elle-même) : l'enregistrer.
     fn save_layout(&mut self, _machines: Vec<MachineCfg>) {}
@@ -149,7 +147,7 @@ pub struct PrimaryCore {
     clients: Vec<(PeerId, String)>,
     mode: Mode,
     locked: bool,
-    /// Dernière pilotée utilisée (raccourci « aller sur la pilotée »).
+    /// Dernière pilotée utilisée (raccourci "aller sur la pilotée").
     last_client: Option<String>,
     /// Position réelle du curseur pendant que l'on pilote une machine.
     anchor: Point,
@@ -198,7 +196,6 @@ impl PrimaryCore {
         self.mode != Mode::Local
     }
 
-    /// Au moins une pilotée connectée.
     pub fn is_connected(&self) -> bool {
         !self.clients.is_empty()
     }
@@ -311,7 +308,7 @@ impl PrimaryCore {
             })
             .collect();
         let cell = crate::config::free_cell(&machines, self.opts.new_client_side);
-        log::info!("« {name} » placée sur la grille en {cell:?}");
+        log::info!("{name:?} placée sur la grille en {cell:?}");
         self.opts.layout.push(Placement { name: name.to_string(), cell, hotkey: None });
         let mut machines = machines;
         machines.push(MachineCfg { name: name.to_string(), x: cell.0, y: cell.1, hotkey: String::new() });
@@ -386,7 +383,7 @@ impl PrimaryCore {
             }
             let Some(Machine::Client(name)) = self.neighbor(&Machine::Primary, edge) else { continue };
             let ratio = layout.ratio_on_edge(layout.clamp(next), edge);
-            log::debug!("bascule vers « {name} » (ratio {ratio:.3})");
+            log::debug!("bascule vers {name:?} (ratio {ratio:.3})");
             let exits = self.client_exits(&name);
             self.go_remote(host, &name, cur, Message::Enter { edge: edge.opposite(), ratio, exits });
             return Decision::Swallow;
@@ -529,7 +526,7 @@ impl PrimaryCore {
                 Some(t) => (t.clone(), true),
                 None => {
                     let t = if !keymap::is_modifier(code) && capture::is_waiting() {
-                        // Saisie d'un raccourci par l'app de réglages.
+                        // Saisie d'un raccourci par la fenêtre de réglages.
                         capture::finish(Hotkey::from_pressed(code, &self.pressed).to_string());
                         Target::Consumed
                     } else {
@@ -591,7 +588,7 @@ impl PrimaryCore {
             .find(|p| matches(&p.hotkey) && self.id_of(&p.name).is_some())
             .map(|p| p.name.clone());
         if let Some(name) = direct {
-            log::info!("raccourci : passage sur « {name} »");
+            log::info!("raccourci : passage sur {name:?}");
             self.switch_to(host, None, SwitchTo::Client(name));
             return Target::Consumed;
         }
@@ -628,7 +625,7 @@ impl PrimaryCore {
                 if self.active_client() == Some(name.as_str()) {
                     // Reconnexion pendant le pilotage : la pilotée (peut-être
                     // redémarrée) reprend le curseur là où il est.
-                    log::info!("reconnexion : reprise du pilotage de « {name} »");
+                    log::info!("reconnexion : reprise du pilotage de {name:?}");
                     self.grace_until = None;
                     host.send(id, Message::Jump { exits: self.client_exits(&name) });
                 } else {
@@ -649,7 +646,7 @@ impl PrimaryCore {
                     }
                 }
                 if self.active_client() == Some(name.as_str()) {
-                    log::info!("connexion perdue avec « {name} » pendant le pilotage : attente d'une reconnexion");
+                    log::info!("connexion perdue avec {name:?} pendant le pilotage : attente d'une reconnexion");
                     self.grace_until = Some(Instant::now() + RECONNECT_GRACE);
                 } else {
                     self.refresh_exits(host);
@@ -659,7 +656,7 @@ impl PrimaryCore {
                 let expired = self.grace_until.is_some_and(|t| Instant::now() >= t);
                 if let (true, Some(name)) = (expired, self.active_client().map(str::to_string)) {
                     if self.id_of(&name).is_none() {
-                        log::info!("« {name} » ne revient pas : retour du curseur sur la machine principale");
+                        log::info!("{name:?} ne revient pas : retour du curseur sur la machine principale");
                         let p = self.exit_point;
                         self.force_local(host, p);
                     }
@@ -680,7 +677,7 @@ impl PrimaryCore {
                         self.force_local(host, pos);
                     }
                     Some(Machine::Client(next)) => {
-                        log::debug!("passage de « {name} » à « {next} »");
+                        log::debug!("passage de {name:?} à {next:?}");
                         let exits = self.client_exits(&next);
                         self.hand_over(host, &next, Message::Enter { edge: edge.opposite(), ratio, exits });
                     }
@@ -710,7 +707,7 @@ impl PrimaryCore {
         }
     }
 
-    /// Pilotée visée par « aller sur la pilotée » : la dernière utilisée si
+    /// Pilotée visée par "aller sur la pilotée" : la dernière utilisée si
     /// elle est connectée, sinon la première de la grille.
     fn default_client(&self) -> Option<String> {
         self.last_client
@@ -753,13 +750,13 @@ impl PrimaryCore {
             }
             Machine::Client(name) => {
                 if self.id_of(&name).is_none() {
-                    log::warn!("« {name} » n'est pas connectée");
+                    log::warn!("{name:?} n'est pas connectée");
                     return;
                 }
                 if self.active_client() == Some(name.as_str()) {
                     return;
                 }
-                log::info!("passage sur « {name} »");
+                log::info!("passage sur {name:?}");
                 let jump = Message::Jump { exits: self.client_exits(&name) };
                 match self.active_client().map(str::to_string) {
                     Some(previous) => {
@@ -834,7 +831,7 @@ pub struct HookWatch {
 }
 
 impl HookWatch {
-    /// Distance (|dx| + |dy|) au-delà de laquelle le curseur est « loin ».
+    /// Distance (|dx| + |dy|) au-delà de laquelle le curseur est "loin".
     const FAR: i32 = 200;
     /// Changements de position suspecte qui valent une panne des hooks.
     const MOVES: u8 = 2;
@@ -889,7 +886,6 @@ mod tests {
     }
 
     impl FakeHost {
-        /// Messages envoyés à une pilotée.
         fn to(&self, id: PeerId) -> Vec<Message> {
             self.sent.iter().filter(|(i, _)| *i == id).map(|(_, m)| m.clone()).collect()
         }
@@ -932,7 +928,7 @@ mod tests {
         Placement { name: name.into(), cell: (x, y), hotkey: None }
     }
 
-    /// Une pilotée, « Atelier », à droite de la principale.
+    /// Une pilotée, "Atelier", à droite de la principale.
     fn setup() -> (PrimaryCore, FakeHost) {
         let mut core = PrimaryCore::new(PrimaryOptions {
             edge_switching: true,
@@ -962,7 +958,7 @@ mod tests {
         (core, host)
     }
 
-    /// Deux pilotées côte à côte : « Atelier » puis « Salon », à droite.
+    /// Deux pilotées côte à côte : "Atelier" puis "Salon", à droite.
     fn setup_two() -> (PrimaryCore, FakeHost) {
         let (mut core, mut host) = setup();
         core.opts.layout.push(placement("Salon", 2, 0));
@@ -988,7 +984,6 @@ mod tests {
         d
     }
 
-    /// Touche A (code HID).
     const KEY_A: u32 = 0x070004;
 
     #[test]
@@ -1020,7 +1015,7 @@ mod tests {
         assert!((p.y - 540).abs() <= 1);
     }
 
-    /// Déplacements envoyés à « Atelier ».
+    /// Déplacements envoyés à "Atelier".
     fn motions(host: &FakeHost) -> Vec<(i32, i32)> {
         host.to(ATELIER)
             .iter()
@@ -1046,7 +1041,7 @@ mod tests {
     }
 
     /// Sans autre application qui touche au curseur, rien ne change : le
-    /// déplacement reste « position demandée moins point de recentrage ».
+    /// déplacement reste "position demandée moins point de recentrage".
     #[test]
     fn remote_motion_is_unchanged_when_nothing_moves_the_cursor() {
         let (mut core, mut host) = setup();
@@ -1124,7 +1119,7 @@ mod tests {
     }
 
     /// L'artefact du recentrage reste filtré après le recentrage, et
-    /// seulement après (comme avant).
+    /// seulement après.
     #[test]
     fn warp_artifact_is_filtered_only_after_the_warp() {
         let (mut core, mut host) = setup();
@@ -1186,7 +1181,7 @@ mod tests {
     }
 
     /// Près de l'endroit où il a été laissé, le curseur n'est jamais suspect
-    /// (comme avant), et un passage par là remet la surveillance à zéro.
+    /// et un passage par là remet la surveillance à zéro.
     #[test]
     fn hook_watch_ignores_a_cursor_that_stays_close() {
         let center = Point::new(960, 540);
@@ -1354,7 +1349,7 @@ mod tests {
         core.key(&mut host, HID_SCROLL_LOCK, true);
         core.key(&mut host, HID_SCROLL_LOCK, false);
         go_remote(&mut core, &mut host);
-        // Verrouillé pendant le pilotage : un « Leave » renvoie le curseur là-bas.
+        // Verrouillé pendant le pilotage : un "Leave" renvoie le curseur là-bas.
         core.key(&mut host, HID_SCROLL_LOCK, true);
         core.peer_event(&mut host, PeerEvent::Leave { id: ATELIER, edge: Edge::Left, ratio: 0.3 });
         assert!(core.is_remote());
@@ -1525,7 +1520,7 @@ mod tests {
         assert!(matches!(host.to(ATELIER).last(), Some(Message::Enter { edge: Edge::Right, .. })));
         core.peer_event(&mut host, PeerEvent::Leave { id: ATELIER, edge: Edge::Left, ratio: 0.5 });
         assert!(!core.is_remote());
-        // Un « Leave » d'une pilotée qui n'est pas en cours est ignoré.
+        // Un "Leave" d'une pilotée qui n'est pas en cours est ignoré.
         core.peer_event(&mut host, PeerEvent::Leave { id: SALON, edge: Edge::Left, ratio: 0.5 });
         assert!(!core.is_remote());
     }
@@ -1568,7 +1563,7 @@ mod tests {
         let n = hid_from_name("N").unwrap();
         press(&mut core, &mut host, &[HID_CONTROL_LEFT, HID_ALT_LEFT, n]);
         assert_eq!(core.active_client(), None);
-        // « Aller sur la pilotée » : la dernière utilisée.
+        // "Aller sur la pilotée" : la dernière utilisée.
         press(&mut core, &mut host, &[HID_SHIFT_LEFT, hid_from_name("F12").unwrap()]);
         assert_eq!(core.active_client(), Some("Salon"));
     }

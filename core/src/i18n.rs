@@ -1,6 +1,6 @@
-//! Traductions du daemon (menus, état de la connexion). Les textes sont dans
-//! `locales/*.json`, section « daemon », à côté de ceux de l'app (section
-//! « app », lue par vue-i18n). `{nom}` est remplacé par la valeur donnée.
+//! Traductions de Baskul (menus, état de la connexion). Les textes sont dans
+//! `locales/*.json`, section "daemon", à côté de ceux de la fenêtre (section
+//! "app", lue par vue-i18n). `{nom}` est remplacé par la valeur donnée.
 
 use crate::config::Language;
 use serde_json::Value;
@@ -12,7 +12,7 @@ const EN: &str = include_str!("../../locales/en.json");
 
 static TEXTS: OnceLock<HashMap<String, String>> = OnceLock::new();
 
-/// Choisit la langue, une fois pour toutes, au démarrage.
+/// Une seule fois, au démarrage.
 pub fn init(pref: Language) {
     let lang = match pref {
         Language::Fr => "fr",
@@ -22,7 +22,6 @@ pub fn init(pref: Language) {
     let _ = TEXTS.set(load(lang));
 }
 
-/// Langue du système : français ou, à défaut, anglais.
 fn system_language() -> &'static str {
     let locale = sys_locale::get_locale().unwrap_or_default();
     if locale.to_ascii_lowercase().starts_with("fr") { "fr" } else { "en" }
@@ -54,7 +53,7 @@ fn flatten(v: &Value, prefix: &str, out: &mut HashMap<String, String>) {
     }
 }
 
-/// Texte traduit (français si la langue n'a pas été choisie, dans les tests).
+/// Français si la langue n'a pas été choisie (tests).
 pub fn t(key: &str) -> String {
     tf(key, &[])
 }

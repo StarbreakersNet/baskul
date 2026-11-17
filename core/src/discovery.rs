@@ -9,7 +9,6 @@ use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::{Mutex, OnceLock};
 
-/// Type de service annoncé.
 pub const SERVICE: &str = "_baskul._tcp.local.";
 
 /// Machine principale trouvée sur le réseau.
@@ -23,12 +22,11 @@ pub struct Found {
     pub protocol: u32,
 }
 
-/// Machines principales trouvées, par nom complet du service.
+/// Par nom complet du service.
 static FOUND: Mutex<BTreeMap<String, Found>> = Mutex::new(BTreeMap::new());
 /// Service mDNS (annonce ou recherche), gardé pour toute la durée du programme.
 static DAEMON: OnceLock<ServiceDaemon> = OnceLock::new();
 
-/// Machines principales trouvées sur le réseau local.
 pub fn primaries() -> Vec<Found> {
     FOUND.lock().unwrap_or_else(|e| e.into_inner()).values().cloned().collect()
 }
@@ -52,7 +50,7 @@ fn daemon(interface: Option<&str>) -> Option<&'static ServiceDaemon> {
     Some(DAEMON.get_or_init(|| d))
 }
 
-/// Machine principale : annonce `name` sur le port `port`.
+/// Machine principale.
 pub fn advertise(name: &str, port: u16, interface: Option<&str>) {
     let Some(d) = daemon(interface) else { return };
     let host = format!("{}.local.", host_label(&crate::config::hostname()));
@@ -75,7 +73,7 @@ pub fn advertise(name: &str, port: u16, interface: Option<&str>) {
     }
 }
 
-/// Machine pilotée : recherche les machines principales.
+/// Machine pilotée.
 pub fn browse(interface: Option<&str>) {
     let Some(d) = daemon(interface) else { return };
     let rx = match d.browse(SERVICE) {
@@ -101,13 +99,13 @@ pub fn browse(interface: Option<&str>) {
                     };
                     let mut all = FOUND.lock().unwrap_or_else(|e| e.into_inner());
                     if all.get(&s.fullname) != Some(&found) {
-                        log::info!("machine principale trouvée : « {} » {:?}", found.name, found.addresses);
+                        log::info!("machine principale trouvée : {:?} {:?}", found.name, found.addresses);
                         all.insert(s.fullname.clone(), found);
                     }
                 }
                 ServiceEvent::ServiceRemoved(_, fullname) => {
                     if let Some(f) = FOUND.lock().unwrap_or_else(|e| e.into_inner()).remove(&fullname) {
-                        log::info!("machine principale disparue du réseau : « {} »", f.name);
+                        log::info!("machine principale disparue du réseau : {:?}", f.name);
                     }
                 }
                 _ => {}

@@ -1,4 +1,4 @@
-//! Saisie d'un raccourci depuis l'app de réglages : sur la machine
+//! Saisie d'un raccourci depuis la fenêtre de réglages : sur la machine
 //! principale, la prochaine combinaison tapée est relevée par le crochet
 //! clavier de Baskul. Elle ne déclenche alors aucun raccourci et n'arrive pas
 //! aux applications, et les touches que la fenêtre de réglages ne reçoit pas
@@ -15,7 +15,7 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 pub enum State {
     Idle,
     Waiting,
-    /// Combinaison relevée, au format de la configuration (« Shift+F11 »).
+    /// Combinaison relevée, au format de la configuration ("Shift+F11").
     Done(String),
 }
 
@@ -80,7 +80,6 @@ pub fn is_waiting() -> bool {
     })
 }
 
-/// Combinaison relevée par le crochet clavier.
 pub fn finish(hotkey: String) {
     with(|i| {
         if i.state == State::Waiting {
