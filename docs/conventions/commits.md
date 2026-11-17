@@ -68,6 +68,6 @@ Une branche se nomme `type/sujet`, avec les mêmes types que les commits et un s
 
 - **Une PR part de `main`**, pour être relue et fusionnée seule, dans n'importe quel ordre.
 - Elle n'est **empilée** sur une autre PR ouverte que si elle en dépend vraiment (elle utilise son code, ou modifie les mêmes lignes). Sa base est alors la branche dont elle dépend, et sa description commence par le dire, avec le lien de cette PR. Une fois la première fusionnée, la suivante repasse sur `main`.
-- Le titre de la PR suit le même format : c'est le message du commit quand la PR est fusionnée en un seul commit (*squash*).
+- Le titre de la PR suit le même format : la PR est fusionnée par un commit de fusion (*merge commit*), dont le message est le titre de la PR suivi de sa description.
 - Un commit, un changement : un correctif glissé dans une nouvelle fonction a son propre commit.
-- Pas de commit "wip" ni "fix lint" dans une PR prête à relire : on les fusionne avant (`git commit --fixup`, puis `git rebase --autosquash`).
+- Les commits de la PR restent tels quels dans l'historique de `main` : pas de commit "wip" ni "fix lint" dans une PR prête à relire, on les fusionne avant (`git commit --fixup`, puis `git rebase --autosquash`).
