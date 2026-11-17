@@ -1,0 +1,41 @@
+// Identité de Baskul (docs/identite.md) : variables CSS pour ce que Naive UI ne dessine pas
+
+:root {
+  --brand-gradient: linear-gradient(135deg, #5b8cff 0%, #4338ca 100%);
+  --brand-glow-start: rgba(91, 140, 255, 0.16);
+  --brand-glow-end: rgba(67, 56, 202, 0.12);
+  --glass: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(21, 26, 45, 0.08);
+  --brand-tint: rgba(76, 95, 239, 0.1);
+}
+
+:root[data-theme="dark"] {
+  --brand-glow-start: rgba(91, 140, 255, 0.2);
+  --brand-glow-end: rgba(67, 56, 202, 0.18);
+  --glass: rgba(13, 16, 32, 0.62);
+  --glass-border: rgba(160, 170, 255, 0.1);
+  --brand-tint: rgba(140, 155, 255, 0.14);
+}
+
+// Fond de la fenêtre : deux lueurs de la marque, sous le cadre transparent
+body {
+  background-image:
+    radial-gradient(60rem 40rem at 0% 0%, var(--brand-glow-start), transparent 60%),
+    radial-gradient(50rem 40rem at 100% 100%, var(--brand-glow-end), transparent 60%);
+  background-attachment: fixed;
+}
+
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+}
+
+.brand-wordmark {
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}

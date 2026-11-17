@@ -55,7 +55,8 @@
       "none": "Aucun",
       "osOnly": "{os} uniquement",
       "version": "Version {version}",
-      "edit": "Modifier"
+      "edit": "Modifier",
+      "linkFailed": "Impossible d'ouvrir {url}"
     },
     "status": {
       "notRunning": "Baskul n'est pas lancé",
@@ -70,7 +71,14 @@
       "restartingWith": "Baskul redémarre avec les nouveaux réglages…",
       "saveRestart": "Enregistrer et redémarrer",
       "closeTitle": "Modifications non enregistrées",
-      "closeText": "Fermer sans enregistrer ?"
+      "closeText": "Fermer sans enregistrer ?",
+      "saved": "Réglages à jour",
+      "shortcuts": "Raccourcis clavier",
+      "shortcutPages": "Accueil, Réglages, Journal, À propos",
+      "shortcutSave": "Enregistrer les réglages",
+      "reportIssue": "Signaler un problème",
+      "issueBody": "**Version** : {version}\n**Système** : {os}\n\n**Ce qui se passe**\n\n\n**Ce qui était attendu**\n",
+      "aboutVersion": "À propos de Baskul {version}"
     },
     "actions": {
       "saved": "Réglages enregistrés et appliqués.",
@@ -127,7 +135,29 @@
       "findsPrimary": "Trouve la machine principale sur le réseau",
       "nextMachine": "Machine suivante",
       "edgesGrid": "Activée ({n} pilotée sur la grille) | Activée ({n} pilotées sur la grille)",
-      "clipboardAll": "Partagé (texte, images et fichiers)"
+      "clipboardAll": "Partagé (texte, images et fichiers)",
+      "activity": "Activité récente",
+      "activityEmpty": "Rien pour l'instant : les connexions et les bascules s'afficheront ici.",
+      "eventConnected": "\"{name}\" s'est connectée",
+      "eventDisconnected": "\"{name}\" s'est déconnectée",
+      "eventSwitchedTo": "Clavier et souris sur \"{name}\"",
+      "eventSwitchedHere": "Clavier et souris sur cette machine",
+      "eventLocked": "Curseur verrouillé sur cette machine",
+      "eventUnlocked": "Curseur déverrouillé",
+      "eventRestarted": "Baskul a redémarré",
+      "eventWarning": "Avertissement : {text}",
+      "pairing": "Ajouter une machine",
+      "pairingText": "Sur l'autre ordinateur, installez Baskul en machine pilotée avec le même secret. Il trouve cette machine tout seul sur le réseau local ; sinon, donnez-lui l'adresse.",
+      "pairingAddress": "Adresse",
+      "pairingSecret": "Secret",
+      "pairingCopy": "Copier l'adresse et le secret",
+      "pairingCopied": "Adresse et secret copiés",
+      "pairingClipboard": "Adresse de la machine principale : {address}\nSecret partagé : {secret}",
+      "pairingSecondary": "Cette machine cherche la principale sur le réseau local, avec le secret partagé : il doit être identique sur les deux machines.",
+      "pairingCheck": "Vérifier la connexion",
+      "activityClear": "Effacer",
+      "pairingShowSecret": "Afficher le secret",
+      "pairingHideSecret": "Masquer le secret"
     },
     "settings": {
       "restarting": "Redémarrage de Baskul…",
@@ -326,7 +356,17 @@
     },
     "log": {
       "title": "Dernières lignes",
-      "follow": "Suivre"
+      "follow": "Suivre",
+      "search": "Rechercher dans le journal",
+      "levelError": "Erreurs",
+      "levelWarn": "Avertissements",
+      "levelInfo": "Infos",
+      "levelDebug": "Débogage",
+      "noMatch": "Aucune ligne ne correspond.",
+      "copyVisible": "Copier",
+      "copied": "Lignes affichées copiées",
+      "lineCount": "{n} ligne | {n} lignes",
+      "lineCountFiltered": "{n} sur {total} lignes"
     },
     "about": {
       "tagline": "Un seul clavier, une seule souris et un presse-papiers partagé entre plusieurs ordinateurs.",
@@ -340,7 +380,8 @@
       "license": "Licence",
       "addressCopied": "Adresse copiée",
       "thanks": "Remerciements",
-      "thanksText": "Construit avec Rust, Tauri, Vue et Naive UI. Le défilement fluide reprend l'algorithme de Mac Mouse Fix, de Noah Nuebling."
+      "thanksText": "Construit avec Rust, Tauri, Vue et Naive UI. Le défilement fluide reprend l'algorithme de Mac Mouse Fix, de Noah Nuebling.",
+      "releases": "Notes de version"
     },
     "update": {
       "title": "Mises à jour",
@@ -361,6 +402,9 @@
       "readyText": "Redémarrez pour installer la nouvelle version ; cette fenêtre se rouvre ensuite.",
       "unsavedTitle": "Modifications non enregistrées",
       "unsavedText": "Elles seront perdues. Redémarrer quand même ?"
+    },
+    "splash": {
+      "connecting": "Connexion à Baskul…"
     }
   }
 }

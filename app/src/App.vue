@@ -10,27 +10,17 @@ import {
   NDialogProvider,
   NGlobalStyle,
   NMessageProvider,
-  type GlobalThemeOverrides,
 } from "naive-ui";
 import AppLayout from "@/AppLayout.vue";
 import { usePreferences } from "@/composables/usePreferences";
+import { themeOverrides } from "@/utils/naiveTheme";
 
 const { isDark, locale } = usePreferences();
 
 const naiveLocale = computed(() => (locale.value === "fr" ? frFR : enUS));
 const naiveDateLocale = computed(() => (locale.value === "fr" ? dateFrFR : dateEnUS));
 
-const themeOverrides = computed<GlobalThemeOverrides>(() => ({
-  common: {
-    primaryColor: isDark.value ? "#6d9eff" : "#2563eb",
-    primaryColorHover: isDark.value ? "#8db2ff" : "#3b74f0",
-    primaryColorPressed: isDark.value ? "#5585ee" : "#1d4ed8",
-    primaryColorSuppl: isDark.value ? "#8db2ff" : "#3b74f0",
-    borderRadius: "8px",
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
-    ...(isDark.value ? {} : { bodyColor: "#f4f5f7" }),
-  },
-}));
+const overrides = computed(() => themeOverrides(isDark.value));
 </script>
 
 <template>
@@ -38,7 +28,7 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => ({
     :date-locale="naiveDateLocale"
     :locale="naiveLocale"
     :theme="isDark ? darkTheme : null"
-    :theme-overrides="themeOverrides">
+    :theme-overrides="overrides">
     <n-global-style />
     <n-message-provider placement="top">
       <n-dialog-provider>

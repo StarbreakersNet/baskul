@@ -55,7 +55,8 @@
       "none": "None",
       "osOnly": "{os} only",
       "version": "Version {version}",
-      "edit": "Edit"
+      "edit": "Edit",
+      "linkFailed": "Couldn't open {url}"
     },
     "status": {
       "notRunning": "Baskul is not running",
@@ -70,7 +71,14 @@
       "restartingWith": "Baskul is restarting with the new settings…",
       "saveRestart": "Save and Restart",
       "closeTitle": "Unsaved changes",
-      "closeText": "Close without saving?"
+      "closeText": "Close without saving?",
+      "saved": "Settings up to date",
+      "shortcuts": "Keyboard shortcuts",
+      "shortcutPages": "Home, Settings, Log, About",
+      "shortcutSave": "Save settings",
+      "reportIssue": "Report a problem",
+      "issueBody": "**Version**: {version}\n**System**: {os}\n\n**What happens**\n\n\n**What was expected**\n",
+      "aboutVersion": "About Baskul {version}"
     },
     "actions": {
       "saved": "Settings saved and applied.",
@@ -127,7 +135,29 @@
       "findsPrimary": "Finds the main computer on the network",
       "nextMachine": "Next computer",
       "edgesGrid": "On ({n} controlled computer in the layout) | On ({n} controlled computers in the layout)",
-      "clipboardAll": "Shared (text, images and files)"
+      "clipboardAll": "Shared (text, images and files)",
+      "activity": "Recent activity",
+      "activityEmpty": "Nothing yet: connections and switches will show up here.",
+      "eventConnected": "\"{name}\" connected",
+      "eventDisconnected": "\"{name}\" disconnected",
+      "eventSwitchedTo": "Keyboard and mouse on \"{name}\"",
+      "eventSwitchedHere": "Keyboard and mouse on this computer",
+      "eventLocked": "Cursor locked on this computer",
+      "eventUnlocked": "Cursor unlocked",
+      "eventRestarted": "Baskul restarted",
+      "eventWarning": "Warning: {text}",
+      "pairing": "Add a computer",
+      "pairingText": "On the other computer, install Baskul as a controlled computer with the same secret. It finds this computer on its own on the local network; otherwise, give it the address.",
+      "pairingAddress": "Address",
+      "pairingSecret": "Secret",
+      "pairingCopy": "Copy address and secret",
+      "pairingCopied": "Address and secret copied",
+      "pairingClipboard": "Main computer address: {address}\nShared secret: {secret}",
+      "pairingSecondary": "This computer looks for the main computer on the local network, with the shared secret: it must be the same on both computers.",
+      "pairingCheck": "Check the connection",
+      "activityClear": "Clear",
+      "pairingShowSecret": "Show secret",
+      "pairingHideSecret": "Hide secret"
     },
     "settings": {
       "restarting": "Restarting Baskul…",
@@ -326,7 +356,17 @@
     },
     "log": {
       "title": "Latest lines",
-      "follow": "Follow"
+      "follow": "Follow",
+      "search": "Search the log",
+      "levelError": "Errors",
+      "levelWarn": "Warnings",
+      "levelInfo": "Info",
+      "levelDebug": "Debug",
+      "noMatch": "No matching line.",
+      "copyVisible": "Copy",
+      "copied": "Shown lines copied",
+      "lineCount": "{n} line | {n} lines",
+      "lineCountFiltered": "{n} of {total} lines"
     },
     "about": {
       "tagline": "One keyboard, one mouse and a shared clipboard across several computers.",
@@ -340,7 +380,8 @@
       "license": "License",
       "addressCopied": "Address copied",
       "thanks": "Thanks",
-      "thanksText": "Built with Rust, Tauri, Vue and Naive UI. Smooth scrolling follows the algorithm of Mac Mouse Fix, by Noah Nuebling."
+      "thanksText": "Built with Rust, Tauri, Vue and Naive UI. Smooth scrolling follows the algorithm of Mac Mouse Fix, by Noah Nuebling.",
+      "releases": "Release notes"
     },
     "update": {
       "title": "Updates",
@@ -361,6 +402,9 @@
       "readyText": "Restart to install the new version; this window reopens afterwards.",
       "unsavedTitle": "Unsaved changes",
       "unsavedText": "They will be lost. Restart anyway?"
+    },
+    "splash": {
+      "connecting": "Connecting to Baskul…"
     }
   }
 }
