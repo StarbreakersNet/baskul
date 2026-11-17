@@ -32,13 +32,11 @@ static WELCOME: AtomicBool = AtomicBool::new(false);
 /// Configuration invalide : l'app se ferme avec la fenêtre de réglages.
 static CONFIG_ERROR: AtomicBool = AtomicBool::new(false);
 
-/// Erreur transmise au front : `{ kind, message }`.
+/// Erreur transmise au front : `{ kind, message }` ; Baskul tourne dans ce processus, il n'est jamais
+/// hors ligne.
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", content = "message", rename_all = "lowercase")]
 enum Error {
-    /// Baskul ne répond pas.
-    #[allow(dead_code)]
-    Offline(String),
     /// Baskul a refusé la demande (réglage invalide…).
     Refused(String),
 }

@@ -1,15 +1,28 @@
 <script setup lang="ts" generic="T extends string">
-// Choix exclusif présenté en boutons.
-import { NRadioButton, NRadioGroup } from "naive-ui";
+import HRadioButton from "@/components/c/hRadioButton.vue";
+import HRadioGroup from "@/components/c/hRadioGroup.vue";
+import type { ChoiceOption } from "@/types/Choice";
 
 const model = defineModel<T>({ required: true });
-defineProps<{ options: { value: T; label: string; disabled?: boolean }[]; disabled?: boolean }>();
+
+const { options, disabled = false } = defineProps<{
+  options: ChoiceOption<T>[];
+  disabled?: boolean;
+}>();
+
+function select(value: T) {
+  model.value = value;
+}
 </script>
 
 <template>
-  <n-radio-group :value="model" :disabled="disabled" @update:value="(v) => (model = v as T)">
-    <n-radio-button v-for="o in options" :key="o.value" :value="o.value" :disabled="o.disabled">
-      {{ o.label }}
-    </n-radio-button>
-  </n-radio-group>
+  <h-radio-group :disabled="disabled" :value="model" @update:value="select($event)">
+    <h-radio-button
+      v-for="option in options"
+      :key="option.value"
+      :disabled="option.disabled"
+      :value="option.value">
+      {{ option.label }}
+    </h-radio-button>
+  </h-radio-group>
 </template>

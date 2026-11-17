@@ -8,7 +8,7 @@ pub struct NetInterface {
     /// Nom donné par le système (`en0`, `Ethernet`, `Wi-Fi`…) : c'est lui qui
     /// est enregistré dans la configuration.
     pub name: String,
-    /// Nom lisible (macOS : « Wi-Fi », « Ethernet »… au lieu de `en0`).
+    /// Nom lisible (macOS : "Wi-Fi", "Ethernet"… au lieu de `en0`).
     pub label: String,
     /// Adresses IPv4.
     pub addresses: Vec<IpAddr>,
@@ -35,7 +35,6 @@ pub fn list() -> Vec<NetInterface> {
     out
 }
 
-/// Adresse IPv4 de la carte `name`.
 pub fn address_of(name: &str) -> Option<IpAddr> {
     list().into_iter().find(|i| i.name == name).and_then(|i| i.addresses.first().copied())
 }

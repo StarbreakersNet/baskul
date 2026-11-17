@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 /// Incrémenté à chaque changement incompatible du protocole.
 pub const PROTOCOL_VERSION: u32 = 4;
 
-/// Port TCP par défaut.
 pub const DEFAULT_PORT: u16 = 24870;
 
 /// Taille maximale d'un morceau de presse-papiers dans un message.
@@ -32,7 +31,6 @@ impl Role {
     }
 }
 
-/// Bord d'un écran.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Edge {
     Left,
@@ -75,9 +73,9 @@ pub enum MouseButton {
     Left,
     Right,
     Middle,
-    /// Bouton 4 (« précédent »).
+    /// Bouton 4 ("précédent").
     Back,
-    /// Bouton 5 (« suivant »).
+    /// Bouton 5 ("suivant").
     Forward,
 }
 
@@ -190,7 +188,7 @@ pub enum Message {
     },
     /// L'utilisateur est actif sur la machine qui envoie ce message (au plus
     /// un message toutes les quelques secondes) : celle qui le reçoit reste
-    /// active elle aussi (veille de l'écran, économiseur, statut « absent »).
+    /// active elle aussi (veille de l'écran, économiseur, statut "absent").
     UserActive,
 }
 
@@ -295,7 +293,7 @@ pub struct ClipImage {
 /// l'ordre de la liste.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct ClipFile {
-    /// Chemin relatif, séparé par « / » (le premier élément est le nom de
+    /// Chemin relatif, séparé par "/" (le premier élément est le nom de
     /// l'élément copié).
     pub path: String,
     /// Taille (octets) ; `None` pour un dossier.

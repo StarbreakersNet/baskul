@@ -1,259 +1,293 @@
 <script setup lang="ts">
-// Grille des machines : la principale au centre (case 0, 0), les pilotées
-// autour. On passe d'un écran à l'autre par leur bord commun. Une pilotée se
-// déplace en la faisant glisser sur une case, ou en la sélectionnant puis en
-// cliquant sur la case voulue ; deux pilotées échangent leurs places.
 import { computed, ref } from "vue";
-import { NAlert, NButton, NFlex, NIcon, NText, useThemeVars } from "naive-ui";
-import { IconDeviceDesktop, IconDeviceLaptop, IconHome } from "@tabler/icons-vue";
-import HotkeyInput from "./HotkeyInput.vue";
-import SettingRow from "./SettingRow.vue";
-import type { LayoutMachine, Peer } from "../types";
-import { osLabel } from "../utils";
+import { useI18n } from "vue-i18n";
+import { useThemeVars } from "naive-ui";
+import { IconHome } from "@tabler/icons-vue";
+import HAlert from "@/components/c/hAlert.vue";
+import HButton from "@/components/c/hButton.vue";
+import HFlex from "@/components/c/hFlex.vue";
+import HIcon from "@/components/c/hIcon.vue";
+import HText from "@/components/c/hText.vue";
+import HotkeyInput from "@/components/HotkeyInput.vue";
+import SettingRow from "@/components/SettingRow.vue";
+import { gridCells, gridColumns, isolatedMachines, type GridCell } from "@/utils/layoutGrid";
+import { osIcon, osLabel } from "@/utils/os";
+import type { LayoutMachine } from "@/types/Config";
+import type { Peer } from "@/types/Daemon";
+
+interface Drag {
+  name: string;
+  x: number;
+  y: number;
+  startX: number;
+  startY: number;
+  hasMoved: boolean;
+}
 
 const machines = defineModel<LayoutMachine[]>({ required: true });
-const props = defineProps<{ primaryName: string; os: string; peers: Peer[] }>();
 
-const vars = useThemeVars();
+const { primaryName, os, peers } = defineProps<{
+  primaryName: string;
+  os: string;
+  peers: Peer[];
+}>();
+
+// Au-delà, le geste est un glisser et non un clic
+const DRAG_THRESHOLD_PX = 4;
+
+const themeVars = useThemeVars();
+const { t } = useI18n();
+
+const selectedName = ref<string | null>(null);
+const drag = ref<Drag | null>(null);
+const hoveredCell = ref<string | null>(null);
+
 const colors = computed(() => ({
-  border: vars.value.borderColor,
-  muted: vars.value.textColor3,
-  accent: vars.value.primaryColor,
-  soft: `color-mix(in srgb, ${vars.value.primaryColor} 14%, transparent)`,
-  tile: vars.value.cardColor,
-  success: vars.value.successColor,
-  screen: vars.value.dividerColor,
+  border: themeVars.value.borderColor,
+  muted: themeVars.value.textColor3,
+  accent: themeVars.value.primaryColor,
+  tile: themeVars.value.cardColor,
+  success: themeVars.value.successColor,
+  screen: themeVars.value.dividerColor,
 }));
 
-const selected = ref<string | null>(null);
-/** Glisser en cours : pilotée, position du pointeur, case survolée. */
-const drag = ref<{ name: string; x: number; y: number; sx: number; sy: number; moved: boolean } | null>(null);
-const hover = ref<string | null>(null);
-
-const peerOf = (name: string) => props.peers.find((p) => p.name === name);
-const osIcon = (os?: string) => (os === "macos" ? IconDeviceLaptop : IconDeviceDesktop);
-
-/** Pilotées connectées mais pas encore sur la grille. */
-const unplaced = computed(() => props.peers.filter((p) => !machines.value.some((m) => m.name === p.name)));
-
-/** Cases affichées : les machines placées et une rangée libre tout autour. */
-const bounds = computed(() => {
-  const xs = [0, ...machines.value.map((m) => m.x)];
-  const ys = [0, ...machines.value.map((m) => m.y)];
-  return { x0: Math.min(...xs) - 1, x1: Math.max(...xs) + 1, y0: Math.min(...ys) - 1, y1: Math.max(...ys) + 1 };
+const unplacedPeers = computed(() =>
+  peers.filter(peer => !machines.value.some(machine => machine.name === peer.name))
+);
+const cells = computed(() => gridCells(machines.value));
+const columnsStyle = computed(() => ({
+  gridTemplateColumns: `repeat(${gridColumns(machines.value)}, minmax(84px, 128px))`,
+}));
+const isolated = computed(() => isolatedMachines(machines.value));
+const selectedMachine = computed(() =>
+  machines.value.find(machine => machine.name === selectedName.value)
+);
+const selectedHelp = computed(() => {
+  const peer = selectedMachine.value && peerOf(selectedMachine.value.name);
+  return peer ? osLabel(peer.os) : t("settings.layout.offlineHelp");
 });
-const cells = computed(() => {
-  const b = bounds.value;
-  const out = [];
-  for (let y = b.y0; y <= b.y1; y++) {
-    for (let x = b.x0; x <= b.x1; x++) {
-      out.push({ x, y, key: `${x},${y}`, primary: x === 0 && y === 0, machine: machines.value.find((m) => m.x === x && m.y === y) });
-    }
-  }
-  return out;
-});
-const columns = computed(() => bounds.value.x1 - bounds.value.x0 + 1);
-
-/** Pilotées qu'aucun bord ne relie à la principale : seul un raccourci y mène. */
-const isolated = computed(() => {
-  const at = new Map(machines.value.map((m) => [`${m.x},${m.y}`, m.name]));
-  const seen = new Set(["0,0"]);
-  const queue = [[0, 0]];
-  while (queue.length) {
-    const [x, y] = queue.shift()!;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const key = `${x + dx},${y + dy}`;
-      if (!seen.has(key) && at.has(key)) {
-        seen.add(key);
-        queue.push([x + dx, y + dy]);
-      }
-    }
-  }
-  return machines.value.filter((m) => !seen.has(`${m.x},${m.y}`)).map((m) => m.name);
-});
-
-/** Place `name` en (x, y) ; une pilotée déjà là prend son ancienne place. */
-function place(name: string, x: number, y: number) {
-  if (x === 0 && y === 0) return;
-  const list = machines.value.map((m) => ({ ...m }));
-  const moving = list.find((m) => m.name === name);
-  const other = list.find((m) => m.x === x && m.y === y);
-  if (moving) {
-    if (other && other !== moving) Object.assign(other, { x: moving.x, y: moving.y });
-    Object.assign(moving, { x, y });
-  } else if (!other) {
-    list.push({ name, x, y });
-  } else {
-    return;
-  }
-  machines.value = list;
-  selected.value = name;
-}
-
-function remove(name: string) {
-  machines.value = machines.value.filter((m) => m.name !== name);
-  selected.value = null;
-}
-
-const current = computed(() => machines.value.find((m) => m.name === selected.value));
 const hotkey = computed({
-  get: () => current.value?.hotkey ?? "",
-  set: (v: string) => {
-    machines.value = machines.value.map((m) => {
-      if (m.name !== selected.value) return m;
-      const { hotkey: _, ...rest } = m;
-      return v ? { ...rest, hotkey: v } : rest;
-    });
+  get: () => selectedMachine.value?.hotkey ?? "",
+  set: (value: string) => {
+    machines.value = machines.value.map(machine =>
+      machine.name === selectedName.value ? withHotkey(machine, value) : machine
+    );
   },
 });
 
-function cellAt(x: number, y: number): string | null {
-  const el = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-cell]");
-  return el?.dataset.cell ?? null;
+function peerOf(name: string) {
+  return peers.find(peer => peer.name === name);
 }
 
-function onPointerDown(e: PointerEvent, name: string) {
-  if (e.button !== 0) return;
-  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  drag.value = { name, x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: false };
+function withHotkey(machine: LayoutMachine, value: string): LayoutMachine {
+  const { name, x, y } = machine;
+  return value ? { name, x, y, hotkey: value } : { name, x, y };
 }
 
-function onPointerMove(e: PointerEvent) {
-  const d = drag.value;
-  if (!d) return;
-  d.x = e.clientX;
-  d.y = e.clientY;
-  if (!d.moved && Math.hypot(d.x - d.sx, d.y - d.sy) > 4) d.moved = true;
-  if (d.moved) hover.value = cellAt(d.x, d.y);
+/** Une pilotée déjà en (x, y) prend la place de celle qu'on déplace */
+function swapInto(moving: LayoutMachine, x: number, y: number) {
+  return machines.value.map(machine => {
+    if (machine.name === moving.name) {
+      return { ...machine, x, y };
+    }
+    return machine.x === x && machine.y === y ? { ...machine, x: moving.x, y: moving.y } : machine;
+  });
 }
 
-function onPointerUp() {
-  const d = drag.value;
-  const target = hover.value;
+function place(name: string, x: number, y: number) {
+  const moving = machines.value.find(machine => machine.name === name);
+  const isOccupied = machines.value.some(machine => machine.x === x && machine.y === y);
+  const isPrimaryCell = x === 0 && y === 0;
+  if (!isPrimaryCell && (moving || !isOccupied)) {
+    machines.value = moving ? swapInto(moving, x, y) : [...machines.value, { name, x, y }];
+    selectedName.value = name;
+  }
+}
+
+function remove(name: string) {
+  machines.value = machines.value.filter(machine => machine.name !== name);
+  selectedName.value = null;
+}
+
+function toggleSelection(name: string) {
+  selectedName.value = selectedName.value === name ? null : name;
+}
+
+function cellAt(x: number, y: number) {
+  const element = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-cell]");
+  return element?.dataset.cell ?? null;
+}
+
+function handlePointerDown(event: PointerEvent, name: string) {
+  if (event.button === 0) {
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    const { clientX: x, clientY: y } = event;
+    drag.value = { name, x, y, startX: x, startY: y, hasMoved: false };
+  }
+}
+
+function handlePointerMove(event: PointerEvent) {
+  const current = drag.value;
+  if (current) {
+    current.x = event.clientX;
+    current.y = event.clientY;
+    current.hasMoved ||=
+      Math.hypot(current.x - current.startX, current.y - current.startY) > DRAG_THRESHOLD_PX;
+    hoveredCell.value = current.hasMoved ? cellAt(current.x, current.y) : null;
+  }
+}
+
+function handlePointerUp() {
+  const current = drag.value;
+  const target = hoveredCell.value;
   drag.value = null;
-  hover.value = null;
-  if (!d) return;
-  if (!d.moved) {
-    // Simple clic : sélection.
-    selected.value = selected.value === d.name ? null : d.name;
-    return;
-  }
-  if (target) {
+  hoveredCell.value = null;
+  if (current && !current.hasMoved) {
+    toggleSelection(current.name);
+  } else if (current && target) {
     const [x, y] = target.split(",").map(Number);
-    place(d.name, x, y);
+    place(current.name, x, y);
   }
 }
 
-function onCellClick(cell: { x: number; y: number; primary: boolean; machine?: LayoutMachine }) {
-  if (selected.value && !cell.primary && !cell.machine) place(selected.value, cell.x, cell.y);
+function handleCellClick(cell: GridCell) {
+  if (selectedName.value && !cell.isPrimary && !cell.machine) {
+    place(selectedName.value, cell.x, cell.y);
+  }
+}
+
+function cellClasses(cell: GridCell) {
+  const isFree = !cell.machine && !cell.isPrimary;
+  return {
+    "layout-cell--empty": isFree,
+    "layout-cell--target": hoveredCell.value === cell.key && !cell.isPrimary,
+    "layout-cell--pick": !!selectedName.value && isFree,
+  };
+}
+
+function tileClasses(name: string) {
+  return {
+    "layout-tile--on": selectedName.value === name,
+    "layout-tile--dragging": drag.value?.hasMoved && drag.value.name === name,
+  };
 }
 </script>
 
 <template>
   <div>
-    <div class="grid" :style="{ gridTemplateColumns: `repeat(${columns}, minmax(84px, 128px))` }" role="grid">
+    <div class="layout-grid" role="grid" :style="columnsStyle">
       <div
         v-for="cell in cells"
         :key="cell.key"
+        :class="['layout-cell', cellClasses(cell)]"
         :data-cell="cell.key"
-        :class="['cell', { empty: !cell.machine && !cell.primary, target: hover === cell.key && !cell.primary, pick: !!selected && !cell.machine && !cell.primary }]"
-        @click="onCellClick(cell)"
-      >
-        <div v-if="cell.primary" class="tile primary">
-          <n-icon :size="20"><icon-home /></n-icon>
-          <span class="name">{{ primaryName }}</span>
-          <span class="sub">{{ $t("settings.layout.primary") }}</span>
+        @click="handleCellClick(cell)">
+        <div v-if="cell.isPrimary" class="layout-tile layout-tile--primary">
+          <h-icon :size="20"><icon-home /></h-icon>
+          <span class="layout-name">{{ primaryName }}</span>
+          <span class="layout-sub">{{ $t("settings.layout.primary") }}</span>
         </div>
         <div
           v-else-if="cell.machine"
-          :class="['tile', { on: selected === cell.machine.name, dragging: drag?.moved && drag.name === cell.machine.name }]"
+          :aria-pressed="selectedName === cell.machine.name"
+          :class="['layout-tile', tileClasses(cell.machine.name)]"
           role="button"
           tabindex="0"
-          :aria-pressed="selected === cell.machine.name"
-          @pointerdown="onPointerDown($event, cell.machine.name)"
-          @pointermove="onPointerMove"
-          @pointerup="onPointerUp"
+          @keydown.enter.prevent="toggleSelection(cell.machine.name)"
           @pointercancel="drag = null"
-          @keydown.enter.prevent="selected = selected === cell.machine.name ? null : cell.machine.name"
-        >
-          <n-icon :size="20" :depth="peerOf(cell.machine.name) ? undefined : 3">
+          @pointerdown="handlePointerDown($event, cell.machine.name)"
+          @pointermove="handlePointerMove($event)"
+          @pointerup="handlePointerUp()">
+          <h-icon :depth="peerOf(cell.machine.name) ? undefined : 3" :size="20">
             <component :is="osIcon(peerOf(cell.machine.name)?.os)" />
-          </n-icon>
-          <span class="name">{{ cell.machine.name }}</span>
-          <span class="sub">
-            <span :class="['dot', { live: !!peerOf(cell.machine.name) }]" />
-            {{ peerOf(cell.machine.name) ? $t("settings.layout.connected") : $t("settings.layout.offline") }}
+          </h-icon>
+          <span class="layout-name">{{ cell.machine.name }}</span>
+          <span class="layout-sub">
+            <span :class="['layout-dot', { 'layout-dot--live': !!peerOf(cell.machine.name) }]" />
+            {{
+              peerOf(cell.machine.name)
+                ? $t("settings.layout.connected")
+                : $t("settings.layout.offline")
+            }}
           </span>
         </div>
       </div>
     </div>
 
-    <n-flex v-if="unplaced.length" align="center" :size="8" style="margin-top: 10px">
-      <n-text depth="3" style="font-size: 13px">{{ $t("settings.layout.unplaced") }}</n-text>
+    <h-flex v-if="unplacedPeers.length" align="center" class="layout-block" :size="8">
+      <h-text class="small-text" depth="3">{{ $t("settings.layout.unplaced") }}</h-text>
       <div
-        v-for="p in unplaced"
-        :key="p.name"
-        :class="['tile', 'chip', { on: selected === p.name }]"
+        v-for="peer in unplacedPeers"
+        :key="peer.name"
+        :class="['layout-tile', 'layout-tile--chip', tileClasses(peer.name)]"
         role="button"
         tabindex="0"
-        @pointerdown="onPointerDown($event, p.name)"
-        @pointermove="onPointerMove"
-        @pointerup="onPointerUp"
         @pointercancel="drag = null"
-      >
-        <n-icon :size="16"><component :is="osIcon(p.os)" /></n-icon>
-        <span class="name">{{ p.name }}</span>
+        @pointerdown="handlePointerDown($event, peer.name)"
+        @pointermove="handlePointerMove($event)"
+        @pointerup="handlePointerUp()">
+        <h-icon :size="16"><component :is="osIcon(peer.os)" /></h-icon>
+        <span class="layout-name">{{ peer.name }}</span>
       </div>
-    </n-flex>
+    </h-flex>
 
-    <n-alert v-if="isolated.length" type="warning" style="margin-top: 10px">
+    <h-alert v-if="isolated.length" class="layout-block" type="warning">
       {{ $t("settings.layout.isolated", { names: isolated.join(", ") }, isolated.length) }}
-    </n-alert>
+    </h-alert>
 
-    <n-text v-if="selected" depth="3" tag="div" class="hint">{{ $t("settings.layout.pickHint") }}</n-text>
-    <n-text v-else depth="3" tag="div" class="hint">{{ $t("settings.layout.dragHint") }}</n-text>
+    <h-text class="layout-hint" depth="3" tag="div">
+      {{ selectedName ? $t("settings.layout.pickHint") : $t("settings.layout.dragHint") }}
+    </h-text>
 
-    <div v-if="current" class="details">
-      <setting-row
-        :label="current.name"
-        :help="peerOf(current.name) ? osLabel(peerOf(current.name)!.os) : $t('settings.layout.offlineHelp')"
-      >
-        <n-button size="small" @click="remove(current.name)">{{ $t("settings.layout.remove") }}</n-button>
+    <div v-if="selectedMachine" class="layout-details">
+      <setting-row :help="selectedHelp" :label="selectedMachine.name">
+        <h-button size="small" @click="remove(selectedMachine.name)">
+          {{ $t("settings.layout.remove") }}
+        </h-button>
       </setting-row>
-      <setting-row :label="$t('settings.layout.hotkey')" :help="$t('settings.layout.hotkeyHelp')">
+      <setting-row :help="$t('settings.layout.hotkeyHelp')" :label="$t('settings.layout.hotkey')">
         <hotkey-input v-model="hotkey" :os="os" />
       </setting-row>
     </div>
 
-    <!-- Pilotée qui suit le pointeur pendant le glisser. -->
-    <div v-if="drag?.moved" class="tile ghost" :style="{ left: `${drag.x}px`, top: `${drag.y}px` }">
-      <span class="name">{{ drag.name }}</span>
+    <div
+      v-if="drag?.hasMoved"
+      class="layout-tile layout-tile--ghost"
+      :style="{ left: `${drag.x}px`, top: `${drag.y}px` }">
+      <span class="layout-name">{{ drag.name }}</span>
     </div>
   </div>
 </template>
 
-<style scoped>
-.grid {
+<style lang="scss" scoped>
+@use "@/assets/variables";
+
+.layout-grid {
   display: grid;
   gap: 6px;
   justify-content: start;
   user-select: none;
 }
-.cell {
+
+.layout-cell {
   height: 72px;
-  border-radius: 9px;
+  border-radius: variables.$radius;
 }
-.cell.empty {
+
+.layout-cell--empty {
   border: 1px dashed v-bind("colors.border");
 }
-.cell.pick {
+
+.layout-cell--pick {
   cursor: pointer;
 }
-.cell.target {
+
+.layout-cell--target {
   border: 1.5px solid v-bind("colors.accent");
-  background: v-bind("colors.soft");
+  background: color-mix(in srgb, v-bind("colors.accent") variables.$accent-tint, transparent);
 }
-.tile {
+
+.layout-tile {
   height: 100%;
   box-sizing: border-box;
   display: flex;
@@ -262,32 +296,37 @@ function onCellClick(cell: { x: number; y: number; primary: boolean; machine?: L
   justify-content: center;
   gap: 2px;
   padding: 6px;
-  border-radius: 9px;
+  border-radius: variables.$radius;
   border: 1.5px solid v-bind("colors.border");
   background: v-bind("colors.tile");
   cursor: grab;
   touch-action: none;
   overflow: hidden;
 }
-.tile.primary {
+
+.layout-tile--primary {
   cursor: default;
   background: v-bind("colors.screen");
   border-color: transparent;
 }
-.tile.on {
+
+.layout-tile--on {
   border-color: v-bind("colors.accent");
-  background: v-bind("colors.soft");
+  background: color-mix(in srgb, v-bind("colors.accent") variables.$accent-tint, transparent);
 }
-.tile.dragging {
+
+.layout-tile--dragging {
   opacity: 0.4;
 }
-.tile.chip {
+
+.layout-tile--chip {
   height: auto;
   flex-direction: row;
   padding: 4px 10px;
   border-radius: 999px;
 }
-.tile.ghost {
+
+.layout-tile--ghost {
   position: fixed;
   height: auto;
   padding: 8px 14px;
@@ -297,35 +336,45 @@ function onCellClick(cell: { x: number; y: number; primary: boolean; machine?: L
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
   z-index: 10;
 }
-.name {
+
+.layout-name {
   font-weight: 600;
-  font-size: 13px;
+  font-size: variables.$font-size-help;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.sub {
+
+.layout-sub {
   font-size: 11.5px;
   color: v-bind("colors.muted");
   display: flex;
   align-items: center;
   gap: 4px;
 }
-.dot {
+
+.layout-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: v-bind("colors.border");
 }
-.dot.live {
+
+.layout-dot--live {
   background: v-bind("colors.success");
 }
-.hint {
-  margin-top: 8px;
-  font-size: 13px;
+
+.layout-block {
+  margin-top: 10px;
 }
-.details {
+
+.layout-hint {
+  margin-top: 8px;
+  font-size: variables.$font-size-help;
+}
+
+.layout-details {
   margin-top: 6px;
 }
 </style>

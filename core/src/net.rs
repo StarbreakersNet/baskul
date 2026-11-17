@@ -52,7 +52,6 @@ pub struct NetSettings {
     pub listen: String,
     /// Machine pilotée : adresse de la principale (`None` : découverte).
     pub connect: Option<String>,
-    /// Découverte automatique active.
     pub discovery: bool,
     /// Adresse locale imposée (carte réseau choisie).
     pub bind: Option<IpAddr>,
@@ -133,7 +132,7 @@ impl LinkHandle {
             if old.machine_id != peer.machine_id {
                 return Err(i18n::tf("status.nameTaken", &[("name", &peer.info.name)]));
             }
-            log::info!("« {} » s'est reconnectée : l'ancienne connexion est fermée", peer.info.name);
+            log::info!("{:?} s'est reconnectée : l'ancienne connexion est fermée", peer.info.name);
             if let Some(s) = &old.stream {
                 let _ = s.shutdown(Shutdown::Both);
             }
@@ -453,7 +452,7 @@ fn session(
             return Err(e);
         }
     }
-    log::info!("connecté à « {peer_name} » ({peer_os})");
+    log::info!("connecté à {peer_name:?} ({peer_os})");
     status::add_peer(&peer_name, &peer_os);
     on_event(LinkEvent::Connected { peer: id, name: peer_name.clone(), os: peer_os });
 
@@ -585,7 +584,7 @@ mod tests {
         (h, rx)
     }
 
-    /// Principale « A » en écoute, pilotée « B » qui s'y connecte.
+    /// Principale "A" en écoute, pilotée "B" qui s'y connecte.
     fn start_pair(
         secret_a: &str,
         secret_b: &str,

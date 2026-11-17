@@ -6,11 +6,9 @@ use blake2::{Blake2s256, Digest};
 use snow::{Builder, HandshakeState, StatelessTransportState};
 
 pub const NOISE_PARAMS: &str = "Noise_NNpsk0_25519_ChaChaPoly_BLAKE2s";
-/// Taille maximale d'un message Noise.
 pub const MAX_MSG: usize = 65535;
 pub const TAG_LEN: usize = 16;
 
-/// Dérive la clé pré-partagée (32 octets) du secret de la configuration.
 pub fn derive_psk(secret: &str) -> [u8; 32] {
     let mut h = Blake2s256::new();
     h.update(b"bascule-psk-v1\0");
@@ -27,14 +25,14 @@ pub fn new_handshake(psk: &[u8; 32], initiator: bool) -> Result<HandshakeState, 
     if initiator { b.build_initiator() } else { b.build_responder() }
 }
 
-/// Moitié « émission » d'un canal chiffré (un seul thread l'utilise).
+/// Moitié "émission" d'un canal chiffré (un seul thread l'utilise).
 pub struct Sealer {
     state: std::sync::Arc<StatelessTransportState>,
     nonce: u64,
     buf: Vec<u8>,
 }
 
-/// Moitié « réception » d'un canal chiffré (un seul thread l'utilise).
+/// Moitié "réception" d'un canal chiffré (un seul thread l'utilise).
 pub struct Opener {
     state: std::sync::Arc<StatelessTransportState>,
     nonce: u64,
@@ -50,7 +48,6 @@ pub fn split(state: StatelessTransportState) -> (Sealer, Opener) {
 }
 
 impl Sealer {
-    /// Chiffre `plain` ; renvoie le message chiffré.
     pub fn seal(&mut self, plain: &[u8]) -> Result<&[u8], snow::Error> {
         let n = self.state.write_message(self.nonce, plain, &mut self.buf)?;
         self.nonce += 1;
@@ -59,7 +56,6 @@ impl Sealer {
 }
 
 impl Opener {
-    /// Déchiffre `cipher` ; renvoie le texte clair.
     pub fn open(&mut self, cipher: &[u8]) -> Result<&[u8], snow::Error> {
         let n = self.state.read_message(self.nonce, cipher, &mut self.buf)?;
         self.nonce += 1;

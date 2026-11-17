@@ -1,7 +1,7 @@
 //! Mises à jour, façon Discord : Baskul cherche une nouvelle version parmi
 //! les Releases de GitHub, la télécharge en arrière-plan et vérifie son
 //! empreinte SHA-256 ; il ne reste qu'à redémarrer pour l'installer (menu de
-//! l'icône ou app de réglages).
+//! l'icône ou fenêtre de réglages).
 //!
 //! Les téléchargements passent par `curl`, présent sur macOS et sur Windows
 //! (depuis Windows 10 1803) : aucune bibliothèque TLS à embarquer.
@@ -77,7 +77,7 @@ pub fn state() -> State {
     shared().state.clone()
 }
 
-/// État pour l'app de réglages.
+/// État pour la fenêtre de réglages.
 pub fn info() -> serde_json::Value {
     let s = shared();
     let mut v = serde_json::to_value(&s.state).unwrap_or_default();
@@ -108,7 +108,7 @@ pub fn start_auto_check() {
     });
 }
 
-/// Vérifie maintenant, dans un thread (bouton de l'app de réglages).
+/// Vérifie maintenant, dans un thread (bouton de la fenêtre de réglages).
 pub fn check_in_background() {
     let _ = std::thread::Builder::new().name("baskul-update-check".into()).spawn(|| check(true));
 }
@@ -378,9 +378,9 @@ fn now_ms() -> u64 {
 // ---------------------------------------------------------------------------
 
 /// Installe la version téléchargée puis redémarre Baskul (menu de l'icône,
-/// app de réglages). Les fichiers sont remplacés depuis un thread ; la boucle
+/// fenêtre de réglages). Les fichiers sont remplacés depuis un thread ; la boucle
 /// principale redémarre ensuite comme après un changement de réglages.
-/// `settings` : demandé par l'app de réglages (fichier de configuration),
+/// `settings` : demandé par la fenêtre de réglages (fichier de configuration),
 /// qui se ferme pendant l'installation et que Baskul rouvre ensuite.
 pub fn install(settings: Option<PathBuf>) -> Result<(), String> {
     let (archive, version) = {
@@ -416,7 +416,7 @@ pub fn install(settings: Option<PathBuf>) -> Result<(), String> {
                     s.archive = None;
                     s.state = State::Error { message: format!("installation impossible : {e} — {url}") };
                 }
-                // L'app de réglages s'est fermée : elle revient avec l'erreur.
+                // La fenêtre de réglages s'est fermée : elle revient avec l'erreur.
                 if let Some(path) = settings {
                     std::thread::sleep(Duration::from_secs(1));
                     crate::platform::open_settings(&path, false);
@@ -491,7 +491,7 @@ fn install_files(archive: &Path) -> Result<(), String> {
         .find(|p| p.join(&main).is_file())
         .ok_or("archive inattendue (programme absent)")?;
     replace_programs(&[(src.join(&main), exe.clone())])?;
-    // Ancienne app de réglages séparée (avant la 0.8) : devenue inutile.
+    // Programme de réglages séparé des versions 0.7 et antérieures : devenu inutile.
     let settings = dir.join(format!("baskul-settings{ext}"));
     if settings.is_file() && std::fs::rename(&settings, old_path(&settings)).is_err() {
         log::warn!("{} : ancienne app de réglages laissée en place", settings.display());
@@ -541,12 +541,12 @@ fn old_path(target: &Path) -> PathBuf {
     target.with_file_name(name)
 }
 
-/// Marque « rouvrir l'app de réglages après la mise à jour ».
+/// Marque "rouvrir la fenêtre de réglages après la mise à jour".
 fn reopen_marker() -> PathBuf {
     crate::config::config_dir().join(".reopen-settings")
 }
 
-/// Au démarrage : l'app de réglages a lancé la mise à jour ; elle se rouvre.
+/// Au démarrage : la fenêtre de réglages a lancé la mise à jour ; elle se rouvre.
 pub fn take_reopen_settings() -> bool {
     std::fs::remove_file(reopen_marker()).is_ok()
 }

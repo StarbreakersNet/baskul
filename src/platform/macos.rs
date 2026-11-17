@@ -298,7 +298,7 @@ const F_SCROLL_FIXED_2: u32 = 94;
 const F_SCROLL_POINT_1: u32 = 96;
 const F_SCROLL_POINT_2: u32 = 97;
 
-// Drapeaux (CGEventFlags) et bits « par touche » (NX_DEVICE*).
+// Drapeaux (CGEventFlags) et bits "par touche" (NX_DEVICE*).
 const FL_ALPHA_SHIFT: u64 = 0x0001_0000;
 const FL_SHIFT: u64 = 0x0002_0000;
 const FL_CONTROL: u64 = 0x0004_0000;
@@ -427,7 +427,7 @@ fn media_type(hid: u32) -> Option<i64> {
     })
 }
 
-/// Envoie une touche multimédia (événement « system defined », sous-type 8).
+/// Envoie une touche multimédia (événement "system defined", sous-type 8).
 fn post_media(nx_type: i64, down: bool) {
     autoreleasepool(|_| {
         let state: i64 = if down { 0xa } else { 0xb };
@@ -454,7 +454,7 @@ fn post_media(nx_type: i64, down: bool) {
     });
 }
 
-/// Geste « balayage » précédent/suivant, comme SensibleSideButtons
+/// Geste "balayage" précédent/suivant, comme SensibleSideButtons
 /// (direction : 4 = gauche/précédent, 8 = droite/suivant).
 fn post_swipe(direction: u8) {
     // SAFETY: création, modification et libération d'objets CoreGraphics /
@@ -475,7 +475,7 @@ fn post_swipe(direction: u8) {
             let len = CFDataGetLength(data) as usize;
             let mut bytes = std::slice::from_raw_parts(CFDataGetBytePtr(data), len).to_vec();
             CFRelease(data);
-            // Champs ajoutés : sous-type « swipe », phase, et direction en fin de geste.
+            // Champs ajoutés : sous-type "swipe", phase, et direction en fin de geste.
             bytes.extend_from_slice(&[0x00, 0x01, 0x40, 0x6e, 0, 0, 0, 0x10]);
             bytes.extend_from_slice(&[0x00, 0x01, 0x40, 0x84, 0, 0, 0, phase]);
             if phase == 4 {
@@ -650,7 +650,7 @@ fn post_smooth_event(source: CGEventSourceRef, ev: smooth::Event, flags: u64, li
         CGEventSetFlags(e, flags);
         CGEventPost(TAP_SESSION, e);
         CFRelease(e);
-        // Le geste lui-même (événement « gesture » de sous-type défilement).
+        // Le geste lui-même (événement "gesture" de sous-type défilement).
         if phase != 0 {
             let g = CGEventCreate(null_mut());
             if g.is_null() {
@@ -739,7 +739,7 @@ impl MacEmulator {
         };
         if active != self.iso_active || log_always {
             log::info!(
-                "clavier du Mac : type {kbd_type} ({}) ; échange des touches ISO « ² » / « < » : {}",
+                "clavier du Mac : type {kbd_type} ({}) ; échange des touches ISO \"²\" / \"<\" : {}",
                 if iso { "ISO" } else { "ANSI/JIS" },
                 if active { "oui" } else { "non" }
             );
@@ -1329,7 +1329,7 @@ fn button_from_number(n: i64) -> Option<MouseButton> {
     }
 }
 
-/// Bit « par touche » d'un modificateur, pour savoir s'il est enfoncé.
+/// Bit "par touche" d'un modificateur, pour savoir s'il est enfoncé.
 fn modifier_device_bit(kc: u16) -> u64 {
     match kc {
         mac::SHIFT => DEV_LSHIFT,
@@ -1577,9 +1577,9 @@ fn forget_permissions(services: &[&str]) {
     }
     for service in services {
         match std::process::Command::new("/usr/bin/tccutil").args(["reset", service, BUNDLE_ID]).output() {
-            Ok(out) if out.status.success() => log::info!("autorisation macOS « {service} » remise à zéro"),
+            Ok(out) if out.status.success() => log::info!("autorisation macOS {service:?} remise à zéro"),
             Ok(out) => log::warn!(
-                "remise à zéro de l'autorisation « {service} » refusée : {}",
+                "remise à zéro de l'autorisation {service:?} refusée : {}",
                 String::from_utf8_lossy(&out.stderr).trim()
             ),
             Err(e) => log::warn!("tccutil introuvable : {e}"),
@@ -1594,7 +1594,7 @@ fn new_version_started() -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// Barre des menus
+// Icône et vérifications périodiques
 // ---------------------------------------------------------------------------
 
 struct MacUi {
@@ -1603,7 +1603,7 @@ struct MacUi {
     config_path: PathBuf,
     args: Args,
     permissions_ok: bool,
-    /// Autorisation « Accessibilité » au dernier contrôle.
+    /// Autorisation "Accessibilité" au dernier contrôle.
     ax_trusted: bool,
 }
 
@@ -1626,7 +1626,7 @@ impl tray::Backend for MacTray {
     }
 
     /// La même icône que sous Windows (voir `icon.rs`), en 36 pixels pour
-    /// 18 points (écrans Retina). En monochrome, c'est une image « modèle » :
+    /// 18 points (écrans Retina). En monochrome, c'est une image "modèle" :
     /// macOS la colore comme les autres icônes de la barre des menus.
     fn icon_style(&self) -> IconStyle {
         let mono = self.tray_icon == TrayIcon::Mono;
@@ -1754,7 +1754,7 @@ fn ui_value<R>(f: impl FnOnce(&MacUi) -> R) -> Option<R> {
 }
 
 fn ui_tick(_mtm: MainThreadMarker) {
-    // Redémarrage demandé par l'app de réglages.
+    // Redémarrage demandé par les réglages.
     if super::take_restart_request() {
         let args = ui_value(|u| u.args.clone()).unwrap_or_default();
         shutdown();
@@ -1764,12 +1764,12 @@ fn ui_tick(_mtm: MainThreadMarker) {
         Some(r) => r,
         None => return,
     };
-    // Autorisation « Accessibilité » accordée pendant que Baskul tourne :
+    // Autorisation "Accessibilité" accordée pendant que Baskul tourne :
     // macOS ne l'applique complètement qu'à un nouveau processus.
     // SAFETY: fonction sans précondition.
     let ax = unsafe { AXIsProcessTrusted() };
     if ax && !ui_value(|u| u.ax_trusted).unwrap_or(true) {
-        log::info!("autorisation « Accessibilité » accordée : redémarrage");
+        log::info!("autorisation \"Accessibilité\" accordée : redémarrage");
         let args = ui_value(|u| u.args.clone()).unwrap_or_default();
         shutdown();
         super::relaunch(&args);
@@ -1781,7 +1781,6 @@ fn ui_tick(_mtm: MainThreadMarker) {
             }
         }
     });
-    // Autorisations.
     let ok = match role {
         Role::Secondary => post_access(),
         Role::Primary => primary_permissions_ok(),
@@ -2109,7 +2108,7 @@ pub fn start(settings: Settings, config_path: PathBuf, args: Args) {
     let app = NSApplication::sharedApplication(mtm);
     // Pas d'icône dans le Dock : uniquement la barre des menus.
     app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
-    // Pas d'« App Nap » : sans fenêtre visible, macOS ralentirait sinon les
+    // Pas d'"App Nap" : sans fenêtre visible, macOS ralentirait sinon les
     // minuteries et les threads de Baskul (latence de la souris).
     let activity = NSProcessInfo::processInfo().beginActivityWithOptions_reason(
         NSActivityOptions::UserInitiatedAllowingIdleSystemSleep | NSActivityOptions::LatencyCritical,
@@ -2143,7 +2142,7 @@ pub fn start(settings: Settings, config_path: PathBuf, args: Args) {
         Role::Secondary => {
             permissions_ok = post_access();
             if !permissions_ok {
-                log::warn!("autorisation « Accessibilité » manquante : demande à macOS");
+                log::warn!("autorisation \"Accessibilité\" manquante : demande à macOS");
                 // SAFETY: affiche la demande d'autorisation du système.
                 unsafe { CGRequestPostEventAccess() };
                 status::set_warning(Some(i18n::t("status.needAccessibility")));

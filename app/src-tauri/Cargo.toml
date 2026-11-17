@@ -9,6 +9,9 @@ description = "Un clavier, une souris et un presse-papiers partagés entre plusi
 license.workspace = true
 publish = false
 
+[lints]
+workspace = true
+
 [[bin]]
 name = "baskul"
 path = "src/main.rs"

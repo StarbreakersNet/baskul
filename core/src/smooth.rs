@@ -1,9 +1,9 @@
 //! Défilement fluide (mode `smooth`), reproduisant l'algorithme de Mac Mouse
-//! Fix 3 (réglages « Vitesse » et « Douceur ») :
+//! Fix 3 (réglages "Vitesse" et "Douceur") :
 //!
 //! - la vitesse de rotation de la molette est mesurée : plus les crans sont
 //!   rapprochés, plus chacun fait défiler loin ;
-//! - plusieurs gestes rapides enchaînés accélèrent encore (« fast scroll ») ;
+//! - plusieurs gestes rapides enchaînés accélèrent encore ("fast scroll") ;
 //! - chaque cran lance une animation : vitesse constante pendant une durée de
 //!   base (plus courte quand la molette tourne vite), puis freinage jusqu'à
 //!   l'arrêt, comme un objet qui glisse ;
@@ -12,12 +12,12 @@
 //!
 //! Les constantes viennent de Mac Mouse Fix (ScrollConfig.swift,
 //! ScrollAnalyzer.m, Scroll.m, BezierCappedAccelerationCurve.swift) ; seule
-//! la courbe du « fast scroll » est une approximation. L'option « Précision »
+//! la courbe du "fast scroll" est une approximation. L'option "Précision"
 //! réduit à 10 pixels un cran isolé, en gardant l'accélération des crans
 //! rapprochés. Comme Mac Mouse Fix, on produit des défilements continus au
 //! pixel ; avec la simulation du trackpad (GestureScrollSimulator.m), la
 //! phase à vitesse constante devient un geste à deux doigts et le freinage
-//! l'élan qui suit (« momentum ») : les apps réagissent comme avec un
+//! l'élan qui suit ("momentum") : les apps réagissent comme avec un
 //! trackpad (rebond en bout de page, élan géré par l'app…).
 
 use std::time::{Duration, Instant};
@@ -93,7 +93,7 @@ impl Part {
     }
 }
 
-/// « Tape » à deux doigts : arrête l'élan que certaines apps (Xcode…)
+/// "Tape" à deux doigts : arrête l'élan que certaines apps (Xcode…)
 /// ajoutent d'elles-mêmes.
 const TAP: [Event; 2] = [
     Event::Gesture { v: 0, h: 0, phase: GesturePhase::MayBegin },
@@ -105,7 +105,7 @@ const TAP: [Event; 2] = [
 pub struct Options {
     pub speed: SmoothSpeed,
     pub smoothness: Smoothness,
-    /// Option « Précision » de Mac Mouse Fix.
+    /// Option "Précision" de Mac Mouse Fix.
     pub precise: bool,
     /// Simulation du trackpad : gestes et élan au lieu de défilements simples.
     pub trackpad: bool,

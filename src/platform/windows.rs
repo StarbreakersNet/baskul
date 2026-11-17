@@ -1,7 +1,7 @@
 //! Windows.
 //!
 //! - Machine principale : hooks bas niveau clavier/souris (`WH_KEYBOARD_LL`,
-//!   `WH_MOUSE_LL`) installés sur le thread de l'interface. Quand le curseur
+//!   `WH_MOUSE_LL`) installés sur le thread de Baskul. Quand le curseur
 //!   part sur une pilotée, il est recentré et caché derrière une petite
 //!   fenêtre transparente ; les événements sont alors supprimés localement et
 //!   envoyés à la pilotée.
@@ -134,8 +134,10 @@ fn monitors() -> Layout {
     unsafe extern "system" fn cb(hmon: HMONITOR, _hdc: HDC, _rc: *mut RECT, data: LPARAM) -> windows_sys::core::BOOL {
         // SAFETY: `data` pointe vers le Vec passé à EnumDisplayMonitors ci-dessous.
         let v = unsafe { &mut *(data as *mut Vec<Rect>) };
+        // SAFETY: structure de nombres, initialisable à zéro.
         let mut mi: MONITORINFO = unsafe { zeroed() };
         mi.cbSize = size_of::<MONITORINFO>() as u32;
+        // SAFETY: moniteur fourni par EnumDisplayMonitors, structure à la taille indiquée.
         if unsafe { GetMonitorInfoW(hmon, &mut mi) } != 0 {
             let r = mi.rcMonitor;
             v.push(Rect::new(r.left, r.top, r.right, r.bottom));
@@ -187,7 +189,7 @@ pub fn early_init(args: &Args) {
         // le facteur d'échelle.
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         // Réactivité : priorité un peu au-dessus de la normale, et pas de
-        // ralentissement « économie d'énergie » de Windows 11 pour ce
+        // ralentissement "économie d'énergie" de Windows 11 pour ce
         // processus sans fenêtre visible.
         SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
         let state = PROCESS_POWER_THROTTLING_STATE {
@@ -998,7 +1000,7 @@ fn mouse_input_tagged(dx: i32, dy: i32, data: i32, flags: u32, extra: usize) {
 
 /// L'utilisateur est actif sur l'autre machine : l'écran reste allumé et
 /// Windows ne compte pas d'inactivité (économiseur, verrouillage
-/// automatique, statut « absent » de Teams, Discord…).
+/// automatique, statut "absent" de Teams, Discord…).
 fn keep_active() {
     // SAFETY: appel sans précondition.
     unsafe { SetThreadExecutionState(ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED) };
@@ -1147,7 +1149,7 @@ impl Emulator for WinEmulator {
 }
 
 // ---------------------------------------------------------------------------
-// Icône de notification et menu
+// Icône
 // ---------------------------------------------------------------------------
 
 struct Ui {
@@ -1335,7 +1337,7 @@ fn handle_action(action: Action) {
 /// Remet le système dans un état propre avant de quitter.
 fn shutdown() {
     with_primary(|s| s.core.reset(&mut s.host));
-    // Le message « tout relâcher » part avant la fermeture.
+    // Le message "tout relâcher" part avant la fermeture.
     std::thread::sleep(Duration::from_millis(150));
     // SAFETY: restauration de l'état du curseur.
     unsafe {
@@ -1738,7 +1740,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
         if hwnd.is_null() || hider.is_null() {
             fatal("impossible de créer les fenêtres de Baskul");
         }
-        // Presque transparente (une opacité nulle la rendrait « traversable »).
+        // Presque transparente (une opacité nulle la rendrait "traversable").
         SetLayeredWindowAttributes(hider, 0, 1, LWA_ALPHA);
         WTSRegisterSessionNotification(hwnd, NOTIFY_FOR_THIS_SESSION);
         (hwnd, hider)

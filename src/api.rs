@@ -6,7 +6,7 @@
 //! Un petit serveur HTTP écoute sur 127.0.0.1 (port aléatoire). Son port et un
 //! jeton aléatoire sont écrits dans `api.json`, à côté du fichier de
 //! configuration, lisible par l'utilisateur seulement. Chaque requête doit
-//! présenter ce jeton, et l'en-tête `Host` est vérifié (contre le « DNS
+//! présenter ce jeton, et l'en-tête `Host` est vérifié (contre le "DNS
 //! rebinding ») : une page web ne peut ni lire ni modifier la configuration.
 
 use crate::config::{self, Config};
@@ -30,7 +30,7 @@ struct Server {
     path: PathBuf,
     port: u16,
     token: String,
-    /// Démarrage de ce processus (ms) : l'app de réglages voit ainsi qu'un
+    /// Démarrage de ce processus (ms) : la fenêtre de réglages voit ainsi qu'un
     /// redémarrage a eu lieu.
     started: u64,
 }
@@ -369,7 +369,7 @@ fn switch(body: &[u8]) -> Response {
     }
     if let (SwitchTo::Client(name), Role::Primary) = (&target, role) {
         if !s.peers.iter().any(|p| &p.name == name) {
-            return Response::error(409, &format!("« {name} » n'est pas connectée"));
+            return Response::error(409, &format!("{name:?} n'est pas connectée"));
         }
     }
     match handler(target) {
@@ -396,7 +396,7 @@ fn switch_target(to: &str, role: Role, remote_active: bool) -> Option<SwitchTo> 
 }
 
 /// Cartes réseau de la machine et machines principales trouvées sur le
-/// réseau, pour l'app de réglages.
+/// réseau, pour la fenêtre de réglages.
 fn network_info() -> Value {
     json!({
         "interfaces": crate::iface::list(),
@@ -466,7 +466,7 @@ fn status_info(server: &Server) -> Value {
     })
 }
 
-/// Fin du journal (environ 64 Kio), pour l'app de réglages.
+/// Fin du journal (environ 64 Kio), pour la fenêtre de réglages.
 fn log_tail() -> Value {
     let Some(path) = crate::logging::log_path() else {
         return json!({ "path": null, "text": "" });
@@ -492,7 +492,7 @@ fn read_tail(path: &Path, max: u64) -> std::io::Result<String> {
     })
 }
 
-/// Configuration actuelle et informations utiles à l'app de réglages.
+/// Configuration actuelle et informations utiles à la fenêtre de réglages.
 fn config_info(path: &Path) -> Value {
     let (config, error) = match config::load_or_create(path) {
         Ok((cfg, _)) => (serde_json::to_value(&cfg).unwrap_or(Value::Null), Value::Null),

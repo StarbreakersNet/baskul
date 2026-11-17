@@ -25,7 +25,7 @@ pub enum Action {
     OpenFolder,
     /// Lancement à l'ouverture de session.
     ToggleLogin,
-    /// macOS : autorisation « Accessibilité ».
+    /// macOS : autorisation "Accessibilité".
     AllowAccessibility,
     InstallUpdate,
     Restart,
@@ -75,7 +75,7 @@ impl Action {
 pub struct Image {
     pub rgba: Vec<u8>,
     pub size: u32,
-    /// macOS : image « modèle », colorée par le système comme les autres
+    /// macOS : image "modèle", colorée par le système comme les autres
     /// icônes de la barre des menus.
     pub template: bool,
 }
@@ -118,7 +118,7 @@ pub trait Backend: Send + Sync {
     fn icon_style(&self) -> IconStyle;
     /// Libellé et état du lancement à l'ouverture de session, s'il existe.
     fn login_item(&self) -> Option<(String, bool)>;
-    /// macOS : autorisation « Accessibilité » manquante.
+    /// macOS : autorisation "Accessibilité" manquante.
     fn needs_accessibility(&self) -> bool {
         false
     }

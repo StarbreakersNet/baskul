@@ -1,5 +1,5 @@
 //! État partagé affiché par l'icône (barre des tâches / barre des menus), le
-//! menu et l'app de réglages.
+//! menu et la fenêtre de réglages.
 
 use std::sync::Mutex;
 
@@ -63,8 +63,6 @@ impl Snapshot {
 
 struct State {
     snap: Snapshot,
-    /// État hors connexion (attente, erreur), affiché quand plus aucune
-    /// machine n'est connectée.
     idle: Conn,
 }
 
@@ -108,7 +106,6 @@ pub fn set_conn(c: Conn) {
     update(|s| s.idle = c);
 }
 
-/// Une autre machine vient de se connecter.
 pub fn add_peer(name: &str, os: &str) {
     let since = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
     update(|s| {
@@ -117,7 +114,6 @@ pub fn add_peer(name: &str, os: &str) {
     });
 }
 
-/// Une autre machine s'est déconnectée.
 pub fn remove_peer(name: &str) {
     update(|s| s.snap.peers.retain(|p| p.name != name));
 }
@@ -126,7 +122,6 @@ pub fn set_remote_active(active: bool) {
     update(|s| s.snap.remote_active = active);
 }
 
-/// Machine principale : pilotée où agissent le clavier et la souris.
 pub fn set_active_peer(name: Option<&str>) {
     update(|s| {
         s.snap.remote_active = name.is_some();
@@ -146,7 +141,6 @@ pub fn snapshot() -> Snapshot {
     STATE.lock().unwrap_or_else(|e| e.into_inner()).snap.clone()
 }
 
-/// Ajoute une fonction appelée à chaque changement.
 pub fn on_change(f: impl Fn() + Send + Sync + 'static) {
     LISTENERS.lock().unwrap_or_else(|e| e.into_inner()).push(Box::new(f));
 }

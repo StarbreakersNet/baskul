@@ -1,4 +1,4 @@
-//! Raccourcis clavier de Baskul (ex. « Ctrl+Alt+Shift+B »).
+//! Raccourcis clavier de Baskul (ex. "Ctrl+Alt+Shift+B").
 
 use crate::keymap::{self, *};
 use std::collections::HashSet;
@@ -13,7 +13,7 @@ pub struct Hotkey {
 }
 
 impl Hotkey {
-    /// Analyse une chaîne comme « Ctrl+Alt+Shift+B ». Chaîne vide → `Ok(None)`.
+    /// Analyse une chaîne comme "Ctrl+Alt+Shift+B". Chaîne vide → `Ok(None)`.
     pub fn parse(s: &str) -> Result<Option<Hotkey>, String> {
         let s = s.trim();
         if s.is_empty() {
@@ -30,20 +30,18 @@ impl Hotkey {
                     "shift" | "maj" => hk.shift = true,
                     "alt" | "option" | "opt" => hk.alt = true,
                     "win" | "cmd" | "command" | "meta" | "super" => hk.meta = true,
-                    _ => return Err(format!("modificateur inconnu « {part} » dans « {s} »")),
+                    _ => return Err(format!("modificateur inconnu {part:?} dans {s:?}")),
                 }
             } else {
-                hk.key =
-                    keymap::hid_from_name(part).ok_or_else(|| format!("touche inconnue « {part} » dans « {s} »"))?;
+                hk.key = keymap::hid_from_name(part).ok_or_else(|| format!("touche inconnue {part:?} dans {s:?}"))?;
                 if keymap::is_modifier(hk.key) {
-                    return Err(format!("« {s} » : la dernière touche ne peut pas être un modificateur"));
+                    return Err(format!("{s:?} : la dernière touche ne peut pas être un modificateur"));
                 }
             }
         }
         Ok(Some(hk))
     }
 
-    /// Combinaison formée par la touche `key` et les modificateurs enfoncés.
     pub fn from_pressed(key: u32, pressed: &HashSet<u32>) -> Hotkey {
         let held = |a: u32, b: u32| pressed.contains(&a) || pressed.contains(&b);
         Hotkey {
@@ -69,7 +67,7 @@ impl Hotkey {
     }
 }
 
-/// Format de la configuration : « Ctrl+Alt+Shift+B ».
+/// Format de la configuration : "Ctrl+Alt+Shift+B".
 impl std::fmt::Display for Hotkey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let meta = if cfg!(target_os = "macos") { "Cmd" } else { "Win" };
@@ -78,7 +76,7 @@ impl std::fmt::Display for Hotkey {
                 write!(f, "{name}+")?;
             }
         }
-        // « KeyB » → « B », « Digit1 » → « 1 ».
+        // "KeyB" → "B", "Digit1" → "1".
         let name = keymap::name_from_hid(self.key);
         let short = name.strip_prefix("Key").or_else(|| name.strip_prefix("Digit")).filter(|s| s.len() == 1);
         f.write_str(short.unwrap_or(&name))

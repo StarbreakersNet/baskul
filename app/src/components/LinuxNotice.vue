@@ -1,14 +1,19 @@
 <script setup lang="ts">
-// Rappel : la version Linux ne partage pas le clavier et la souris.
 import { inject } from "vue";
-import { NAlert } from "naive-ui";
-import { osKey } from "../keys";
+import HAlert from "@/components/c/hAlert.vue";
+import { OS_KEY } from "@/utils/injectionKeys";
 
-const os = inject(osKey);
+const os = inject(OS_KEY);
 </script>
 
 <template>
-  <n-alert v-if="os === 'linux'" type="info" :bordered="false" style="margin: 8px 0 4px">
+  <h-alert v-if="os === 'linux'" :bordered="false" class="linux-notice" type="info">
     {{ $t("settings.linuxNotice") }}
-  </n-alert>
+  </h-alert>
 </template>
+
+<style lang="scss" scoped>
+.linux-notice {
+  margin: 8px 0 4px;
+}
+</style>

@@ -106,7 +106,7 @@ pub fn init(path: PathBuf, level: log::LevelFilter, to_stderr: bool) {
     std::panic::set_hook(Box::new(|info| {
         let thread = std::thread::current();
         let name = thread.name().unwrap_or("?");
-        log::error!("ERREUR FATALE (panic) dans le thread « {name} » : {info}");
+        log::error!("ERREUR FATALE (panic) dans le thread {name:?} : {info}");
         flush();
     }));
 }
