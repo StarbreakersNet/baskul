@@ -22,12 +22,13 @@ Les règles marquées **`lint`** sont vérifiées automatiquement : par `yarn li
 | `yarn format` (dans `app/`) | Prettier sur `src/` : indentation, guillemets, retours à la ligne |
 | `yarn lint` (dans `app/`) | oxlint et ESLint, avec correction automatique de ce qui peut l'être, puis les noms de fichiers |
 | `yarn type-check` (dans `app/`) | `vue-tsc` sur tout le front |
+| `yarn test` (dans `app/`) | Tests du front (`app/tests/`) : `utils/`, cohérence des traductions |
 | `cargo fmt --all` | Mise en forme du Rust (`rustfmt.toml`) |
 | `cargo clippy -p baskul-core -p baskul-desktop --all-targets -- -D warnings` | Lint du Rust |
 | `cargo test -p baskul-core -p baskul-desktop` | Tests, dont des tests de bout en bout sur de vraies connexions |
 | `./scripts/xcheck.sh` | Vérification du code Windows et macOS depuis Linux |
 
-**Avant d'ouvrir une PR** : ces commandes, sans nouvelle erreur ni nouvel avertissement dans les fichiers touchés. La CI refait ces vérifications, et toute erreur la fait échouer.
+**Avant d'ouvrir une PR** : ces commandes, sans nouvelle erreur ni nouvel avertissement dans les fichiers touchés. La CI (workflow `checks`) refait ces vérifications à chaque PR, et toute erreur la fait échouer.
 
 La mise en forme ne se discute pas en relecture : Prettier (`app/.prettierrc.yaml` : 2 espaces, guillemets doubles, points-virgules, 100 colonnes) et `rustfmt` décident. Dans l'IDE :
 

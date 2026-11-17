@@ -41,7 +41,15 @@ Une fois installé, Baskul se met à jour tout seul (voir [Mises à jour](#5-mis
      ```
 2. À la fin, la **Release** contient les trois archives et `SHA256SUMS`.
 
-Pour compiler sans publier : onglet **Actions** → **build** → **Run workflow**. Les programmes sont alors dans les *artifacts*, en bas de la page de l'exécution. Le workflow **release** réutilise ce workflow **build** (tests puis compilation), puis publie.
+Pour compiler sans publier (**build de test**) : onglet **Actions** → **build** → **Run workflow**. Les programmes sont alors dans les *artifacts*, en bas de la page de l'exécution. Par défaut, c'est un build rapide :
+
+| Option | Par défaut | Effet |
+|---|---|---|
+| Systèmes à compiler | tous | Un seul système va plus vite : `windows`, `macos` ou `linux` |
+| macOS universel | non | Apple Silicon seulement ; universel (Intel en plus) prend deux fois plus de temps |
+| Optimisations complètes | non | Sans LTO, le programme se compile plusieurs fois plus vite, pour à peine moins de performances |
+
+Les vérifications (workflow **checks** : format, lint, tests, types) tournent en parallèle de la compilation, et aussi à chaque PR. Le workflow **release** réutilise **build** avec les réglages d'une version publiée (trois systèmes, macOS universel, optimisations complètes, tests sur chaque système), puis publie. Les compilations gardent un cache (Rust, Yarn, paquets Linux) d'une exécution à l'autre.
 
 #### Certificat de signature macOS
 
@@ -338,6 +346,7 @@ yarn tauri dev           # Baskul complet, fenêtre de réglages avec rechargeme
 yarn format              # Prettier
 yarn lint                # oxlint, ESLint et noms de fichiers
 yarn type-check          # vue-tsc
+yarn test                # tests (utils, traductions)
 ```
 
 Le code suit les conventions de [`AGENTS.md`](AGENTS.md) et de [`docs/conventions/`](docs/conventions/README.md) (les mêmes que le site des Starbreakers) : wrappers `h-*` autour de Naive UI, stores Pinia seuls à appeler Baskul, props typées, commentaires réduits à l'indispensable. La CI vérifie le format, le lint et les types.
