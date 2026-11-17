@@ -1,10 +1,12 @@
 /target
 /dist
 
-# Système et éditeurs
+# Système
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Éditeurs
 .idea/
 .vscode/
 
