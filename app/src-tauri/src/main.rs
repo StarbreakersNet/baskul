@@ -21,6 +21,8 @@ use baskul_desktop::{activity, api, i18n, platform};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, MutexGuard};
+use std::time::Duration;
 use tauri::{AppHandle, Manager, RunEvent, WebviewWindowBuilder, WindowEvent};
 
 /// Libellé de la fenêtre de réglages (voir tauri.conf.json).
@@ -180,14 +182,34 @@ fn show_settings(app: &AppHandle, welcome: bool) {
     }
 }
 
-/// Notification du système pour les connexions et déconnexions. Hors du thread
-/// qui produit l'événement (réseau, crochets).
+static NOTICES: Mutex<activity::Notices> = Mutex::new(activity::Notices::new());
+
+fn notices() -> MutexGuard<'static, activity::Notices> {
+    NOTICES.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Notification du système pour les connexions et déconnexions (voir [`activity::Notices`]).
 fn notify(app: &AppHandle, kind: &activity::Kind) {
-    let body = match kind {
-        activity::Kind::Connected { peer } => i18n::tf("notify.connected", &[("peer", peer)]),
-        activity::Kind::Disconnected { peer } => i18n::tf("notify.disconnected", &[("peer", peer)]),
-        _ => return,
-    };
+    match kind {
+        activity::Kind::Connected { peer } if notices().connected(peer) => {
+            show_notification(app, i18n::tf("notify.connected", &[("peer", peer)]));
+        }
+        activity::Kind::Disconnected { peer } => {
+            let ticket = notices().disconnected(peer);
+            let (app, peer) = (app.clone(), peer.clone());
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(activity::FLAP_MS));
+                if notices().confirm(&peer, ticket) {
+                    show_notification(&app, i18n::tf("notify.disconnected", &[("peer", &peer)]));
+                }
+            });
+        }
+        _ => {}
+    }
+}
+
+/// Hors du thread qui produit l'événement (réseau, crochets).
+fn show_notification(app: &AppHandle, body: String) {
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         use tauri_plugin_notification::NotificationExt;
