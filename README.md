@@ -351,7 +351,7 @@ yarn type-check          # vue-tsc
 yarn test                # tests (utils, traductions)
 ```
 
-Le code suit les conventions de [`AGENTS.md`](AGENTS.md) et de [`docs/conventions/`](docs/conventions/README.md) (les mêmes que le site des Starbreakers) : wrappers `h-*` autour de Naive UI, stores Pinia seuls à appeler Baskul, props typées, commentaires réduits à l'indispensable. La CI vérifie le format, le lint et les types.
+Le code suit les conventions de [`AGENTS.md`](AGENTS.md) et de [`docs/conventions/`](docs/conventions/README.md) (les mêmes que le site des Starbreakers) : wrappers `h-*` autour de Naive UI, stores Pinia seuls à appeler Baskul, props typées, commentaires réduits à l'indispensable. La CI vérifie le format, le lint, les types et les tests, ainsi que les messages de commit : [Conventional Commits](docs/conventions/commits.md) (`feat(front): …`, `fix(windows): …`).
 
 - `src/types/Config.ts` reprend la configuration de `core/src/config.rs`. Pour un nouveau réglage : `config.rs` (structure, modèle commenté, validation), puis `types/Config.ts` et la section concernée dans `src/components/settings/`.
 - Les stores (`src/stores/`) tiennent l'état et parlent à Baskul : `status` (état en direct, redémarrage), `activity` (activité récente, déduite de l'état), `settings` (chargement, enregistrement), `update`, `log`, `network`, `hotkeyCapture`.

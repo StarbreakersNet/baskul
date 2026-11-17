@@ -14,6 +14,7 @@ Les règles marquées **`lint`** sont vérifiées automatiquement : par `yarn li
 - [Wrappers `components/c/`](wrappers.md)
 - [Styles](styles.md)
 - [Organisation du front](organisation.md) : dossiers de `app/src/`, stores, composables et `utils/`
+- [Commits et PR](commits.md) : Conventional Commits
 
 ## Outils
 
@@ -27,6 +28,7 @@ Les règles marquées **`lint`** sont vérifiées automatiquement : par `yarn li
 | `cargo clippy -p baskul-core -p baskul-desktop --all-targets -- -D warnings` | Lint du Rust |
 | `cargo test -p baskul-core -p baskul-desktop` | Tests, dont des tests de bout en bout sur de vraies connexions |
 | `./scripts/xcheck.sh` | Vérification du code Windows et macOS depuis Linux |
+| `node scripts/check-commits.mjs origin/main HEAD` | Messages des commits de la branche (Conventional Commits) |
 
 **Avant d'ouvrir une PR** : ces commandes, sans nouvelle erreur ni nouvel avertissement dans les fichiers touchés. La CI (workflow `checks`) refait ces vérifications à chaque PR, et toute erreur la fait échouer.
 
