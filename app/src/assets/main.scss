@@ -1,0 +1,30 @@
+@use "@/assets/variables";
+
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page-body {
+  max-width: variables.$page-max-width;
+  margin: 0 auto;
+}
+
+.mono,
+.mono input,
+code {
+  font-family: variables.$font-mono;
+}
+
+.break-all {
+  word-break: break-all;
+}
+
+.small-text {
+  font-size: variables.$font-size-help;
+}
+
+.help-text {
+  margin-top: 2px;
+  font-size: variables.$font-size-help;
+}

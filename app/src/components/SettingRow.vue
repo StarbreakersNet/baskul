@@ -1,59 +1,80 @@
 <script setup lang="ts">
-// Une ligne de réglage : libellé et aide à gauche, contrôle à droite (une
-// seule colonne quand la place manque).
-// `machine` : la ligne n'apparaît que pour ce rôle.
-// `os` : réglage propre à un système ; ailleurs, la ligne est grisée.
 import { computed, inject } from "vue";
-import { NFlex, NGi, NGrid, NTag, NText, useThemeVars } from "naive-ui";
-import { osKey, roleKey } from "../keys";
-import type { Role } from "../types";
-import { osLabel } from "../utils";
+import { useThemeVars } from "naive-ui";
+import HFlex from "@/components/c/hFlex.vue";
+import HGrid from "@/components/c/hGrid.vue";
+import HGridItem from "@/components/c/hGridItem.vue";
+import HTag from "@/components/c/hTag.vue";
+import HText from "@/components/c/hText.vue";
+import { OS_KEY, ROLE_KEY } from "@/utils/injectionKeys";
+import { osLabel } from "@/utils/os";
+import type { Role } from "@/types/Config";
 
-const props = defineProps<{ label: string; help?: string; machine?: Role; os?: string; disabled?: boolean }>();
-const role = inject(roleKey);
-const currentOs = inject(osKey);
-const shown = computed(() => !props.machine || role?.value === props.machine);
-const otherOs = computed(() => !!props.os && currentOs?.value !== props.os);
-const vars = useThemeVars();
-const divider = computed(() => vars.value.dividerColor);
+const {
+  label,
+  help,
+  machine,
+  os,
+  disabled = false,
+} = defineProps<{
+  label: string;
+  help?: string;
+  /** La ligne n'apparaît que pour ce rôle */
+  machine?: Role;
+  /** Réglage propre à ce système : grisé sur les autres */
+  os?: string;
+  disabled?: boolean;
+}>();
+
+defineSlots<{
+  default(): unknown;
+  help?(): unknown;
+}>();
+
+const role = inject(ROLE_KEY);
+const currentOs = inject(OS_KEY);
+const themeVars = useThemeVars();
+
+const isShown = computed(() => !machine || role?.value === machine);
+const isOtherOs = computed(() => !!os && currentOs?.value !== os);
+const osName = computed(() => osLabel(os ?? ""));
+const dividerColor = computed(() => themeVars.value.dividerColor);
 </script>
 
 <template>
-  <div v-if="shown" class="setting" :class="{ off: disabled || otherOs }">
-    <n-grid cols="1 560:2" responsive="self" :x-gap="24" :y-gap="8" item-style="align-self: center">
-      <n-gi>
-        <n-flex align="center" :size="8">
-          <n-text strong>{{ label }}</n-text>
-          <n-tag v-if="os" size="small" :bordered="false" :type="otherOs ? 'default' : 'info'">
-            {{ otherOs ? $t("common.osOnly", { os: osLabel(os) }) : osLabel(os) }}
-          </n-tag>
-        </n-flex>
-        <n-text v-if="help || $slots.help" depth="3" tag="div" class="help">
+  <div v-if="isShown" :class="['setting-row', { 'setting-row--off': disabled || isOtherOs }]">
+    <h-grid cols="1 560:2" item-style="align-self: center" responsive="self" :x-gap="24" :y-gap="8">
+      <h-grid-item>
+        <h-flex align="center" :size="8">
+          <h-text strong>{{ label }}</h-text>
+          <h-tag v-if="os" :bordered="false" size="small" :type="isOtherOs ? 'default' : 'info'">
+            {{ isOtherOs ? $t("common.osOnly", { os: osName }) : osName }}
+          </h-tag>
+        </h-flex>
+        <h-text v-if="help || $slots.help" class="help-text" depth="3" tag="div">
           <slot name="help">{{ help }}</slot>
-        </n-text>
-      </n-gi>
-      <n-gi>
-        <n-flex align="center" :size="8" :inert="otherOs || undefined">
+        </h-text>
+      </h-grid-item>
+      <h-grid-item>
+        <h-flex align="center" :inert="isOtherOs || undefined" :size="8">
           <slot />
-        </n-flex>
-      </n-gi>
-    </n-grid>
+        </h-flex>
+      </h-grid-item>
+    </h-grid>
   </div>
 </template>
 
-<style scoped>
-.setting {
+<style lang="scss" scoped>
+.setting-row {
   padding: 12px 0;
   transition: opacity 0.15s;
+
+  & + & {
+    border-top: 1px solid v-bind(dividerColor);
+  }
 }
-.setting + .setting {
-  border-top: 1px solid v-bind(divider);
-}
-.setting.off {
+
+.setting-row--off {
   opacity: 0.45;
-}
-.help {
-  margin-top: 2px;
-  font-size: 13px;
 }
 </style>

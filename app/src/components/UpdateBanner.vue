@@ -1,23 +1,39 @@
 <script setup lang="ts">
-// Nouvelle version téléchargée : un redémarrage l'installe.
-import { NAlert, NButton, NFlex, NText } from "naive-ui";
-import { useUpdate } from "../composables/useUpdate";
+import { computed } from "vue";
+import HAlert from "@/components/c/hAlert.vue";
+import HButton from "@/components/c/hButton.vue";
+import HFlex from "@/components/c/hFlex.vue";
+import HText from "@/components/c/hText.vue";
+import { useUpdateInstall } from "@/composables/useUpdateInstall";
+import { useUpdateStore } from "@/stores/update";
 
-const { info, install } = useUpdate();
+const update = useUpdateStore();
+const { install } = useUpdateInstall();
+
+const readyVersion = computed(() => {
+  const info = update.info;
+  return info?.state === "ready" || info?.state === "installing" ? info.version : null;
+});
+const isInstalling = computed(() => update.info?.state === "installing");
 </script>
 
 <template>
-  <n-alert
-    v-if="info && (info.state === 'ready' || info.state === 'installing')"
-    type="success"
-    :title="$t('update.readyTitle', { version: info.version })"
-    style="margin-bottom: 16px"
-  >
-    <n-flex align="center" justify="space-between" :size="12">
-      <n-text>{{ $t("update.readyText") }}</n-text>
-      <n-button type="primary" size="small" :loading="info.state === 'installing'" @click="install">
+  <h-alert
+    v-if="readyVersion"
+    class="update-banner"
+    :title="$t('update.readyTitle', { version: readyVersion })"
+    type="success">
+    <h-flex align="center" justify="space-between" :size="12">
+      <h-text>{{ $t("update.readyText") }}</h-text>
+      <h-button :loading="isInstalling" size="small" type="primary" @click="install()">
         {{ $t("update.restart") }}
-      </n-button>
-    </n-flex>
-  </n-alert>
+      </h-button>
+    </h-flex>
+  </h-alert>
 </template>
+
+<style lang="scss" scoped>
+.update-banner {
+  margin-bottom: 16px;
+}
+</style>
