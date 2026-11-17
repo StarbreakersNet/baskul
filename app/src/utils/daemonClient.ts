@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { ActivityEvent } from "@/types/Activity";
 import type { BaskulConfig } from "@/types/Config";
 import type { CommandError, DaemonInfo, DaemonStatus, LogTail } from "@/types/Daemon";
 import type { CaptureState } from "@/types/Hotkey";
@@ -17,6 +18,8 @@ export const daemonClient = {
   openConfigFile: () => invoke("open_config_file"),
   readLog: () => invoke<LogTail>("read_log"),
   openLogFile: () => invoke("open_log_file"),
+  readActivity: () => invoke<{ events: ActivityEvent[] }>("read_activity"),
+  clearActivity: () => invoke("clear_activity"),
   startCapture: () => invoke("capture_hotkey", { action: "start" }),
   pollCapture: () => invoke<CaptureState>("capture_hotkey", { action: "poll" }),
   cancelCapture: () => invoke("capture_hotkey", { action: "cancel" }),

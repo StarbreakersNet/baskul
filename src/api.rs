@@ -305,6 +305,11 @@ fn dispatch(method: &str, path: &str, body: &[u8], server: &Server) -> Response 
             Response::json(200, json!({}))
         }
         ("GET", "/api/log") => Response::json(200, log_tail()),
+        ("GET", "/api/activity") => Response::json(200, json!({ "events": crate::activity::list() })),
+        ("DELETE", "/api/activity") => {
+            crate::history::clear();
+            Response::json(200, json!({}))
+        }
         ("POST", "/api/open-log") => match crate::logging::log_path() {
             Some(p) => {
                 crate::platform::open_in_editor(&p);
@@ -342,6 +347,7 @@ fn dispatch(method: &str, path: &str, body: &[u8], server: &Server) -> Response 
             | "/api/network"
             | "/api/open-file"
             | "/api/log"
+            | "/api/activity"
             | "/api/open-log"
             | "/api/update"
             | "/api/update/check"
@@ -462,6 +468,7 @@ fn status_info(server: &Server) -> Value {
         }),
         "version": crate::VERSION,
         "started": server.started,
+        "activity": crate::activity::last_id(),
         "update": crate::update::info(),
     })
 }

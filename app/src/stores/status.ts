@@ -38,7 +38,7 @@ export const useStatusStore = defineStore("status", () => {
     try {
       const current = await daemonClient.status();
       status.value = current;
-      useActivityStore().observe(current);
+      void useActivityStore().sync(current.activity);
       await reloadSettingsIfNeeded(current);
     } catch (error) {
       handleOffline(error);

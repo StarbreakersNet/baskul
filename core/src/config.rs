@@ -368,6 +368,9 @@ pub struct UiCfg {
     /// Bulle d'arrivée : le nom de la machine s'affiche un instant près du
     /// curseur quand le clavier et la souris arrivent sur elle.
     pub arrival_bubble: bool,
+    /// Notification du système quand une autre machine se connecte ou se
+    /// déconnecte.
+    pub notifications: bool,
 }
 
 impl Default for UiCfg {
@@ -377,6 +380,7 @@ impl Default for UiCfg {
             language: Language::default(),
             tray_icon: TrayIcon::default(),
             arrival_bubble: true,
+            notifications: true,
         }
     }
 }
@@ -1032,11 +1036,14 @@ tray_icon = "color"
 # Bulle d'arrivée : le nom de la machine s'affiche un instant près du curseur
 # quand le clavier et la souris arrivent sur elle.
 arrival_bubble = true
+# Notification du système quand une autre machine se connecte ou se
+# déconnecte.
+notifications = true
 
 [updates]
 # Recherche les nouvelles versions de Baskul (au démarrage puis toutes les six
 # heures) et les télécharge en arrière-plan ; "Redémarrer pour mettre à
-# jour » (menu de l'icône ou app de réglages) les installe.
+# jour" (menu de l'icône ou app de réglages) les installe.
 check = true
 
 [log]

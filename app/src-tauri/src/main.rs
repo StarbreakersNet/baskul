@@ -17,7 +17,7 @@
 
 mod tray;
 
-use baskul_desktop::{api, platform};
+use baskul_desktop::{activity, api, i18n, platform};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -82,6 +82,17 @@ async fn open_config_file() -> Result<Value, Error> {
 #[tauri::command]
 async fn read_log() -> Result<Value, Error> {
     call("GET", "/api/log", None).await
+}
+
+/// Activité récente, de la plus ancienne à la plus récente.
+#[tauri::command]
+async fn read_activity() -> Result<Value, Error> {
+    call("GET", "/api/activity", None).await
+}
+
+#[tauri::command]
+async fn clear_activity() -> Result<Value, Error> {
+    call("DELETE", "/api/activity", None).await
 }
 
 #[tauri::command]
@@ -169,15 +180,38 @@ fn show_settings(app: &AppHandle, welcome: bool) {
     }
 }
 
+/// Notification du système pour les connexions et déconnexions. Hors du thread
+/// qui produit l'événement (réseau, crochets).
+fn notify(app: &AppHandle, event: &activity::Event) {
+    let body = match &event.kind {
+        activity::Kind::Connected { peer } => i18n::tf("notify.connected", &[("peer", peer)]),
+        activity::Kind::Disconnected { peer } => i18n::tf("notify.disconnected", &[("peer", peer)]),
+        _ => return,
+    };
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri_plugin_notification::NotificationExt;
+        if let Err(e) = app.notification().builder().title("Baskul").body(body).show() {
+            log::warn!("notification impossible : {e}");
+        }
+    });
+}
+
 fn main() {
     let prepared = baskul_desktop::prepare();
     CONFIG_ERROR.store(prepared.config_error(), Ordering::Release);
+    let notifications = prepared.notifications();
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(move |app| {
             let handle = app.handle().clone();
             platform::set_settings_opener(move |welcome| show_settings(&handle, welcome));
+            if notifications {
+                let handle = app.handle().clone();
+                activity::on_event(move |event| notify(&handle, event));
+            }
             baskul_desktop::start(prepared);
             tray::install(app.handle());
             Ok(())
@@ -195,6 +229,8 @@ fn main() {
             open_config_file,
             read_log,
             open_log_file,
+            read_activity,
+            clear_activity,
             capture_hotkey,
             network_info,
             switch_to,

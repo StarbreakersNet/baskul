@@ -29,9 +29,10 @@ import HTimelineItem from "@/components/c/hTimelineItem.vue";
 import { useCopy } from "@/composables/useCopy";
 import { useCurrentTime } from "@/composables/useCurrentTime";
 import { useLoader } from "@/composables/useLoader";
-import { useActivityStore, type ActivityType } from "@/stores/activity";
+import { useActivityStore } from "@/stores/activity";
 import { useSettingsStore } from "@/stores/settings";
 import { useStatusStore } from "@/stores/status";
+import { describeActivity } from "@/utils/activity";
 import { formatHotkey, hotkeyParts } from "@/utils/hotkey";
 import { osIcon, osLabel } from "@/utils/os";
 import { capitalize } from "@/utils/text";
@@ -57,15 +58,6 @@ interface MachineEntry {
 }
 
 const CLOCK_MS = 15_000;
-const ACTIVITY_COLORS: Record<ActivityType, "success" | "warning" | "info" | "default" | "error"> =
-  {
-    connection: "success",
-    disconnection: "warning",
-    switch: "info",
-    lock: "default",
-    restart: "info",
-    warning: "error",
-  };
 
 const settings = useSettingsStore();
 const statusStore = useStatusStore();
@@ -79,6 +71,10 @@ const now = useCurrentTime(CLOCK_MS);
 const switching = useLoader();
 const switchingTarget = ref("");
 const showSecret = ref(false);
+
+const activityItems = computed(() =>
+  activity.events.map(event => ({ ...event, label: describeActivity(event) }))
+);
 
 const status = computed(() => statusStore.status);
 const config = computed(() => settings.config);
@@ -409,15 +405,17 @@ function openLog() {
             </h-button>
           </template>
           <h-timeline v-if="activity.events.length" class="home-activity">
-            <h-timeline-item
-              v-for="event in activity.events"
-              :key="event.id"
-              :type="ACTIVITY_COLORS[event.type]">
-              <template #header>{{ $t(`home.${event.key}`, event.params ?? {}) }}</template>
-              <template #footer>
-                <h-time :time="event.at" :to="Math.max(now, event.at)" type="relative" />
-              </template>
-            </h-timeline-item>
+            <transition-group name="home-event">
+              <h-timeline-item
+                v-for="item in activityItems"
+                :key="item.id"
+                :type="item.label.color">
+                <template #header>{{ $t(`home.${item.label.key}`, item.label.params) }}</template>
+                <template #footer>
+                  <h-time :time="item.at" :to="Math.max(now, item.at)" type="relative" />
+                </template>
+              </h-timeline-item>
+            </transition-group>
           </h-timeline>
           <h-empty v-else class="home-activity-empty" :description="$t('home.activityEmpty')" />
         </h-card>
@@ -497,6 +495,17 @@ function openLog() {
   max-height: 260px;
   overflow-y: auto;
   padding: 4px 4px 0 2px;
+}
+
+.home-event-enter-active {
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+}
+
+.home-event-enter-from {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
 .home-activity-empty {

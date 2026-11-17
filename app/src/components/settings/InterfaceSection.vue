@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { IconLanguage, IconLayoutNavbar, IconMessageCircle, IconPalette } from "@tabler/icons-vue";
+import {
+  IconBell,
+  IconLanguage,
+  IconLayoutNavbar,
+  IconMessageCircle,
+  IconPalette,
+} from "@tabler/icons-vue";
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import HSwitch from "@/components/c/hSwitch.vue";
@@ -55,6 +61,12 @@ const trayIconOptions = computed<ChoiceOption<UiConfig["tray_icon"]>[]>(() => [
       :help="$t('settings.interface.bubbleHelp')"
       :label="$t('settings.interface.bubble')">
       <h-switch v-model:value="config.ui.arrival_bubble" />
+    </setting-row>
+    <setting-row
+      :icon="IconBell"
+      :help="$t('settings.interface.notificationsHelp')"
+      :label="$t('settings.interface.notifications')">
+      <h-switch v-model:value="config.ui.notifications" />
     </setting-row>
   </div>
 </template>
