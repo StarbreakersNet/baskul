@@ -146,19 +146,21 @@ onBeforeUnmount(stopRefreshing);
       </h-input>
     </h-flex>
 
-    <h-empty
-      v-if="logStore.isLoaded && lines.length && !visibleLines.length"
-      class="log-empty"
-      :description="$t('log.noMatch')" />
-    <h-log
-      v-else
-      ref="logRef"
-      :hljs="logHighlighter"
-      :language="LOG_LANGUAGE"
-      :loading="!logStore.isLoaded"
-      :log="visibleText"
-      :rows="24"
-      trim />
+    <transition mode="out-in" name="fade">
+      <h-empty
+        v-if="logStore.isLoaded && lines.length && !visibleLines.length"
+        class="log-empty"
+        :description="$t('log.noMatch')" />
+      <h-log
+        v-else
+        ref="logRef"
+        :hljs="logHighlighter"
+        :language="LOG_LANGUAGE"
+        :loading="!logStore.isLoaded"
+        :log="visibleText"
+        :rows="24"
+        trim />
+    </transition>
 
     <template #footer>
       <h-flex align="center" justify="space-between" :size="12" :wrap="false">

@@ -34,27 +34,29 @@ function openAbout() {
 
 <template>
   <h-flex align="center" class="app-footer" :size="10" :wrap="false">
-    <template v-if="showSaveBar">
-      <h-text class="app-footer-state" depth="2">
-        {{ isRestarting ? $t("layout.restartingWith") : $t("layout.unsaved") }}
-      </h-text>
-      <h-button :disabled="!settings.isDirty || isBusy" size="small" @click="settings.reset()">
-        {{ $t("common.cancel") }}
-      </h-button>
-      <h-button
-        :disabled="!settings.isDirty || isBusy"
-        :loading="isBusy"
-        size="small"
-        type="primary"
-        @click="settings.save()">
-        {{ $t("layout.saveRestart") }}
-      </h-button>
-    </template>
-    <h-flex v-else-if="settings.config" align="center" class="app-footer-state" :size="6">
-      <h-icon depth="3" :size="16"><icon-circle-check /></h-icon>
-      <h-text depth="3">{{ $t("layout.saved") }}</h-text>
-    </h-flex>
-    <div v-else class="app-footer-state" />
+    <transition mode="out-in" name="fade">
+      <h-flex v-if="showSaveBar" align="center" class="app-footer-state" :size="10" :wrap="false">
+        <h-text class="app-footer-message" depth="2">
+          {{ isRestarting ? $t("layout.restartingWith") : $t("layout.unsaved") }}
+        </h-text>
+        <h-button :disabled="!settings.isDirty || isBusy" size="small" @click="settings.reset()">
+          {{ $t("common.cancel") }}
+        </h-button>
+        <h-button
+          :disabled="!settings.isDirty || isBusy"
+          :loading="isBusy"
+          size="small"
+          type="primary"
+          @click="settings.save()">
+          {{ $t("layout.saveRestart") }}
+        </h-button>
+      </h-flex>
+      <h-flex v-else-if="settings.config" align="center" class="app-footer-state" :size="6">
+        <h-icon depth="3" :size="16"><icon-circle-check /></h-icon>
+        <h-text depth="3">{{ $t("layout.saved") }}</h-text>
+      </h-flex>
+      <div v-else class="app-footer-state" />
+    </transition>
 
     <h-popover placement="top-end" trigger="click">
       <template #trigger>
@@ -90,17 +92,19 @@ function openAbout() {
       </template>
       {{ $t("layout.reportIssue") }}
     </h-tooltip>
-    <h-tag
-      v-if="version"
-      :bordered="false"
-      class="app-footer-version"
-      round
-      size="small"
-      :title="$t('layout.aboutVersion', { version })"
-      type="primary"
-      @click="openAbout()">
-      v{{ version }}
-    </h-tag>
+    <transition name="fade">
+      <h-tag
+        v-if="version"
+        :bordered="false"
+        class="app-footer-version"
+        round
+        size="small"
+        :title="$t('layout.aboutVersion', { version })"
+        type="primary"
+        @click="openAbout()">
+        v{{ version }}
+      </h-tag>
+    </transition>
   </h-flex>
 </template>
 
@@ -112,6 +116,11 @@ function openAbout() {
 }
 
 .app-footer-state {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-footer-message {
   flex: 1;
   min-width: 0;
 }

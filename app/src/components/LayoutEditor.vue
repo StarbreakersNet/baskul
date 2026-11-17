@@ -10,6 +10,7 @@ import HIcon from "@/components/c/hIcon.vue";
 import HText from "@/components/c/hText.vue";
 import HotkeyInput from "@/components/HotkeyInput.vue";
 import SettingRow from "@/components/SettingRow.vue";
+import ExpandTransition from "@/components/ExpandTransition.vue";
 import { gridCells, gridColumns, isolatedMachines, type GridCell } from "@/utils/layoutGrid";
 import { osIcon, osLabel } from "@/utils/os";
 import type { LayoutMachine } from "@/types/Config";
@@ -182,80 +183,94 @@ function tileClasses(name: string) {
         :class="['layout-cell', cellClasses(cell)]"
         :data-cell="cell.key"
         @click="handleCellClick(cell)">
-        <div v-if="cell.isPrimary" class="layout-tile layout-tile--primary">
-          <h-icon :size="20"><icon-home /></h-icon>
-          <span class="layout-name">{{ primaryName }}</span>
-          <span class="layout-sub">{{ $t("settings.layout.primary") }}</span>
-        </div>
-        <div
-          v-else-if="cell.machine"
-          :aria-pressed="selectedName === cell.machine.name"
-          :class="['layout-tile', tileClasses(cell.machine.name)]"
-          role="button"
-          tabindex="0"
-          @keydown.enter.prevent="toggleSelection(cell.machine.name)"
-          @pointercancel="drag = null"
-          @pointerdown="handlePointerDown($event, cell.machine.name)"
-          @pointermove="handlePointerMove($event)"
-          @pointerup="handlePointerUp()">
-          <h-icon :depth="peerOf(cell.machine.name) ? undefined : 3" :size="20">
-            <component :is="osIcon(peerOf(cell.machine.name)?.os)" />
-          </h-icon>
-          <span class="layout-name">{{ cell.machine.name }}</span>
-          <span class="layout-sub">
-            <span :class="['layout-dot', { 'layout-dot--live': !!peerOf(cell.machine.name) }]" />
-            {{
-              peerOf(cell.machine.name)
-                ? $t("settings.layout.connected")
-                : $t("settings.layout.offline")
-            }}
-          </span>
-        </div>
+        <transition mode="out-in" name="fade">
+          <div v-if="cell.isPrimary" class="layout-tile layout-tile--primary">
+            <h-icon :size="20"><icon-home /></h-icon>
+            <span class="layout-name">{{ primaryName }}</span>
+            <span class="layout-sub">{{ $t("settings.layout.primary") }}</span>
+          </div>
+          <div
+            v-else-if="cell.machine"
+            :aria-pressed="selectedName === cell.machine.name"
+            :class="['layout-tile', tileClasses(cell.machine.name)]"
+            role="button"
+            tabindex="0"
+            @keydown.enter.prevent="toggleSelection(cell.machine.name)"
+            @pointercancel="drag = null"
+            @pointerdown="handlePointerDown($event, cell.machine.name)"
+            @pointermove="handlePointerMove($event)"
+            @pointerup="handlePointerUp()">
+            <h-icon :depth="peerOf(cell.machine.name) ? undefined : 3" :size="20">
+              <component :is="osIcon(peerOf(cell.machine.name)?.os)" />
+            </h-icon>
+            <span class="layout-name">{{ cell.machine.name }}</span>
+            <span class="layout-sub">
+              <span :class="['layout-dot', { 'layout-dot--live': !!peerOf(cell.machine.name) }]" />
+              {{
+                peerOf(cell.machine.name)
+                  ? $t("settings.layout.connected")
+                  : $t("settings.layout.offline")
+              }}
+            </span>
+          </div>
+        </transition>
       </div>
     </div>
 
-    <h-flex v-if="unplacedPeers.length" align="center" class="layout-block" :size="8">
-      <h-text class="small-text" depth="3">{{ $t("settings.layout.unplaced") }}</h-text>
-      <div
-        v-for="peer in unplacedPeers"
-        :key="peer.name"
-        :class="['layout-tile', 'layout-tile--chip', tileClasses(peer.name)]"
-        role="button"
-        tabindex="0"
-        @pointercancel="drag = null"
-        @pointerdown="handlePointerDown($event, peer.name)"
-        @pointermove="handlePointerMove($event)"
-        @pointerup="handlePointerUp()">
-        <h-icon :size="16"><component :is="osIcon(peer.os)" /></h-icon>
-        <span class="layout-name">{{ peer.name }}</span>
+    <expand-transition>
+      <div v-if="unplacedPeers.length" class="layout-block">
+        <h-flex align="center" :size="8">
+          <h-text class="small-text" depth="3">{{ $t("settings.layout.unplaced") }}</h-text>
+          <div
+            v-for="peer in unplacedPeers"
+            :key="peer.name"
+            :class="['layout-tile', 'layout-tile--chip', tileClasses(peer.name)]"
+            role="button"
+            tabindex="0"
+            @pointercancel="drag = null"
+            @pointerdown="handlePointerDown($event, peer.name)"
+            @pointermove="handlePointerMove($event)"
+            @pointerup="handlePointerUp()">
+            <h-icon :size="16"><component :is="osIcon(peer.os)" /></h-icon>
+            <span class="layout-name">{{ peer.name }}</span>
+          </div>
+        </h-flex>
       </div>
-    </h-flex>
+    </expand-transition>
 
-    <h-alert v-if="isolated.length" class="layout-block" type="warning">
-      {{ $t("settings.layout.isolated", { names: isolated.join(", ") }, isolated.length) }}
-    </h-alert>
+    <expand-transition>
+      <div v-if="isolated.length" class="layout-block">
+        <h-alert type="warning">
+          {{ $t("settings.layout.isolated", { names: isolated.join(", ") }, isolated.length) }}
+        </h-alert>
+      </div>
+    </expand-transition>
 
     <h-text class="layout-hint" depth="3" tag="div">
       {{ selectedName ? $t("settings.layout.pickHint") : $t("settings.layout.dragHint") }}
     </h-text>
 
-    <div v-if="selectedMachine" class="layout-details">
-      <setting-row :help="selectedHelp" :label="selectedMachine.name">
-        <h-button size="small" @click="remove(selectedMachine.name)">
-          {{ $t("settings.layout.remove") }}
-        </h-button>
-      </setting-row>
-      <setting-row :help="$t('settings.layout.hotkeyHelp')" :label="$t('settings.layout.hotkey')">
-        <hotkey-input v-model="hotkey" :os="os" />
-      </setting-row>
-    </div>
+    <expand-transition>
+      <div v-if="selectedMachine" class="layout-details">
+        <setting-row :help="selectedHelp" :label="selectedMachine.name">
+          <h-button size="small" @click="remove(selectedMachine.name)">
+            {{ $t("settings.layout.remove") }}
+          </h-button>
+        </setting-row>
+        <setting-row :help="$t('settings.layout.hotkeyHelp')" :label="$t('settings.layout.hotkey')">
+          <hotkey-input v-model="hotkey" :os="os" />
+        </setting-row>
+      </div>
+    </expand-transition>
 
-    <div
-      v-if="drag?.hasMoved"
-      class="layout-tile layout-tile--ghost"
-      :style="{ left: `${drag.x}px`, top: `${drag.y}px` }">
-      <span class="layout-name">{{ drag.name }}</span>
-    </div>
+    <transition name="fade">
+      <div
+        v-if="drag?.hasMoved"
+        class="layout-tile layout-tile--ghost"
+        :style="{ left: `${drag.x}px`, top: `${drag.y}px` }">
+        <span class="layout-name">{{ drag.name }}</span>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -366,7 +381,7 @@ function tileClasses(name: string) {
 }
 
 .layout-block {
-  margin-top: 10px;
+  padding-top: 10px;
 }
 
 .layout-hint {
@@ -375,6 +390,6 @@ function tileClasses(name: string) {
 }
 
 .layout-details {
-  margin-top: 6px;
+  padding-top: 6px;
 }
 </style>
