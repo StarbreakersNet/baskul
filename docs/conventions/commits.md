@@ -60,8 +60,14 @@ feat(core)!: secret partagé sur 24 caractères
 chore(release): 0.8.0
 ```
 
+## Branches
+
+Une branche se nomme `type/sujet`, avec les mêmes types que les commits et un sujet court en kebab-case : `feat/profils`, `fix/souris-qui-remonte`, `ci/builds-rapides`, `docs/identite`. La portée n'y figure pas.
+
 ## PR
 
+- **Une PR part de `main`**, pour être relue et fusionnée seule, dans n'importe quel ordre.
+- Elle n'est **empilée** sur une autre PR ouverte que si elle en dépend vraiment (elle utilise son code, ou modifie les mêmes lignes). Sa base est alors la branche dont elle dépend, et sa description commence par le dire, avec le lien de cette PR. Une fois la première fusionnée, la suivante repasse sur `main`.
 - Le titre de la PR suit le même format : c'est le message du commit quand la PR est fusionnée en un seul commit (*squash*).
 - Un commit, un changement : un correctif glissé dans une nouvelle fonction a son propre commit.
 - Pas de commit "wip" ni "fix lint" dans une PR prête à relire : on les fusionne avant (`git commit --fixup`, puis `git rebase --autosquash`).
