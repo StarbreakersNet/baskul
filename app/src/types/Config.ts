@@ -12,7 +12,13 @@ export interface BaskulConfig {
     discovery: boolean;
     secret: string;
   };
-  screen: { edge_switching: boolean; secondary_position: Edge; corner_size: number };
+  screen: {
+    edge_switching: boolean;
+    secondary_position: Edge;
+    corner_size: number;
+    /** Programmes qui suspendent la bascule par les bords au premier plan */
+    pause_edges_for: string[];
+  };
   /** Principale en 0, 0 ; x vers la droite, y vers le bas */
   layout: { machines: LayoutMachine[] };
   mouse: { speed: number };

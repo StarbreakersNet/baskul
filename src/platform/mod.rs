@@ -16,15 +16,15 @@ mod linux;
 #[cfg(windows)]
 use self::windows::run;
 #[cfg(windows)]
-pub use self::windows::{early_init, fatal, first_run, open_in_editor};
+pub use self::windows::{early_init, fatal, first_run, foreground_programs, open_in_editor};
 
 #[cfg(target_os = "macos")]
-pub use self::macos::{early_init, fatal, first_run, open_in_editor};
+pub use self::macos::{early_init, fatal, first_run, foreground_programs, open_in_editor};
 
 #[cfg(not(any(windows, target_os = "macos")))]
 use self::linux::run;
 #[cfg(not(any(windows, target_os = "macos")))]
-pub use self::linux::{early_init, fatal, first_run, open_in_editor};
+pub use self::linux::{early_init, fatal, first_run, foreground_programs, open_in_editor};
 
 use crate::Args;
 use baskul_core::config::Settings;

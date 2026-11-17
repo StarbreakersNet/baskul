@@ -18,6 +18,7 @@ import HSwitch from "@/components/c/hSwitch.vue";
 import ChoiceGroup from "@/components/ChoiceGroup.vue";
 import LinuxNotice from "@/components/LinuxNotice.vue";
 import NumberInput from "@/components/NumberInput.vue";
+import PausePrograms from "@/components/PausePrograms.vue";
 import SettingRow from "@/components/SettingRow.vue";
 import { OS_KEY } from "@/utils/injectionKeys";
 import type { BaskulConfig } from "@/types/Config";
@@ -119,5 +120,6 @@ const sideButtonOptions = computed<ChoiceOption<BaskulConfig["buttons"]["side_bu
       os="macos">
       <choice-group v-model="config.buttons.side_buttons" :options="sideButtonOptions" />
     </setting-row>
+    <pause-programs v-model="config.screen.pause_edges_for" />
   </div>
 </template>

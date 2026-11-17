@@ -43,6 +43,10 @@ export interface DaemonStatus {
   started: number;
   /** Identifiant du dernier événement de l'activité récente */
   activity: number;
+  /** Programme au premier plan qui suspend la bascule par les bords */
+  edges_paused_by: string | null;
+  /** Dernier programme au premier plan, hors Baskul */
+  foreground: string | null;
   update: UpdateInfo;
 }
 

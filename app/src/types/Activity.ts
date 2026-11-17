@@ -6,7 +6,9 @@ export type ActivityKind =
   | "switchedHere"
   | "locked"
   | "unlocked"
-  | "warning";
+  | "warning"
+  | "edgesPaused"
+  | "edgesResumed";
 
 /** Événement de `read_activity` (core/src/activity.rs) */
 export interface ActivityEvent {
@@ -18,4 +20,6 @@ export interface ActivityEvent {
   peer?: string;
   /** warning */
   text?: string;
+  /** edgesPaused */
+  program?: string;
 }

@@ -149,6 +149,8 @@ Pour ne passer d'une machine à l'autre **qu'au clavier**, désactivez « Bascul
 
 Si la connexion avec la pilotée en cours tombe, Baskul attend quelques secondes qu'elle revienne (redémarrage de Baskul sur la pilotée…), puis le curseur revient tout seul sur la principale. Tout ce qui était enfoncé est relâché.
 
+**Programmes qui suspendent les bords.** Un jeu qui capture la souris (FPS, MMO…) peut faire passer le curseur sur une autre machine par erreur. Ajoutez-le à « Programmes qui suspendent les bords » (onglet Changer de machine, ou Souris sur une pilotée) : tant qu'il est au premier plan sur cette machine, la bascule par les bords est suspendue ; les raccourcis clavier marchent toujours. Baskul le signale dans l'info-bulle de l'icône, sur l'accueil et par une notification. La fenêtre propose d'ajouter le dernier programme utilisé. Windows et macOS.
+
 **Bulle d'arrivée.** Quand le clavier et la souris arrivent sur une machine, son nom s'affiche un instant près du curseur, avec le logo de son système, puis s'efface. Elle ne prend pas le focus et laisse passer les clics. Réglage « Bulle d'arrivée », onglet Interface, sur chaque machine.
 
 **Presse-papiers.** Les images partent dans leur format d'origine (PNG, JPEG, GIF, WebP, HEIC…) ; seul le TIFF interne de macOS devient un PNG. Pour les formats que le système d'arrivée lit mal (HEIC, WebP…), un PNG est ajouté. Les **fichiers et dossiers** copiés dans le Finder ou l'Explorateur sont transférés en arrière-plan, puis collés depuis un dossier temporaire de Baskul ; une nouvelle copie annule un transfert en cours. Copier une seule image en tant que fichier permet aussi de la coller comme image. La principale relaie le presse-papiers entre les pilotées. Les limites de taille se règlent dans l'onglet Presse-papiers.
@@ -226,6 +228,7 @@ Le fichier complet et commenté est dans [`docs/config.exemple.toml`](docs/confi
 | | `discovery` | Découverte automatique (Bonjour) : la principale s'annonce, les pilotées la cherchent |
 | `[layout]` (principale) | `machines = [{ name = "Atelier", x = 1, y = 0, hotkey = "Ctrl+Alt+1" }]` | Grille des pilotées : la principale est en (0, 0), `x` vers la droite, `y` vers le bas ; `hotkey` facultatif |
 | `[screen]` (principale) | `edge_switching` | Bascule par les bords de l'écran (`false` : seulement au clavier) |
+| `[screen]` (chaque machine) | `pause_edges_for = ["Wow"]` | Programmes qui suspendent la bascule par les bords tant qu'ils sont au premier plan |
 | | `secondary_position` | Côté où se place une nouvelle pilotée |
 | | `corner_size` | Coins neutres, en pixels |
 | `[hotkeys]` (principale) | `switch_to_secondary`, `return_to_primary` | Aller sur la dernière pilotée (`"Shift+F12"`), revenir sur la principale (`"Shift+F11"`) |
@@ -411,6 +414,7 @@ src/               couche système (baskul-desktop)
   tray.rs          icône : image, info-bulle, menu et actions, quel que soit le système
   logging.rs       journaux
   history.rs       activité récente gardée dans activity.json
+  programs.rs      programmes au premier plan qui suspendent la bascule par les bords
   api.rs           API : fenêtre de réglages (dans le processus) ; commandes et second lancement (127.0.0.1 + jeton)
   cli.rs           commandes `baskul switch …` et `baskul status`
   platform/

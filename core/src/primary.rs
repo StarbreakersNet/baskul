@@ -373,7 +373,12 @@ impl PrimaryCore {
         if cur != next {
             self.user_input(host);
         }
-        if self.is_remote() || !self.opts.edge_switching || self.locked || self.local_buttons_down() {
+        if self.is_remote()
+            || !self.opts.edge_switching
+            || self.locked
+            || self.local_buttons_down()
+            || status::edges_paused()
+        {
             return Decision::Pass;
         }
         for edge in self.exits(&Machine::Primary) {
