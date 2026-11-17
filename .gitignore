@@ -7,5 +7,6 @@
 /app/node_modules
 /app/dist
 /app/src-tauri/gen
+/app/.eslintcache
 /app/.yarn/*
 !/app/.yarn/releases

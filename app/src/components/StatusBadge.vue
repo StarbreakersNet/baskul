@@ -1,38 +1,52 @@
 <script setup lang="ts">
-// État de la connexion, mis à jour en direct.
 import { computed } from "vue";
-import { NTag } from "naive-ui";
 import { useI18n } from "vue-i18n";
-import type { DaemonStatus } from "../types";
+import HTag from "@/components/c/hTag.vue";
+import type { TagProps } from "naive-ui";
+import type { DaemonStatus } from "@/types/Daemon";
 
-const props = defineProps<{ status: DaemonStatus | null; restarting?: boolean }>();
+const { status, isRestarting = false } = defineProps<{
+  status: DaemonStatus | null;
+  isRestarting?: boolean;
+}>();
 
 const { t } = useI18n();
 
-// Le résumé vient de Baskul, dans la langue choisie.
-const view = computed(() => {
-  if (props.restarting) return { type: "info", text: t("status.restarting") } as const;
-  const s = props.status;
-  if (!s) return { type: "default", text: t("status.notRunning") } as const;
-  const text = s.summary || t("status.starting");
-  if (s.state === "connected") return { type: "success", text } as const;
-  if (s.state === "error") return { type: "error", text } as const;
-  return { type: "warning", text } as const;
+const STATE_TYPES: Record<DaemonStatus["state"], TagProps["type"]> = {
+  connected: "success",
+  error: "error",
+  waiting: "warning",
+};
+
+const badgeType = computed<TagProps["type"]>(() => {
+  if (isRestarting) {
+    return "info";
+  }
+  return status ? STATE_TYPES[status.state] : "default";
+});
+
+// Le résumé vient de Baskul, déjà traduit
+const badgeText = computed(() => {
+  if (isRestarting) {
+    return t("status.restarting");
+  }
+  return status ? status.summary || t("status.starting") : t("status.notRunning");
 });
 </script>
 
 <template>
-  <n-tag :type="view.type" round :bordered="false" class="status">
-    <span class="dot" />
-    {{ view.text }}
-  </n-tag>
+  <h-tag :bordered="false" class="status-badge" round :type="badgeType">
+    <span class="status-badge-dot" />
+    {{ badgeText }}
+  </h-tag>
 </template>
 
-<style scoped>
-.status {
+<style lang="scss" scoped>
+.status-badge {
   max-width: 100%;
 }
-.dot {
+
+.status-badge-dot {
   display: inline-block;
   width: 8px;
   height: 8px;

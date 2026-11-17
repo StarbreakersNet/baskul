@@ -1,157 +1,168 @@
 <script setup lang="ts">
-// Raccourci clavier : « Modifier » puis taper la combinaison. Le format est
-// celui de la configuration, par exemple « Shift+F12 » ou « Ctrl+Alt+B ».
-//
-// Sur la machine principale, c'est le crochet clavier de Baskul qui relève
-// la combinaison : elle ne déclenche alors aucun raccourci, et les touches que
-// la fenêtre ne reçoit pas (F11, F12…) fonctionnent aussi. Sinon, la fenêtre
-// la relève elle-même.
-import { computed, onBeforeUnmount, onDeactivated, ref } from "vue";
-import { NButton, NInput, NInputGroup } from "naive-ui";
-import { daemon } from "../daemon";
+import { computed, onBeforeUnmount, onDeactivated, ref, useTemplateRef } from "vue";
+import HButton from "@/components/c/hButton.vue";
+import HInput from "@/components/c/hInput.vue";
+import HInputGroup from "@/components/c/hInputGroup.vue";
+import { useHotkeyCaptureStore } from "@/stores/hotkeyCapture";
+import {
+  formatHotkey,
+  hotkeyParts,
+  isModifierKey,
+  keyName,
+  pressedModifiers,
+} from "@/utils/hotkey";
+import type { HInputInst } from "@/types/components/c/hInput";
+import type { CaptureState } from "@/types/Hotkey";
 
 const model = defineModel<string>({ required: true });
-const props = defineProps<{ os?: string }>();
 
-const MODIFIERS = new Set([
-  "ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight", "AltLeft", "AltRight",
-  "MetaLeft", "MetaRight", "OSLeft", "OSRight",
-]);
+const { os } = defineProps<{
+  os?: string;
+}>();
+
 const POLL_MS = 120;
 
-const recording = ref(false);
-const preview = ref<string[]>([]);
-const root = ref<HTMLElement>();
-const input = ref<InstanceType<typeof NInput>>();
-/** Le daemon relève la combinaison. */
-let daemonCapture = false;
+const hotkeyCapture = useHotkeyCaptureStore();
 
-const text = computed(() =>
-  (recording.value ? preview.value : model.value ? model.value.split("+") : []).join(" + "),
+const isRecording = ref(false);
+const isDaemonCapturing = ref(false);
+const preview = ref<string[]>([]);
+const rootRef = useTemplateRef<HTMLElement>("rootRef");
+const inputRef = useTemplateRef<HInputInst>("inputRef");
+
+const displayText = computed(() =>
+  formatHotkey(isRecording.value ? preview.value : hotkeyParts(model.value))
 );
 
-function modifiers(e: KeyboardEvent): string[] {
-  const m: string[] = [];
-  if (e.ctrlKey) m.push("Ctrl");
-  if (e.altKey) m.push("Alt");
-  if (e.shiftKey) m.push("Shift");
-  if (e.metaKey) m.push(props.os === "macos" ? "Cmd" : "Win");
-  return m;
+function handleKeyDown(event: KeyboardEvent) {
+  event.preventDefault();
+  event.stopPropagation();
+  const modifiers = pressedModifiers(event, os);
+  if (isModifierKey(event)) {
+    preview.value = modifiers;
+  } else if (event.code) {
+    // Touche arrivée jusqu'à la fenêtre : le crochet de Baskul ne l'a pas relevée
+    finish([...modifiers, keyName(event.code)].join("+"));
+  }
 }
 
-/** Nom Baskul d'une touche physique (codes `KeyboardEvent.code`). */
-function keyName(code: string): string {
-  return /^Key([A-Z])$/.exec(code)?.[1] ?? /^Digit(\d)$/.exec(code)?.[1] ?? code;
+function handleKeyUp(event: KeyboardEvent) {
+  if (isModifierKey(event)) {
+    preview.value = pressedModifiers(event, os);
+  }
 }
 
-/** Combinaison relevée ; Échap seule annule. */
+function handlePointerDown(event: PointerEvent) {
+  if (!rootRef.value?.contains(event.target as Node)) {
+    stop();
+  }
+}
+
+/** Échap seule annule la saisie */
 function finish(hotkey: string) {
-  if (hotkey !== "Escape") model.value = hotkey;
+  if (hotkey !== "Escape") {
+    model.value = hotkey;
+  }
   stop();
 }
 
-function onKeyDown(e: KeyboardEvent) {
-  e.preventDefault();
-  e.stopPropagation();
-  const mods = modifiers(e);
-  if (MODIFIERS.has(e.code)) {
-    preview.value = mods;
-    return;
+function isListeningToDaemon() {
+  return isRecording.value && isDaemonCapturing.value;
+}
+
+/** Renvoie `true` tant que Baskul attend la combinaison */
+function applyCaptureState(state: CaptureState | null) {
+  let isWaiting = false;
+  if (state?.state === "done") {
+    finish(state.hotkey);
+  } else if (state?.state === "waiting") {
+    isWaiting = true;
+  } else {
+    stop();
   }
-  // La touche est arrivée jusqu'à la fenêtre : le daemon ne l'a pas relevée.
-  if (e.code) finish([...mods, keyName(e.code)].join("+"));
+  return isWaiting;
 }
 
-function onKeyUp(e: KeyboardEvent) {
-  if (MODIFIERS.has(e.code)) preview.value = modifiers(e);
-}
-
-/** Un clic ailleurs annule la saisie. */
-function onPointerDown(e: PointerEvent) {
-  if (!root.value?.contains(e.target as Node)) stop();
-}
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/** Attend la combinaison relevée par le daemon. */
-async function pollDaemon() {
-  while (recording.value && daemonCapture) {
-    await sleep(POLL_MS);
-    if (!recording.value || !daemonCapture) return;
-    try {
-      const s = await daemon.captureHotkey.poll();
-      if (!recording.value || !daemonCapture) return;
-      if (s.state === "done") return finish(s.hotkey);
-      // Saisie abandonnée par le daemon (délai dépassé, redémarrage…).
-      if (s.state === "idle") return stop();
-    } catch {
-      return stop();
+async function waitForDaemonHotkey() {
+  let isWaiting = true;
+  while (isWaiting && isListeningToDaemon()) {
+    await new Promise(resolve => setTimeout(resolve, POLL_MS));
+    if (isListeningToDaemon()) {
+      const state = await hotkeyCapture.poll();
+      isWaiting = isListeningToDaemon() && applyCaptureState(state);
     }
   }
 }
 
+function listenToKeyboard() {
+  window.addEventListener("keydown", handleKeyDown, true);
+  window.addEventListener("keyup", handleKeyUp, true);
+  document.addEventListener("pointerdown", handlePointerDown);
+}
+
+function stopListening() {
+  window.removeEventListener("keydown", handleKeyDown, true);
+  window.removeEventListener("keyup", handleKeyUp, true);
+  document.removeEventListener("pointerdown", handlePointerDown);
+}
+
 async function start() {
-  recording.value = true;
+  isRecording.value = true;
   preview.value = [];
-  window.addEventListener("keydown", onKeyDown, true);
-  window.addEventListener("keyup", onKeyUp, true);
-  document.addEventListener("pointerdown", onPointerDown);
-  input.value?.focus();
-  try {
-    await daemon.captureHotkey.start();
-  } catch {
-    // Pas de crochet clavier ici (machine pilotée, Linux…) : la fenêtre
-    // relève seule la combinaison.
-    return;
+  listenToKeyboard();
+  inputRef.value?.focus();
+  const hasDaemonCapture = await hotkeyCapture.start();
+  if (hasDaemonCapture && isRecording.value) {
+    isDaemonCapturing.value = true;
+    void waitForDaemonHotkey();
+  } else if (hasDaemonCapture) {
+    void hotkeyCapture.cancel();
   }
-  if (!recording.value) {
-    void daemon.captureHotkey.cancel().catch(() => {});
-    return;
-  }
-  daemonCapture = true;
-  void pollDaemon();
 }
 
 function stop() {
-  recording.value = false;
+  isRecording.value = false;
   preview.value = [];
-  window.removeEventListener("keydown", onKeyDown, true);
-  window.removeEventListener("keyup", onKeyUp, true);
-  document.removeEventListener("pointerdown", onPointerDown);
-  input.value?.blur();
-  if (daemonCapture) {
-    daemonCapture = false;
-    void daemon.captureHotkey.cancel().catch(() => {});
+  stopListening();
+  inputRef.value?.blur();
+  if (isDaemonCapturing.value) {
+    isDaemonCapturing.value = false;
+    void hotkeyCapture.cancel();
+  }
+}
+
+function toggleRecording() {
+  if (isRecording.value) {
+    stop();
+  } else {
+    void start();
   }
 }
 
 onBeforeUnmount(stop);
-// Page quittée (gardée en mémoire) : la saisie s'arrête.
 onDeactivated(stop);
 </script>
 
 <template>
-  <div ref="root">
-    <n-input-group>
-      <n-input
-        ref="input"
-        :value="text"
-        readonly
-        :placeholder="recording ? $t('settings.hotkey.press') : $t('common.none')"
-        :input-props="{ 'aria-live': 'polite' }"
+  <div ref="rootRef">
+    <h-input-group>
+      <h-input
+        ref="inputRef"
         class="mono"
-      />
-      <n-button :type="recording ? 'primary' : 'default'" @click="recording ? stop() : start()">
-        {{ recording ? $t("common.cancel") : $t("common.edit") }}
-      </n-button>
-      <n-button
-        :title="$t('settings.hotkey.disable')"
+        :input-props="{ 'aria-live': 'polite' }"
+        :placeholder="isRecording ? $t('settings.hotkey.press') : $t('common.none')"
+        readonly
+        :value="displayText" />
+      <h-button :type="isRecording ? 'primary' : 'default'" @click="toggleRecording()">
+        {{ isRecording ? $t("common.cancel") : $t("common.edit") }}
+      </h-button>
+      <h-button
         :aria-label="$t('settings.hotkey.disable')"
-        :disabled="!model || recording"
-        @click="model = ''"
-      >
+        :disabled="!model || isRecording"
+        :title="$t('settings.hotkey.disable')"
+        @click="model = ''">
         ✕
-      </n-button>
-    </n-input-group>
+      </h-button>
+    </h-input-group>
   </div>
 </template>
