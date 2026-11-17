@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import { useAppMessage } from "@/composables/useAppMessage";
+import { useActivityStore } from "@/stores/activity";
 import { useSettingsStore } from "@/stores/settings";
 import { daemonClient, errorMessage, isOffline } from "@/utils/daemonClient";
 import { i18n } from "@/utils/locale";
@@ -37,6 +38,7 @@ export const useStatusStore = defineStore("status", () => {
     try {
       const current = await daemonClient.status();
       status.value = current;
+      useActivityStore().observe(current);
       await reloadSettingsIfNeeded(current);
     } catch (error) {
       handleOffline(error);

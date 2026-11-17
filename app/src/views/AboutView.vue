@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { getVersion } from "@tauri-apps/api/app";
+import { IconBrandGithub, IconBug, IconExternalLink, IconHistory } from "@tabler/icons-vue";
 import HAvatar from "@/components/c/hAvatar.vue";
 import HButton from "@/components/c/hButton.vue";
 import HCard from "@/components/c/hCard.vue";
@@ -11,14 +12,17 @@ import HDescriptions from "@/components/c/hDescriptions.vue";
 import HDescriptionsItem from "@/components/c/hDescriptionsItem.vue";
 import HFlex from "@/components/c/hFlex.vue";
 import HH2 from "@/components/c/hH2.vue";
+import HIcon from "@/components/c/hIcon.vue";
 import HProgress from "@/components/c/hProgress.vue";
 import HText from "@/components/c/hText.vue";
 import HTime from "@/components/c/hTime.vue";
 import logo from "@/assets/logo.svg";
 import { useCopy } from "@/composables/useCopy";
+import { useExternalLink } from "@/composables/useExternalLink";
 import { useUpdateInstall } from "@/composables/useUpdateInstall";
 import { useSettingsStore } from "@/stores/settings";
 import { useUpdateStore } from "@/stores/update";
+import { RELEASES_URL, REPOSITORY_URL } from "@/models/Repository";
 import { osLabel } from "@/utils/os";
 import type { UpdateInfo } from "@/types/Update";
 
@@ -30,12 +34,11 @@ interface UpdateView {
   progress?: number;
 }
 
-const REPO_URL = "https://github.com/StarbreakersNet/baskul";
-
 const settings = useSettingsStore();
 const update = useUpdateStore();
 const { install } = useUpdateInstall();
 const { copy } = useCopy();
+const { openLink, reportIssue } = useExternalLink();
 const { t } = useI18n();
 
 const appVersion = ref("");
@@ -91,11 +94,31 @@ onMounted(async () => {
     <h-card>
       <h-flex align="center" class="about-header" :size="6" vertical>
         <h-avatar color="transparent" :size="80" :src="logo" />
-        <h-h2 class="about-name">Baskul</h-h2>
+        <h-h2 class="about-name brand-wordmark">Baskul</h-h2>
         <h-text depth="3">
           {{ $t("common.version", { version: settings.info?.version ?? appVersion }) }}
         </h-text>
         <h-text class="about-tagline">{{ $t("about.tagline") }}</h-text>
+        <h-flex class="about-links" justify="center" :size="8">
+          <h-button secondary size="small" @click="openLink(REPOSITORY_URL)">
+            <template #icon>
+              <h-icon><icon-brand-github /></h-icon>
+            </template>
+            GitHub
+          </h-button>
+          <h-button secondary size="small" @click="openLink(RELEASES_URL)">
+            <template #icon>
+              <h-icon><icon-history /></h-icon>
+            </template>
+            {{ $t("about.releases") }}
+          </h-button>
+          <h-button secondary size="small" @click="reportIssue()">
+            <template #icon>
+              <h-icon><icon-bug /></h-icon>
+            </template>
+            {{ $t("layout.reportIssue") }}
+          </h-button>
+        </h-flex>
       </h-flex>
     </h-card>
 
@@ -123,8 +146,8 @@ onMounted(async () => {
         </h-descriptions-item>
         <h-descriptions-item :label="$t('about.source')">
           <h-flex align="center" :size="8">
-            <h-text class="mono">{{ REPO_URL }}</h-text>
-            <h-button size="tiny" @click="copy(REPO_URL, 'about.addressCopied')">
+            <h-text class="mono">{{ REPOSITORY_URL }}</h-text>
+            <h-button size="tiny" @click="copy(REPOSITORY_URL, 'about.addressCopied')">
               {{ $t("common.copy") }}
             </h-button>
           </h-flex>
@@ -158,6 +181,12 @@ onMounted(async () => {
         type="line" />
       <h-flex v-if="updateView.url" align="center" class="about-block" :size="8">
         <h-text class="mono break-all" depth="3">{{ updateView.url }}</h-text>
+        <h-button size="tiny" @click="openLink(updateView.url)">
+          <template #icon>
+            <h-icon><icon-external-link /></h-icon>
+          </template>
+          {{ $t("common.open") }}
+        </h-button>
         <h-button size="tiny" @click="copy(updateView.url)">{{ $t("common.copy") }}</h-button>
       </h-flex>
       <h-collapse v-if="updateView.notes" class="about-block">
@@ -184,6 +213,10 @@ onMounted(async () => {
 
 .about-tagline {
   text-align: center;
+}
+
+.about-links {
+  margin-top: 10px;
 }
 
 .about-update-text {

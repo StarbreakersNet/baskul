@@ -1,7 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Fenêtre des réglages",
-  "windows": ["main"],
-  "permissions": ["core:default", "core:window:allow-destroy"]
+  "description": "Fen\u00eatre des r\u00e9glages",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-destroy",
+    "opener:default"
+  ]
 }

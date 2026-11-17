@@ -13,6 +13,7 @@ Et :
 - **Pas d'attribut `style` en dur** : `class="advanced-select"` et `.advanced-select { width: 220px; }`, plutôt que `style="width: 220px"`. Un `:style` ne sert qu'aux valeurs calculées au moment de l'affichage (position de la pilotée qu'on fait glisser, nombre de colonnes de la grille).
 - Valeurs du design (hauteur des barres, rayons, tailles de texte, police à chasse fixe) : les variables de `assets/variables.scss`, avec `@use "@/assets/variables";` puis `variables.$bar-height`. Une valeur qui revient devient une variable.
 - Couleurs : celles du thème Naive UI, avec `useThemeVars()` et `v-bind()` dans le style. Pas de couleur en dur qui ne marche que dans un thème. Une teinte de la couleur d'accent s'écrit `color-mix(in srgb, v-bind("colors.accent") variables.$accent-tint, transparent)`.
+- Couleurs de l'identité que Naive UI ne dessine pas (dégradé, verre, teinte de l'accent) : les variables CSS de `assets/brand.scss`, décrites dans [`docs/identite.md`](../identite.md).
 - `scoped` toujours. Les classes partagées vivent dans `assets/main.scss`.
 - Un `<style>` non scoped dans un composant ne sert qu'à cibler du contenu téléporté hors du composant (menu déroulant, modale), avec un commentaire qui le dit.
 - `:deep()` sert dans les wrappers à ajuster l'intérieur d'un composant Naive UI. Ailleurs, c'est le signe qu'il manque une prop ou une variante au wrapper.

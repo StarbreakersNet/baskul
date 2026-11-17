@@ -1059,7 +1059,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@tauri-apps/api@npm:^2.12.4":
+"@tauri-apps/api@npm:^2.12.0, @tauri-apps/api@npm:^2.12.4":
   version: 2.12.4
   resolution: "@tauri-apps/api@npm:2.12.4"
   checksum: 10c0/4a5c492d17999dc393be617978aed52c133d999575e251f0166cd9f6838941a207b9302c153104dfe83b0f97a8bdc5fda8574dfee40eed457e551b1c6ca4f061
@@ -1184,6 +1184,15 @@ __metadata:
   bin:
     tauri: tauri.js
   checksum: 10c0/6ed22f8613317326c6f7c4e85218995ec0d0ff19bff6accb426a88367503ad2a007793567f6bec116a8620609d86c6270a566ccc6f3aa1a9442285b2037eddfe
+  languageName: node
+  linkType: hard
+
+"@tauri-apps/plugin-opener@npm:^2.5.0":
+  version: 2.7.3
+  resolution: "@tauri-apps/plugin-opener@npm:2.7.3"
+  dependencies:
+    "@tauri-apps/api": "npm:^2.12.0"
+  checksum: 10c0/cd24859fd3d7216ed84a7a7c52b24a573381baea57ad112ce0727358e8c00f094595bafabaee10b3a9203b3b82c63dc007eaa9a7dba75fdf9f28ae4f020b0b45
   languageName: node
   linkType: hard
 
@@ -1882,6 +1891,7 @@ __metadata:
     "@tabler/icons-vue": "npm:^3.49.0"
     "@tauri-apps/api": "npm:^2.12.4"
     "@tauri-apps/cli": "npm:^2.12.3"
+    "@tauri-apps/plugin-opener": "npm:^2.5.0"
     "@types/node": "npm:^22.18.11"
     "@vitejs/plugin-vue": "npm:^6.0.10"
     "@vue/eslint-config-prettier": "npm:^10.2.0"

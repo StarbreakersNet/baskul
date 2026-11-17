@@ -42,6 +42,15 @@ export function usePreferences() {
     return language === "system" ? systemLocale() : language;
   });
 
+  // Pour les styles qui ne viennent pas de Naive UI (assets/brand.scss)
+  watch(
+    isDark,
+    value => {
+      document.documentElement.dataset.theme = value ? "dark" : "light";
+    },
+    { immediate: true }
+  );
+
   watch(
     locale,
     value => {

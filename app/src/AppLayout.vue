@@ -17,17 +17,22 @@ import HLayoutHeader from "@/components/c/hLayoutHeader.vue";
 import HLayoutSider from "@/components/c/hLayoutSider.vue";
 import HMenu from "@/components/c/hMenu.vue";
 import HResult from "@/components/c/hResult.vue";
-import HSpin from "@/components/c/hSpin.vue";
 import HText from "@/components/c/hText.vue";
+import AppFooter from "@/components/AppFooter.vue";
+import AppSplash from "@/components/AppSplash.vue";
 import StatusBadge from "@/components/StatusBadge.vue";
 import UpdateBanner from "@/components/UpdateBanner.vue";
 import logo from "@/assets/logo.svg";
+import { useAppShortcuts } from "@/composables/useAppShortcuts";
 import { registerMessageApi } from "@/composables/useAppMessage";
 import { useSettingsStore } from "@/stores/settings";
 import { useStatusStore } from "@/stores/status";
 import { OS_KEY, ROLE_KEY } from "@/utils/injectionKeys";
+import { readLocalFlag, writeLocalFlag } from "@/utils/localSetting";
 import { osLabel } from "@/utils/os";
 import type { HLayoutContentInst } from "@/types/components/c/hLayoutContent";
+
+const SIDER_COLLAPSED_KEY = "baskul.siderCollapsed";
 
 registerMessageApi(useMessage());
 
@@ -37,6 +42,7 @@ const route = useRoute();
 const router = useRouter();
 const dialog = useDialog();
 const { t } = useI18n();
+useAppShortcuts();
 
 provide(
   ROLE_KEY,
@@ -47,7 +53,7 @@ provide(
   computed(() => settings.info?.os ?? "")
 );
 
-const isCollapsed = ref(false);
+const isCollapsed = ref(readLocalFlag(SIDER_COLLAPSED_KEY, false));
 const contentRef = useTemplateRef<HLayoutContentInst>("contentRef");
 
 const menuOptions = computed<MenuOption[]>(() => [
@@ -57,26 +63,14 @@ const menuOptions = computed<MenuOption[]>(() => [
   { key: "about", label: t("nav.about"), icon: renderIcon(IconInfoCircle) },
 ]);
 
+const isLoading = computed(() => statusStore.phase === "loading");
 const isRestarting = computed(() => statusStore.phase === "restarting");
-const isBusy = computed(() => settings.saving.loading || isRestarting.value);
 const subtitle = computed(() =>
   settings.info ? `${settings.info.hostname} · ${osLabel(settings.info.os)}` : ""
 );
 const isWaitingForDaemon = computed(
   () => route.meta.needsDaemon && statusStore.phase !== "ready" && !isRestarting.value
 );
-const showFooter = computed(
-  () =>
-    settings.config !== null &&
-    (statusStore.phase === "ready" || isRestarting.value) &&
-    (route.name === "settings" || settings.isDirty)
-);
-const footerText = computed(() => {
-  if (isRestarting.value) {
-    return t("layout.restartingWith");
-  }
-  return settings.isDirty ? t("layout.unsaved") : "";
-});
 
 function renderIcon(icon: Component) {
   return () => h(HIcon, null, { default: () => h(icon, { stroke: 1.75 }) });
@@ -93,6 +87,11 @@ function renderSettingsLabel() {
 
 function navigate(name: string) {
   router.push({ name });
+}
+
+function setCollapsed(value: boolean) {
+  isCollapsed.value = value;
+  writeLocalFlag(SIDER_COLLAPSED_KEY, value);
 }
 
 function confirmClose(close: () => void) {
@@ -130,32 +129,37 @@ onMounted(async () => {
 </script>
 
 <template>
+  <transition name="app-fade">
+    <app-splash v-if="isLoading" />
+  </transition>
   <h-layout has-sider position="absolute">
     <h-layout-sider
       bordered
+      class="glass"
       :collapsed="isCollapsed"
       :collapsed-width="64"
       collapse-mode="width"
       :native-scrollbar="false"
-      show-trigger
+      show-trigger="bar"
       :width="220"
-      @collapse="isCollapsed = true"
-      @expand="isCollapsed = false">
-      <h-flex align="center" class="app-brand" :size="12" :wrap="false">
-        <h-avatar color="transparent" :size="32" :src="logo" />
-        <h-text v-if="!isCollapsed" class="app-name" strong>Baskul</h-text>
+      @collapse="setCollapsed(true)"
+      @expand="setCollapsed(false)">
+      <h-flex align="center" class="app-brand" :size="10" :wrap="false">
+        <h-avatar color="transparent" :size="34" :src="logo" />
+        <h-text v-if="!isCollapsed" class="brand-wordmark app-brand-name">Baskul</h-text>
       </h-flex>
       <h-menu
         :collapsed="isCollapsed"
         :collapsed-icon-size="22"
         :collapsed-width="64"
+        :icon-size="20"
         :options="menuOptions"
         :value="String(route.name)"
         @update:value="navigate($event)" />
     </h-layout-sider>
 
     <h-layout>
-      <h-layout-header bordered class="app-bar" position="absolute">
+      <h-layout-header bordered class="app-bar glass" position="absolute">
         <h-flex align="center" class="app-bar-content" justify="space-between" :wrap="false">
           <h-flex :size="0" vertical>
             <h-text class="app-title" strong>
@@ -164,7 +168,7 @@ onMounted(async () => {
             <h-text class="app-subtitle" depth="3">{{ subtitle }}</h-text>
           </h-flex>
           <status-badge
-            v-if="statusStore.phase !== 'loading'"
+            v-if="!isLoading"
             :is-restarting="isRestarting"
             :status="statusStore.status" />
         </h-flex>
@@ -172,20 +176,14 @@ onMounted(async () => {
 
       <h-layout-content
         ref="contentRef"
-        :class="['app-content', { 'app-content--with-footer': showFooter }]"
+        class="app-content"
         content-style="padding: 24px"
         :native-scrollbar="false"
         position="absolute">
         <div class="page-body">
           <update-banner v-if="!isWaitingForDaemon" />
-          <h-flex
-            v-if="isWaitingForDaemon && statusStore.phase === 'loading'"
-            class="app-loading"
-            justify="center">
-            <h-spin />
-          </h-flex>
           <h-result
-            v-else-if="isWaitingForDaemon"
+            v-if="isWaitingForDaemon && !isLoading"
             class="app-offline"
             :description="$t('layout.offlineText')"
             status="info"
@@ -200,7 +198,7 @@ onMounted(async () => {
             </template>
           </h-result>
           <!-- Sortie de durée nulle : sinon Vue attendrait la fin des transitions propres aux composants -->
-          <router-view v-else v-slot="{ Component }">
+          <router-view v-else-if="!isWaitingForDaemon" v-slot="{ Component }">
             <transition :duration="{ enter: 250, leave: 0 }" mode="out-in" name="page">
               <keep-alive>
                 <component :is="Component" :key="route.name" />
@@ -210,20 +208,8 @@ onMounted(async () => {
         </div>
       </h-layout-content>
 
-      <h-layout-footer v-if="showFooter" bordered class="app-bar" position="absolute">
-        <h-flex align="center" class="app-bar-content" :size="10" :wrap="false">
-          <h-text class="app-footer-text" depth="3">{{ footerText }}</h-text>
-          <h-button :disabled="!settings.isDirty || isBusy" @click="settings.reset()">
-            {{ $t("common.cancel") }}
-          </h-button>
-          <h-button
-            :disabled="!settings.isDirty || isBusy"
-            :loading="isBusy"
-            type="primary"
-            @click="settings.save()">
-            {{ $t("layout.saveRestart") }}
-          </h-button>
-        </h-flex>
+      <h-layout-footer bordered class="app-bar app-footer-bar glass" position="absolute">
+        <app-footer />
       </h-layout-footer>
     </h-layout>
   </h-layout>
@@ -233,19 +219,25 @@ onMounted(async () => {
 @use "@/assets/variables";
 
 $page-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+$footer-height: 52px;
 
 .app-brand {
   height: variables.$bar-height;
-  padding: 0 16px;
+  padding: 0 15px;
 }
 
-.app-name {
-  font-size: 17px;
+.app-brand-name {
+  font-size: 19px;
 }
 
 .app-bar {
   height: variables.$bar-height;
   padding: 0 24px;
+}
+
+.app-footer-bar {
+  height: $footer-height;
+  padding: 0 16px 0 24px;
 }
 
 .app-bar-content {
@@ -262,23 +254,11 @@ $page-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
 
 .app-content {
   top: variables.$bar-height;
-  bottom: 0;
-}
-
-.app-content--with-footer {
-  bottom: variables.$bar-height;
-}
-
-.app-loading {
-  padding: 80px 0;
+  bottom: $footer-height;
 }
 
 .app-offline {
   padding: 60px 0;
-}
-
-.app-footer-text {
-  flex: 1;
 }
 
 .page-enter-active {
@@ -290,6 +270,14 @@ $page-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
 .page-enter-from {
   opacity: 0;
   transform: scale(0.98);
+}
+
+.app-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.app-fade-leave-to {
+  opacity: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

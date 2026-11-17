@@ -200,10 +200,12 @@ MetaLeft = "AltLeft"     # Windows du PC → ⌥
 
 Dans le menu de Baskul, choisissez **Réglages…** : la fenêtre de Baskul s'ouvre. Relancer Baskul alors qu'il tourne déjà (double-clic sur l'app) l'ouvre aussi. Le menu de gauche mène à :
 
-- **Accueil** : l'état de Baskul en direct (machines connectées, celle que pilotent le clavier et la souris, raccourcis), avec des boutons « Aller sur » / « Revenir ici » ;
-- **Réglages** : modifiez, puis cliquez sur **Enregistrer et redémarrer** ; Baskul redémarre et la fenêtre affiche aussitôt le nouvel état ;
-- **Journal** : les dernières lignes du journal de Baskul, en direct ;
-- **À propos** : versions, mises à jour, fichier de configuration, licence.
+- **Accueil** : l'état de Baskul en direct (machines connectées, celle que pilotent le clavier et la souris, raccourcis), avec des boutons « Aller sur » / « Revenir ici », l'activité récente (connexions, bascules, verrouillage du curseur) et, pour ajouter une machine, l'adresse et le secret à copier ;
+- **Réglages** : modifiez, puis cliquez sur **Enregistrer et redémarrer** (ou `Ctrl+S`, `⌘S` sur Mac), dans la barre du bas ; Baskul redémarre et la fenêtre affiche aussitôt le nouvel état ;
+- **Journal** : les dernières lignes du journal de Baskul, en direct et en couleurs, à filtrer par niveau ou par texte, et à copier ;
+- **À propos** : versions, mises à jour, fichier de configuration, licence, liens vers GitHub et les notes de version.
+
+`Ctrl+1` à `Ctrl+4` (`⌘1` à `⌘4` sur Mac) ouvrent ces pages. Le bouton en forme d'insecte, en bas, ouvre une issue GitHub avec la version et le système déjà remplis.
 
 Dans les réglages :
 
@@ -352,9 +354,10 @@ yarn test                # tests (utils, traductions)
 Le code suit les conventions de [`AGENTS.md`](AGENTS.md) et de [`docs/conventions/`](docs/conventions/README.md) (les mêmes que le site des Starbreakers) : wrappers `h-*` autour de Naive UI, stores Pinia seuls à appeler Baskul, props typées, commentaires réduits à l'indispensable. La CI vérifie le format, le lint et les types.
 
 - `src/types/Config.ts` reprend la configuration de `core/src/config.rs`. Pour un nouveau réglage : `config.rs` (structure, modèle commenté, validation), puis `types/Config.ts` et la section concernée dans `src/components/settings/`.
-- Les stores (`src/stores/`) tiennent l'état et parlent à Baskul : `status` (état en direct, redémarrage), `settings` (chargement, enregistrement), `update`, `log`, `network`, `hotkeyCapture`.
+- Les stores (`src/stores/`) tiennent l'état et parlent à Baskul : `status` (état en direct, redémarrage), `activity` (activité récente, déduite de l'état), `settings` (chargement, enregistrement), `update`, `log`, `network`, `hotkeyCapture`.
 - `src/components/LayoutEditor.vue` : la grille des machines (glisser-déposer au pointeur, ou sélection puis clic), avec les calculs dans `src/utils/layoutGrid.ts`.
 - Pages (`src/views/`) et menu latéral (`src/AppLayout.vue`) : vue-router. Icônes : [Tabler Icons](https://tabler.io/icons) (`@tabler/icons-vue`).
+- **Identité visuelle** (logo, couleurs, thème Naive UI) : [`docs/identite.md`](docs/identite.md).
 - **Traductions** : `locales/fr.json` et `locales/en.json`, à la racine du dépôt. La section `app` est lue par [vue-i18n](https://vue-i18n.intlify.dev) (`$t("…")` dans les composants), la section `daemon` par Baskul (`core/src/i18n.rs`, menus et état de la connexion). Pour une nouvelle langue : un fichier de plus, avec les mêmes clés.
 - `yarn build` vérifie les types (`vue-tsc`) puis construit le front ; `yarn tauri build` l'intègre à l'exécutable (et, sur macOS, construit `Baskul.app`).
 
