@@ -206,7 +206,7 @@ MetaLeft = "AltLeft"     # Windows du PC → ⌥
 
 Dans le menu de Baskul, choisissez **Réglages…** : la fenêtre de Baskul s'ouvre. Relancer Baskul alors qu'il tourne déjà (double-clic sur l'app) l'ouvre aussi. Le menu de gauche mène à :
 
-- **Accueil** : l'état de Baskul en direct (machines connectées, celle que pilotent le clavier et la souris, raccourcis), avec des boutons « Aller sur » / « Revenir ici », l'activité récente (démarrages, connexions, bascules, verrouillage du curseur), gardée par Baskul dans `activity.json` à côté de `config.toml`, même fenêtre fermée et après un redémarrage ; et, pour ajouter une machine, l'adresse et le secret à copier ;
+- **Accueil** : l'état de Baskul en direct (machines connectées, celle que pilotent le clavier et la souris, raccourcis), avec des boutons « Aller sur » / « Revenir ici », l'activité récente (démarrages, connexions, bascules, verrouillage du curseur), gardée par Baskul dans `activity.json` à côté de `config.toml`, même fenêtre fermée et après un redémarrage ; et, pour ajouter une machine, l'adresse et le secret à copier ; enfin le temps d'aller-retour avec chaque machine (carte Réseau, sur les trois dernières minutes) ;
 - **Réglages** : modifiez, puis cliquez sur **Enregistrer et redémarrer** (ou `Ctrl+S`, `⌘S` sur Mac), dans la barre du bas ; Baskul redémarre et la fenêtre affiche aussitôt le nouvel état ;
 - **Journal** : les dernières lignes du journal de Baskul, en direct et en couleurs, à filtrer par niveau ou par texte, et à copier ;
 - **À propos** : versions, mises à jour, fichier de configuration, licence, liens vers GitHub et les notes de version.
@@ -410,6 +410,7 @@ core/src/          cœur (baskul-core)
   smooth.rs        défilement fluide (algorithme de Mac Mouse Fix, simulation du trackpad)
   status.rs        état de la connexion, partagé avec l'icône et l'app
   activity.rs      activité récente (connexions, bascules…), déduite de l'état
+  latency.rs       temps d'aller-retour avec chaque machine (diagnostic réseau)
   i18n.rs          traductions des menus et de l'état (locales/*.json)
 src/               couche système (baskul-desktop)
   lib.rs           démarrage (prepare, start), arguments, instance unique, reprise des réglages de Bascule

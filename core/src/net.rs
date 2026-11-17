@@ -11,10 +11,13 @@
 //!   attente sont fusionnés.
 //! - Maintien de connexion : `Ping` toutes les secondes en l'absence de
 //!   trafic ; connexion considérée perdue après 5 s de silence.
+//! - Mesure de l'aller-retour : `Probe` toutes les deux secondes, même pendant
+//!   le trafic, sur la file prioritaire (voir `latency.rs`).
 
 use crate::crypto::{self, Sealer};
 use crate::discovery;
 use crate::i18n;
+use crate::latency;
 use crate::protocol::{Message, PROTOCOL_VERSION, Role};
 use crate::status::{self, Conn};
 use crossbeam_channel::{Receiver, Sender, bounded, select, unbounded};
@@ -22,9 +25,10 @@ use std::io::{self, BufReader, Read, Write};
 use std::net::{IpAddr, Shutdown, SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const PING_INTERVAL: Duration = Duration::from_millis(1000);
+const PROBE_INTERVAL: Duration = Duration::from_secs(2);
 const READ_TIMEOUT: Duration = Duration::from_secs(5);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
@@ -431,6 +435,7 @@ fn session(
     };
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
     let (input_tx, input_rx) = unbounded::<Message>();
+    let reply_tx = input_tx.clone();
     let (bulk_tx, bulk_rx) = bounded::<Message>(8);
     let registered = checked.and_then(|(name, os, machine)| {
         let info = PeerInfo { id, name: name.clone(), os: os.clone() };
@@ -470,6 +475,10 @@ fn session(
                 let plain = opener.open(&buf[..n]).map_err(|_| SessionError::Auth)?;
                 match Message::decode(plain) {
                     Ok(Message::Ping) => {}
+                    Ok(Message::Probe { sent }) => {
+                        let _ = reply_tx.send(Message::ProbeReply { sent });
+                    }
+                    Ok(Message::ProbeReply { sent }) => latency::record(&peer_name, sent),
                     Ok(Message::Hello { .. }) => log::warn!("Hello inattendu ignoré"),
                     Ok(Message::Refused { reason }) => return Err(SessionError::Refused(reason)),
                     Ok(msg) => on_event(LinkEvent::Message { peer: id, msg }),
@@ -488,6 +497,7 @@ fn session(
     // la place.
     if !links.peers().iter().any(|p| p.name == peer_name) {
         status::remove_peer(&peer_name);
+        latency::forget(&peer_name);
     }
     on_event(LinkEvent::Disconnected { peer: id });
     result
@@ -502,18 +512,25 @@ fn writer_loop(
     stop_rx: Receiver<()>,
 ) {
     let mut pending: Option<Message> = None;
+    let mut last_probe: Option<Instant> = None;
     loop {
-        let msg = match pending.take() {
-            Some(m) => m,
-            None => match input_rx.try_recv() {
-                Ok(m) => m,
-                Err(_) => select! {
-                    recv(input_rx) -> m => match m { Ok(m) => m, Err(_) => return },
-                    recv(bulk_rx) -> m => match m { Ok(m) => m, Err(_) => return },
-                    recv(stop_rx) -> _ => return,
-                    default(PING_INTERVAL) => Message::Ping,
+        let probe_due = last_probe.is_none_or(|t| t.elapsed() >= PROBE_INTERVAL);
+        let msg = if probe_due && pending.is_none() {
+            last_probe = Some(Instant::now());
+            Message::Probe { sent: latency::clock_us() }
+        } else {
+            match pending.take() {
+                Some(m) => m,
+                None => match input_rx.try_recv() {
+                    Ok(m) => m,
+                    Err(_) => select! {
+                        recv(input_rx) -> m => match m { Ok(m) => m, Err(_) => return },
+                        recv(bulk_rx) -> m => match m { Ok(m) => m, Err(_) => return },
+                        recv(stop_rx) -> _ => return,
+                        default(PING_INTERVAL) => Message::Ping,
+                    },
                 },
-            },
+            }
         };
         // Fusion des déplacements en attente : si le réseau a pris du retard,
         // on envoie un seul déplacement cumulé plutôt qu'une file qui s'allonge.
@@ -635,6 +652,19 @@ mod tests {
                 (_, Message::ClipChunk { data, .. }) => assert_eq!(data.len(), crate::protocol::CLIP_CHUNK),
                 m => panic!("{m:?}"),
             }
+        }
+    }
+
+    #[test]
+    fn round_trips_are_measured_from_the_start() {
+        let (_a, a_rx, _b, b_rx) = start_pair("secret-de-test", "secret-de-test", Role::Secondary);
+        wait_connected(&a_rx);
+        wait_connected(&b_rx);
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let measured = |name: &str| latency::snapshot().iter().any(|(n, s)| n == name && !s.is_empty());
+        while !(measured("A") && measured("B")) {
+            assert!(Instant::now() < deadline, "pas de mesure de l'aller-retour");
+            std::thread::sleep(Duration::from_millis(20));
         }
     }
 

@@ -451,6 +451,12 @@
       "imported": "Settings imported",
       "confirmTitle": "Import these settings?",
       "confirmText": "Current settings are replaced (except the role, name, addresses, network adapter and grid), then Baskul restarts. Unsaved changes are lost."
+    },
+    "network": {
+      "title": "Network",
+      "summary": "average {average} ms · peak {max} ms",
+      "ms": "{ms} ms",
+      "help": "Round-trip time with each computer, measured every two seconds over the last three minutes. Above 30 ms the cursor may feel laggy: an Ethernet cable helps, or another network adapter (Connection tab)."
     }
   }
 }

@@ -119,6 +119,12 @@ async fn import_settings(path: String) -> Result<Value, Error> {
     call("POST", "/api/import", Some(json!({ "path": path }))).await
 }
 
+/// Allers-retours mesurés avec chaque machine connectée.
+#[tauri::command]
+async fn read_latency() -> Result<Value, Error> {
+    call("GET", "/api/latency", None).await
+}
+
 /// Activité récente, de la plus ancienne à la plus récente.
 #[tauri::command]
 async fn read_activity() -> Result<Value, Error> {
@@ -268,6 +274,7 @@ fn main() {
             read_log,
             open_log_file,
             read_activity,
+            read_latency,
             clear_activity,
             list_profiles,
             save_profile,

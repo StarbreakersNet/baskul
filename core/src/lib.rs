@@ -21,6 +21,7 @@ pub mod hotkey;
 pub mod i18n;
 pub mod iface;
 pub mod keymap;
+pub mod latency;
 pub mod net;
 pub mod primary;
 pub mod protocol;
