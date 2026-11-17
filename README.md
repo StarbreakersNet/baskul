@@ -335,12 +335,17 @@ L'API écoute aussi en HTTP sur 127.0.0.1, pour les commandes `baskul switch` / 
 corepack enable          # une fois : active Yarn 4 (champ packageManager)
 cd app && yarn install
 yarn tauri dev           # Baskul complet, fenêtre de réglages avec rechargement à chaud
+yarn format              # Prettier
+yarn lint                # oxlint, ESLint et noms de fichiers
+yarn type-check          # vue-tsc
 ```
 
-- `src/types.ts` reprend la configuration de `core/src/config.rs`. Pour un nouveau réglage : `config.rs` (structure, modèle commenté, validation), puis `types.ts` et la section concernée dans `src/sections/`.
-- `src/composables/useSettings.ts` gère l'état : chargement, état en direct, enregistrement, attente du redémarrage. `useUpdate.ts` gère les mises à jour.
-- `src/components/LayoutEditor.vue` : la grille des machines (glisser-déposer au pointeur, ou sélection puis clic).
-- Pages (`src/pages/`) et menu latéral (`src/layouts/AppLayout.vue`) : vue-router. Icônes : [Tabler Icons](https://tabler.io/icons) (`@tabler/icons-vue`).
+Le code suit les conventions de [`AGENTS.md`](AGENTS.md) et de [`docs/conventions/`](docs/conventions/README.md) (les mêmes que le site des Starbreakers) : wrappers `h-*` autour de Naive UI, stores Pinia seuls à appeler Baskul, props typées, commentaires réduits à l'indispensable. La CI vérifie le format, le lint et les types.
+
+- `src/types/Config.ts` reprend la configuration de `core/src/config.rs`. Pour un nouveau réglage : `config.rs` (structure, modèle commenté, validation), puis `types/Config.ts` et la section concernée dans `src/components/settings/`.
+- Les stores (`src/stores/`) tiennent l'état et parlent à Baskul : `status` (état en direct, redémarrage), `settings` (chargement, enregistrement), `update`, `log`, `network`, `hotkeyCapture`.
+- `src/components/LayoutEditor.vue` : la grille des machines (glisser-déposer au pointeur, ou sélection puis clic), avec les calculs dans `src/utils/layoutGrid.ts`.
+- Pages (`src/views/`) et menu latéral (`src/AppLayout.vue`) : vue-router. Icônes : [Tabler Icons](https://tabler.io/icons) (`@tabler/icons-vue`).
 - **Traductions** : `locales/fr.json` et `locales/en.json`, à la racine du dépôt. La section `app` est lue par [vue-i18n](https://vue-i18n.intlify.dev) (`$t("…")` dans les composants), la section `daemon` par Baskul (`core/src/i18n.rs`, menus et état de la connexion). Pour une nouvelle langue : un fichier de plus, avec les mêmes clés.
 - `yarn build` vérifie les types (`vue-tsc`) puis construit le front ; `yarn tauri build` l'intègre à l'exécutable (et, sur macOS, construit `Baskul.app`).
 
@@ -400,7 +405,7 @@ src/               couche système (baskul-desktop)
     linux.rs       version minimale (connexion, presse-papiers, réglages, actions de l'icône)
 locales/           traductions (fr, en), partagées par Baskul et l'app
 app/               app Baskul : Tauri 2 + Vue 3 + Naive UI
-  src/             front de la fenêtre de réglages (pages, sections, composants, état)
+  src/             front de la fenêtre de réglages : vues, composants, wrappers h-*, stores Pinia (docs/conventions/)
   src-tauri/       exécutable : démarrage de Baskul, icône (tray.rs), fenêtre de réglages, commandes Tauri
 ```
 

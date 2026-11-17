@@ -134,8 +134,10 @@ fn monitors() -> Layout {
     unsafe extern "system" fn cb(hmon: HMONITOR, _hdc: HDC, _rc: *mut RECT, data: LPARAM) -> windows_sys::core::BOOL {
         // SAFETY: `data` pointe vers le Vec passé à EnumDisplayMonitors ci-dessous.
         let v = unsafe { &mut *(data as *mut Vec<Rect>) };
+        // SAFETY: structure de nombres, initialisable à zéro.
         let mut mi: MONITORINFO = unsafe { zeroed() };
         mi.cbSize = size_of::<MONITORINFO>() as u32;
+        // SAFETY: moniteur fourni par EnumDisplayMonitors, structure à la taille indiquée.
         if unsafe { GetMonitorInfoW(hmon, &mut mi) } != 0 {
             let r = mi.rcMonitor;
             v.push(Rect::new(r.left, r.top, r.right, r.bottom));
