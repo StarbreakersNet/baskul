@@ -30,7 +30,7 @@ Variables CSS (`brand.scss`), redéfinies en thème sombre sur `:root[data-theme
 
 | Variable | Usage |
 |---|---|
-| `--brand-gradient` | Dégradé du logo : nom "Baskul" (`.brand-wordmark`) |
+| `--brand-gradient` | Dégradé du logo, éclairci en thème sombre : nom "Baskul" (`.brand-wordmark`) |
 | `--brand-glow-start`, `--brand-glow-end` | Deux lueurs dans les coins du fond de la fenêtre |
 | `--glass`, `--glass-border` | Barre latérale, en-tête et pied de page (`.glass`, flou d'arrière-plan) |
 | `--brand-tint` | Fond teinté de l'accent : icônes des réglages, machine active |
