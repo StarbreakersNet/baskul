@@ -9,6 +9,8 @@ desktop.ini
 # Éditeurs
 .idea/
 .vscode/
+*.swp
+*~
 
 # App de réglages (Tauri + Vue)
 /app/node_modules
