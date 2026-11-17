@@ -34,9 +34,9 @@ describe("activité récente", () => {
     const label = describeActivity(event("switchedTo", { count: 14, names: ["Mac", "Salon"] }));
     expect(label.key).toBe("eventSwitches");
     expect(label.params).toMatchObject({ count: 14, names: '"Mac" et "Salon"' });
-    expect(describeActivity(event("switchedTo", { count: 2, names: ["A", "B"] }), "en").params.names).toBe(
-      '"A" and "B"'
-    );
+    expect(
+      describeActivity(event("switchedTo", { count: 2, names: ["A", "B"] }), "en").params.names
+    ).toBe('"A" and "B"');
   });
 
   it("distingue un redémarrage et donne la durée d'une coupure", () => {

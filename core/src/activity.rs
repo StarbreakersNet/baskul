@@ -4,15 +4,15 @@
 
 use crate::status::Snapshot;
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 pub const MAX_EVENTS: usize = 100;
 /// Au-delà de ce silence, une suite d'événements semblables est close.
 const RUN_GAP_MS: u64 = 30 * 60 * 1000;
-/// Une reconnexion aussi rapide remplace la déconnexion.
-const FLAP_MS: u64 = 30 * 1000;
+/// Une reconnexion aussi rapide remplace la déconnexion, et sa notification.
+pub const FLAP_MS: u64 = 30 * 1000;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
@@ -166,6 +166,41 @@ fn recent_disconnection(events: &VecDeque<Event>, peer: &str, now: u64) -> Optio
         .iter()
         .rposition(|e| matches!(&e.kind, Kind::Disconnected { peer: p } if p == peer))
         .filter(|&i| now.saturating_sub(events[i].at) < FLAP_MS)
+}
+
+/// Notifications des connexions : une déconnexion n'est annoncée qu'au bout de
+/// [`FLAP_MS`], et pas du tout si la machine revient entre-temps.
+#[derive(Debug, Default)]
+pub struct Notices {
+    pending: BTreeMap<String, u64>,
+    next: u64,
+}
+
+impl Notices {
+    pub const fn new() -> Self {
+        Self { pending: BTreeMap::new(), next: 0 }
+    }
+
+    /// Déconnexion de `peer` : numéro à rendre à [`Notices::confirm`] après [`FLAP_MS`].
+    pub fn disconnected(&mut self, peer: &str) -> u64 {
+        self.next += 1;
+        self.pending.insert(peer.to_string(), self.next);
+        self.next
+    }
+
+    /// Faut-il annoncer la connexion de `peer` ? Pas si elle annule une déconnexion pas encore annoncée.
+    pub fn connected(&mut self, peer: &str) -> bool {
+        self.pending.remove(peer).is_none()
+    }
+
+    /// Faut-il annoncer la déconnexion `ticket` de `peer` ? Pas si la machine est revenue depuis.
+    pub fn confirm(&mut self, peer: &str, ticket: u64) -> bool {
+        let is_current = self.pending.get(peer) == Some(&ticket);
+        if is_current {
+            self.pending.remove(peer);
+        }
+        is_current
+    }
 }
 
 /// Du plus ancien au plus récent.
@@ -385,5 +420,28 @@ mod tests {
         // activity.json écrit avant les regroupements
         let old: Event = serde_json::from_str(r#"{ "id": 1, "at": 5, "kind": "started" }"#).unwrap();
         assert_eq!((old.count, old.kind), (1, Kind::Started { restarted: false }));
+    }
+
+    #[test]
+    fn a_quick_reconnection_is_not_notified() {
+        let mut notices = Notices::new();
+        let ticket = notices.disconnected("Mac");
+        assert!(!notices.connected("Mac"));
+        assert!(!notices.confirm("Mac", ticket));
+
+        let ticket = notices.disconnected("Mac");
+        assert!(notices.confirm("Mac", ticket));
+        assert!(notices.connected("Mac"));
+    }
+
+    #[test]
+    fn only_the_last_disconnection_is_notified() {
+        let mut notices = Notices::new();
+        let first = notices.disconnected("Mac");
+        let other = notices.disconnected("Salon");
+        let last = notices.disconnected("Mac");
+        assert!(!notices.confirm("Mac", first));
+        assert!(notices.confirm("Mac", last));
+        assert!(notices.confirm("Salon", other));
     }
 }
