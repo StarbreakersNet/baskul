@@ -461,6 +461,12 @@
       "imported": "Réglages importés",
       "confirmTitle": "Importer ces réglages ?",
       "confirmText": "Les réglages actuels sont remplacés (sauf le rôle, le nom, les adresses, la carte réseau et la grille), puis Baskul redémarre. Les modifications non enregistrées sont perdues."
+    },
+    "network": {
+      "title": "Réseau",
+      "summary": "moyenne {average} ms · pic {max} ms",
+      "ms": "{ms} ms",
+      "help": "Temps d'aller-retour avec chaque machine, mesuré toutes les deux secondes sur les trois dernières minutes. Au-delà de 30 ms, le curseur peut sembler en retard : un câble Ethernet aide, ou une autre carte réseau (onglet Connexion)."
     }
   }
 }

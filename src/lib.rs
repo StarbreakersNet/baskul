@@ -34,8 +34,8 @@ mod update;
 // plateforme n'en utilise qu'une partie.
 #[allow(unused_imports)]
 use baskul_core::{
-    capture, clipboard, config, crypto, discovery, geometry, hotkey, iface, keymap, net, primary, protocol, secondary,
-    services, smooth, status,
+    capture, clipboard, config, crypto, discovery, geometry, hotkey, iface, keymap, latency, net, primary, protocol,
+    secondary, services, smooth, status,
 };
 
 use std::fs::File;

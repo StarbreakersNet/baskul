@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Incrémenté à chaque changement incompatible du protocole.
-pub const PROTOCOL_VERSION: u32 = 4;
+pub const PROTOCOL_VERSION: u32 = 5;
 
 pub const DEFAULT_PORT: u16 = 24870;
 
@@ -190,6 +190,14 @@ pub enum Message {
     /// un message toutes les quelques secondes) : celle qui le reçoit reste
     /// active elle aussi (veille de l'écran, économiseur, statut "absent").
     UserActive,
+    /// Mesure de l'aller-retour : l'autre machine renvoie `sent` tel quel
+    /// dans un `ProbeReply` (horloge de l'émetteur, voir `latency.rs`).
+    Probe {
+        sent: u64,
+    },
+    ProbeReply {
+        sent: u64,
+    },
 }
 
 impl Message {

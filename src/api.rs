@@ -331,6 +331,7 @@ fn dispatch(method: &str, path: &str, body: &[u8], server: &Server) -> Response 
             Ok(()) => Response { restart: can_restart, ..Response::json(200, json!({ "restart": can_restart })) },
             Err(e) => Response::error(422, &e),
         },
+        ("GET", "/api/latency") => Response::json(200, latency_info()),
         ("GET", "/api/activity") => Response::json(200, json!({ "events": crate::activity::list() })),
         ("DELETE", "/api/activity") => {
             crate::history::clear();
@@ -374,6 +375,7 @@ fn dispatch(method: &str, path: &str, body: &[u8], server: &Server) -> Response 
             | "/api/open-file"
             | "/api/log"
             | "/api/activity"
+            | "/api/latency"
             | "/api/profiles"
             | "/api/profiles/apply"
             | "/api/export"
@@ -515,6 +517,19 @@ fn status_info(server: &Server) -> Value {
         "foreground": crate::programs::last_foreground(),
         "update": crate::update::info(),
     })
+}
+
+/// Allers-retours mesurés avec chaque machine connectée, en millisecondes.
+fn latency_info() -> Value {
+    let peers: Vec<Value> = crate::latency::snapshot()
+        .into_iter()
+        .map(|(name, samples)| {
+            let samples: Vec<Value> =
+                samples.iter().map(|s| json!({ "at": s.at, "ms": s.rtt_us as f64 / 1000.0 })).collect();
+            json!({ "name": name, "samples": samples })
+        })
+        .collect();
+    json!({ "peers": peers })
 }
 
 /// Fin du journal (environ 64 Kio), pour la fenêtre de réglages.
