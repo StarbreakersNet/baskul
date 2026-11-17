@@ -86,3 +86,4 @@ Lire d'abord le fichier de [`docs/conventions/`](docs/conventions/README.md) qui
 | `useMessage()` ou `useNotification()` de `naive-ui` | `useAppMessage()` |
 | `const saving = ref(false)`, passé à `true` puis à `false` | `const saving = useLoader()` et `await saving.run(…)` |
 | `<style scoped></style>` vide | Pas de bloc `<style>` |
+| `v-if` qui fait apparaître un élément d'un coup | Une transition (`fade`, `<expand-transition>`) ou un squelette (`h-skeleton`) : voir [`composants.md`](docs/conventions/composants.md#rien-napparaît-dun-coup) |

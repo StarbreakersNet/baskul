@@ -18,6 +18,7 @@ import LinuxNotice from "@/components/LinuxNotice.vue";
 import NumberInput from "@/components/NumberInput.vue";
 import PositionPicker from "@/components/PositionPicker.vue";
 import SettingRow from "@/components/SettingRow.vue";
+import ExpandTransition from "@/components/ExpandTransition.vue";
 import type { BaskulConfig } from "@/types/Config";
 import type { DaemonInfo, Peer } from "@/types/Daemon";
 
@@ -66,9 +67,11 @@ const isMissingHotkey = computed(
       :label="$t('settings.switching.next')">
       <hotkey-input v-model="config.hotkeys.next_machine" :os="info.os" />
     </setting-row>
-    <h-alert v-if="!hasEdgeSwitching && isMissingHotkey" class="switching-alert" type="warning">
-      {{ $t("settings.switching.hotkeysNeeded") }}
-    </h-alert>
+    <expand-transition>
+      <div v-if="!hasEdgeSwitching && isMissingHotkey" class="switching-alert">
+        <h-alert type="warning">{{ $t("settings.switching.hotkeysNeeded") }}</h-alert>
+      </div>
+    </expand-transition>
     <setting-row
       :icon="IconBorderOuter"
       :help="$t('settings.switching.edgesHelp')"
@@ -113,6 +116,6 @@ const isMissingHotkey = computed(
 }
 
 .switching-alert {
-  margin: 4px 0 8px;
+  padding: 4px 0 8px;
 }
 </style>

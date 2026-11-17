@@ -14,8 +14,10 @@ import HFlex from "@/components/c/hFlex.vue";
 import HH2 from "@/components/c/hH2.vue";
 import HIcon from "@/components/c/hIcon.vue";
 import HProgress from "@/components/c/hProgress.vue";
+import HSkeleton from "@/components/c/hSkeleton.vue";
 import HText from "@/components/c/hText.vue";
 import HTime from "@/components/c/hTime.vue";
+import ExpandTransition from "@/components/ExpandTransition.vue";
 import logo from "@/assets/logo.svg";
 import { useCopy } from "@/composables/useCopy";
 import { useExternalLink } from "@/composables/useExternalLink";
@@ -133,16 +135,24 @@ onMounted(async () => {
           {{ settings.info?.version ?? $t("about.notRunning") }}
         </h-descriptions-item>
         <h-descriptions-item :label="$t('about.app')">{{ appVersion }}</h-descriptions-item>
-        <h-descriptions-item v-if="settings.info" :label="$t('about.machine')">
-          {{ settings.info.hostname }} · {{ osLabel(settings.info.os) }}
+        <h-descriptions-item :label="$t('about.machine')">
+          <transition mode="out-in" name="fade">
+            <span v-if="settings.info">
+              {{ settings.info.hostname }} · {{ osLabel(settings.info.os) }}
+            </span>
+            <h-skeleton v-else text :width="180" />
+          </transition>
         </h-descriptions-item>
-        <h-descriptions-item v-if="settings.info" :label="$t('about.config')">
-          <h-flex align="center" :size="8">
-            <h-text class="mono break-all">{{ settings.info.path }}</h-text>
-            <h-button size="tiny" @click="settings.openConfigFile()">
-              {{ $t("common.open") }}
-            </h-button>
-          </h-flex>
+        <h-descriptions-item :label="$t('about.config')">
+          <transition mode="out-in" name="fade">
+            <h-flex v-if="settings.info" align="center" :size="8">
+              <h-text class="mono break-all">{{ settings.info.path }}</h-text>
+              <h-button size="tiny" @click="settings.openConfigFile()">
+                {{ $t("common.open") }}
+              </h-button>
+            </h-flex>
+            <h-skeleton v-else text :width="320" />
+          </transition>
         </h-descriptions-item>
         <h-descriptions-item :label="$t('about.source')">
           <h-flex align="center" :size="8">
@@ -160,40 +170,51 @@ onMounted(async () => {
       <h-flex align="center" justify="space-between" :size="12">
         <h-flex class="about-update-text" :size="2" vertical>
           <h-text>{{ updateView.text }}</h-text>
-          <h-text v-if="update.info?.checkedAt" class="small-text" depth="3">
-            <i18n-t keypath="update.checkedAt" tag="span">
-              <template #ago><h-time :time="update.info.checkedAt" type="relative" /></template>
-            </i18n-t>
-          </h-text>
+          <expand-transition>
+            <h-text v-if="update.info?.checkedAt" class="small-text" depth="3" tag="div">
+              <i18n-t keypath="update.checkedAt" tag="span">
+                <template #ago><h-time :time="update.info.checkedAt" type="relative" /></template>
+              </i18n-t>
+            </h-text>
+          </expand-transition>
         </h-flex>
-        <h-button v-if="isUpdateReady" :loading="isInstalling" type="primary" @click="install()">
-          {{ $t("update.restart") }}
-        </h-button>
-        <h-button v-else :loading="isChecking" @click="update.check()">
-          {{ $t("update.check") }}
-        </h-button>
+        <transition mode="out-in" name="fade">
+          <h-button v-if="isUpdateReady" :loading="isInstalling" type="primary" @click="install()">
+            {{ $t("update.restart") }}
+          </h-button>
+          <h-button v-else :loading="isChecking" @click="update.check()">
+            {{ $t("update.check") }}
+          </h-button>
+        </transition>
       </h-flex>
-      <h-progress
-        v-if="updateView.progress !== undefined"
-        class="about-progress"
-        :percentage="updateView.progress"
-        :show-indicator="false"
-        type="line" />
-      <h-flex v-if="updateView.url" align="center" class="about-block" :size="8">
-        <h-text class="mono break-all" depth="3">{{ updateView.url }}</h-text>
-        <h-button size="tiny" @click="openLink(updateView.url)">
-          <template #icon>
-            <h-icon><icon-external-link /></h-icon>
-          </template>
-          {{ $t("common.open") }}
-        </h-button>
-        <h-button size="tiny" @click="copy(updateView.url)">{{ $t("common.copy") }}</h-button>
-      </h-flex>
-      <h-collapse v-if="updateView.notes" class="about-block">
-        <h-collapse-item name="notes" :title="$t('update.notes')">
-          <h-text class="about-notes">{{ updateView.notes }}</h-text>
-        </h-collapse-item>
-      </h-collapse>
+      <expand-transition>
+        <div v-if="updateView.progress !== undefined" class="about-block">
+          <h-progress :percentage="updateView.progress" :show-indicator="false" type="line" />
+        </div>
+      </expand-transition>
+      <expand-transition>
+        <div v-if="updateView.url" class="about-block">
+          <h-flex align="center" :size="8">
+            <h-text class="mono break-all" depth="3">{{ updateView.url }}</h-text>
+            <h-button size="tiny" @click="openLink(updateView.url)">
+              <template #icon>
+                <h-icon><icon-external-link /></h-icon>
+              </template>
+              {{ $t("common.open") }}
+            </h-button>
+            <h-button size="tiny" @click="copy(updateView.url)">{{ $t("common.copy") }}</h-button>
+          </h-flex>
+        </div>
+      </expand-transition>
+      <expand-transition>
+        <div v-if="updateView.notes" class="about-block">
+          <h-collapse>
+            <h-collapse-item name="notes" :title="$t('update.notes')">
+              <h-text class="about-notes">{{ updateView.notes }}</h-text>
+            </h-collapse-item>
+          </h-collapse>
+        </div>
+      </expand-transition>
     </h-card>
 
     <h-card size="small" :title="$t('about.thanks')">
@@ -224,12 +245,8 @@ onMounted(async () => {
   min-width: 220px;
 }
 
-.about-progress {
-  margin-top: 10px;
-}
-
 .about-block {
-  margin-top: 8px;
+  padding-top: 10px;
 }
 
 .about-notes {

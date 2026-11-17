@@ -146,7 +146,9 @@ onMounted(async () => {
       @expand="setCollapsed(false)">
       <h-flex align="center" class="app-brand" :size="10" :wrap="false">
         <h-avatar color="transparent" :size="34" :src="logo" />
-        <h-text v-if="!isCollapsed" class="brand-wordmark app-brand-name">Baskul</h-text>
+        <transition name="fade">
+          <h-text v-if="!isCollapsed" class="brand-wordmark app-brand-name">Baskul</h-text>
+        </transition>
       </h-flex>
       <h-menu
         :collapsed="isCollapsed"
@@ -167,10 +169,12 @@ onMounted(async () => {
             </h-text>
             <h-text class="app-subtitle" depth="3">{{ subtitle }}</h-text>
           </h-flex>
-          <status-badge
-            v-if="!isLoading"
-            :is-restarting="isRestarting"
-            :status="statusStore.status" />
+          <transition name="fade">
+            <status-badge
+              v-if="!isLoading"
+              :is-restarting="isRestarting"
+              :status="statusStore.status" />
+          </transition>
         </h-flex>
       </h-layout-header>
 
@@ -182,29 +186,33 @@ onMounted(async () => {
         position="absolute">
         <div class="page-body">
           <update-banner v-if="!isWaitingForDaemon" />
-          <h-result
-            v-if="isWaitingForDaemon && !isLoading"
-            class="app-offline"
-            :description="$t('layout.offlineText')"
-            status="info"
-            :title="$t('layout.offlineTitle')">
-            <template #footer>
-              <h-button
-                :loading="statusStore.phase === 'starting'"
-                type="primary"
-                @click="statusStore.start()">
-                {{ $t("layout.start") }}
-              </h-button>
-            </template>
-          </h-result>
-          <!-- Sortie de durée nulle : sinon Vue attendrait la fin des transitions propres aux composants -->
-          <router-view v-else-if="!isWaitingForDaemon" v-slot="{ Component }">
-            <transition :duration="{ enter: 250, leave: 0 }" mode="out-in" name="page">
-              <keep-alive>
-                <component :is="Component" :key="route.name" />
-              </keep-alive>
-            </transition>
-          </router-view>
+          <transition mode="out-in" name="fade">
+            <h-result
+              v-if="isWaitingForDaemon && !isLoading"
+              class="app-offline"
+              :description="$t('layout.offlineText')"
+              status="info"
+              :title="$t('layout.offlineTitle')">
+              <template #footer>
+                <h-button
+                  :loading="statusStore.phase === 'starting'"
+                  type="primary"
+                  @click="statusStore.start()">
+                  {{ $t("layout.start") }}
+                </h-button>
+              </template>
+            </h-result>
+            <div v-else-if="!isWaitingForDaemon">
+              <!-- Sortie de durée nulle : sinon Vue attendrait la fin des transitions propres aux composants -->
+              <router-view v-slot="{ Component }">
+                <transition :duration="{ enter: 250, leave: 0 }" mode="out-in" name="page">
+                  <keep-alive>
+                    <component :is="Component" :key="route.name" />
+                  </keep-alive>
+                </transition>
+              </router-view>
+            </div>
+          </transition>
         </div>
       </h-layout-content>
 

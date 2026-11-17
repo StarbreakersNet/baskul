@@ -21,6 +21,7 @@ import HSwitch from "@/components/c/hSwitch.vue";
 import HTag from "@/components/c/hTag.vue";
 import HText from "@/components/c/hText.vue";
 import SettingRow from "@/components/SettingRow.vue";
+import ExpandTransition from "@/components/ExpandTransition.vue";
 import { useCopy } from "@/composables/useCopy";
 import { useNetworkStore } from "@/stores/network";
 import { hostWithoutDefaultPort } from "@/utils/address";
@@ -114,75 +115,81 @@ onBeforeUnmount(stopRefreshing);
   <div>
     <h-text depth="3" tag="p">{{ $t("settings.connection.intro") }}</h-text>
 
-    <template v-if="isPrimary">
-      <setting-row
-        :icon="IconServer"
-        v-if="address"
-        :help="$t('settings.connection.addressHelp')"
-        :label="$t('settings.connection.address')">
-        <h-text code strong>{{ address }}</h-text>
-        <h-button size="small" @click="copy(address)">{{ $t("common.copy") }}</h-button>
-      </setting-row>
-      <setting-row
-        :icon="IconBroadcast"
-        :help="$t('settings.connection.announceHelp')"
-        :label="$t('settings.connection.announce')">
-        <h-switch v-model:value="config.network.discovery" />
-      </setting-row>
-    </template>
+    <setting-row
+      :icon="IconServer"
+      :help="$t('settings.connection.addressHelp')"
+      :label="$t('settings.connection.address')"
+      :show="isPrimary && !!address">
+      <h-text code strong>{{ address }}</h-text>
+      <h-button size="small" @click="copy(address)">{{ $t("common.copy") }}</h-button>
+    </setting-row>
+    <setting-row
+      :icon="IconBroadcast"
+      :help="$t('settings.connection.announceHelp')"
+      :label="$t('settings.connection.announce')"
+      :show="isPrimary">
+      <h-switch v-model:value="config.network.discovery" />
+    </setting-row>
 
-    <template v-else>
-      <setting-row
-        :icon="IconRadar"
-        :help="$t('settings.connection.discoveryHelp')"
-        :label="$t('settings.connection.discovery')">
-        <h-switch v-model:value="config.network.discovery" />
-      </setting-row>
-      <setting-row
-        :icon="IconDeviceLaptop"
-        v-if="config.network.discovery"
-        :help="$t('settings.connection.foundHelp')"
-        :label="$t('settings.connection.found')">
-        <h-flex class="connection-found" :size="6" vertical>
-          <h-text v-if="!primaries.length" depth="3">
+    <setting-row
+      :icon="IconRadar"
+      :help="$t('settings.connection.discoveryHelp')"
+      :label="$t('settings.connection.discovery')"
+      :show="!isPrimary">
+      <h-switch v-model:value="config.network.discovery" />
+    </setting-row>
+    <setting-row
+      :icon="IconDeviceLaptop"
+      :help="$t('settings.connection.foundHelp')"
+      :label="$t('settings.connection.found')"
+      :show="!isPrimary && config.network.discovery">
+      <div class="connection-found">
+        <expand-transition>
+          <h-text v-if="!primaries.length" depth="3" tag="div">
             {{ $t("settings.connection.searching") }}
           </h-text>
-          <h-flex
+        </expand-transition>
+        <expand-transition group>
+          <div
             v-for="primary in primaries"
             :key="primary.name + primary.addresses.join()"
-            align="center"
-            :size="8">
-            <h-text strong>{{ primary.name }}</h-text>
-            <h-text depth="3">{{ osLabel(primary.os) }} · {{ hostOf(primary) }}</h-text>
-            <h-tag v-if="!isCompatible(primary)" :bordered="false" size="small" type="warning">
-              {{ $t("settings.connection.otherVersion") }}
-            </h-tag>
-            <h-button
-              v-else-if="config.network.connect !== hostOf(primary)"
-              quaternary
-              size="tiny"
-              @click="pin(primary)">
-              {{ $t("settings.connection.pin") }}
-            </h-button>
-          </h-flex>
-        </h-flex>
-      </setting-row>
-      <setting-row
-        :icon="IconPlugConnected"
-        :help="$t('settings.connection.connectHelp')"
-        :label="$t('settings.connection.connect')">
-        <h-input
-          v-model:value="config.network.connect"
-          class="mono"
-          :input-props="{ spellcheck: false, autocomplete: 'off' }"
-          :placeholder="
-            config.network.discovery
-              ? $t('settings.connection.connectAuto')
-              : $t('settings.connection.connectPlaceholder')
-          "
-          :status="isAddressMissing ? 'error' : undefined" />
-      </setting-row>
-    </template>
+            class="connection-primary">
+            <h-flex align="center" :size="8">
+              <h-text strong>{{ primary.name }}</h-text>
+              <h-text depth="3">{{ osLabel(primary.os) }} · {{ hostOf(primary) }}</h-text>
+              <transition mode="out-in" name="fade">
+                <h-tag v-if="!isCompatible(primary)" :bordered="false" size="small" type="warning">
+                  {{ $t("settings.connection.otherVersion") }}
+                </h-tag>
+                <h-button
+                  v-else-if="config.network.connect !== hostOf(primary)"
+                  quaternary
+                  size="tiny"
+                  @click="pin(primary)">
+                  {{ $t("settings.connection.pin") }}
+                </h-button>
+              </transition>
+            </h-flex>
+          </div>
+        </expand-transition>
+      </div>
+    </setting-row>
+    <setting-row
+      :icon="IconPlugConnected"
+      :help="$t('settings.connection.connectHelp')"
+      :label="$t('settings.connection.connect')"
+      :show="!isPrimary">
+      <h-input
+        v-model:value="config.network.connect"
+        class="mono"
+        :input-props="{ spellcheck: false, autocomplete: 'off' }"
+        :placeholder="
+          config.network.discovery
+            ? $t('settings.connection.connectAuto')
+            : $t('settings.connection.connectPlaceholder')
+        "
+        :status="isAddressMissing ? 'error' : undefined" />
+    </setting-row>
 
     <setting-row
       :icon="IconKey"
@@ -215,9 +222,9 @@ onBeforeUnmount(stopRefreshing);
     </setting-row>
     <setting-row
       :icon="IconRouter"
-      v-if="isPrimary"
       :help="$t('settings.connection.listenHelp')"
-      :label="$t('settings.connection.listen')">
+      :label="$t('settings.connection.listen')"
+      :show="isPrimary">
       <h-input
         v-model:value="config.network.listen"
         class="mono"
@@ -235,6 +242,10 @@ onBeforeUnmount(stopRefreshing);
 <style lang="scss" scoped>
 .connection-found {
   width: 100%;
+}
+
+.connection-primary {
+  padding: 3px 0;
 }
 
 .connection-select {

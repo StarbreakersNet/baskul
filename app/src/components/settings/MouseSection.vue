@@ -66,40 +66,44 @@ const sideButtonOptions = computed<ChoiceOption<BaskulConfig["buttons"]["side_bu
       :label="$t('settings.mouse.scrolling')">
       <choice-group v-model="config.scroll.mode" :options="modeOptions" />
     </setting-row>
-    <template v-if="scrollMode === 'smooth'">
-      <setting-row
-        :icon="IconBolt"
-        :help="$t('settings.mouse.smoothSpeedHelp')"
-        :label="$t('settings.mouse.smoothSpeed')">
-        <choice-group v-model="config.scroll.smooth_speed" :options="speedOptions" />
-      </setting-row>
-      <setting-row
-        :icon="IconWaveSine"
-        :help="$t('settings.mouse.smoothnessHelp')"
-        :label="$t('settings.mouse.smoothness')">
-        <choice-group v-model="config.scroll.smoothness" :options="smoothnessOptions" />
-      </setting-row>
-      <setting-row
-        :icon="IconTarget"
-        :help="$t('settings.mouse.precisionHelp')"
-        :label="$t('settings.mouse.precision')">
-        <h-switch v-model:value="config.scroll.smooth_precision" />
-      </setting-row>
-      <setting-row
-        :icon="IconHandFinger"
-        v-if="config.scroll.smoothness === 'high'"
-        :help="$t('settings.mouse.trackpadHelp')"
-        :label="$t('settings.mouse.trackpad')">
-        <h-switch v-model:value="config.scroll.trackpad_simulation" />
-      </setting-row>
-    </template>
+    <setting-row
+      :icon="IconBolt"
+      :help="$t('settings.mouse.smoothSpeedHelp')"
+      :label="$t('settings.mouse.smoothSpeed')"
+      :show="scrollMode === 'smooth'">
+      <choice-group v-model="config.scroll.smooth_speed" :options="speedOptions" />
+    </setting-row>
+    <setting-row
+      :icon="IconWaveSine"
+      :help="$t('settings.mouse.smoothnessHelp')"
+      :label="$t('settings.mouse.smoothness')"
+      :show="scrollMode === 'smooth'">
+      <choice-group v-model="config.scroll.smoothness" :options="smoothnessOptions" />
+    </setting-row>
+    <setting-row
+      :icon="IconTarget"
+      :help="$t('settings.mouse.precisionHelp')"
+      :label="$t('settings.mouse.precision')"
+      :show="scrollMode === 'smooth'">
+      <h-switch v-model:value="config.scroll.smooth_precision" />
+    </setting-row>
+    <setting-row
+      :icon="IconHandFinger"
+      :help="$t('settings.mouse.trackpadHelp')"
+      :label="$t('settings.mouse.trackpad')"
+      :show="scrollMode === 'smooth' && config.scroll.smoothness === 'high'">
+      <h-switch v-model:value="config.scroll.trackpad_simulation" />
+    </setting-row>
     <setting-row
       :icon="IconListNumbers"
-      v-else-if="scrollMode === 'lines'"
-      :label="$t('settings.mouse.linesPerNotch')">
+      :label="$t('settings.mouse.linesPerNotch')"
+      :show="scrollMode === 'lines'">
       <number-input v-model="config.scroll.lines_per_notch" :max="50" :min="0.1" :step="0.5" />
     </setting-row>
-    <setting-row :icon="IconRuler" v-else :label="$t('settings.mouse.pixelsPerNotch')">
+    <setting-row
+      :icon="IconRuler"
+      :label="$t('settings.mouse.pixelsPerNotch')"
+      :show="scrollMode === 'pixels'">
       <number-input v-model="config.scroll.pixels_per_notch" :max="2000" :min="1" :step="10" />
     </setting-row>
     <setting-row :icon="IconArrowsVertical" :label="$t('settings.mouse.invertVertical')">
