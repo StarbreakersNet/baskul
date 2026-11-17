@@ -468,7 +468,7 @@ fn status_info(server: &Server) -> Value {
         }),
         "version": crate::VERSION,
         "started": server.started,
-        "activity": crate::activity::last_id(),
+        "activity": crate::activity::revision(),
         "update": crate::update::info(),
     })
 }

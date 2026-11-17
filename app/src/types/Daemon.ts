@@ -41,7 +41,7 @@ export interface DaemonStatus {
   version: string;
   /** Démarrage de Baskul (ms) : change à chaque redémarrage */
   started: number;
-  /** Identifiant du dernier événement de l'activité récente */
+  /** Change à chaque modification de l'activité récente */
   activity: number;
   update: UpdateInfo;
 }
