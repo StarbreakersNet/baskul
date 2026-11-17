@@ -10,6 +10,7 @@
 }
 
 :root[data-theme="dark"] {
+  --brand-gradient: linear-gradient(135deg, #9ab6ff 0%, #8c9bff 100%);
   --brand-glow-start: rgba(91, 140, 255, 0.2);
   --brand-glow-end: rgba(67, 56, 202, 0.18);
   --glass: rgba(13, 16, 32, 0.62);
