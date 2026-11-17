@@ -47,6 +47,10 @@ pub enum Kind {
         program: String,
     },
     EdgesResumed,
+    /// Une pilotée a reçu le secret avec le code d'appairage.
+    Paired {
+        peer: String,
+    },
 }
 
 impl Kind {
@@ -59,7 +63,7 @@ impl Kind {
             Kind::EdgesPaused { .. } | Kind::EdgesResumed => "edges".into(),
             Kind::Reconnected { peer, .. } => format!("reconnected:{peer}"),
             Kind::Warning { text } => format!("warning:{text}"),
-            Kind::Connected { .. } | Kind::Disconnected { .. } => return None,
+            Kind::Connected { .. } | Kind::Disconnected { .. } | Kind::Paired { .. } => return None,
         })
     }
 

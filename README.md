@@ -113,7 +113,7 @@ Au premier lancement, Baskul crée sa configuration et ouvre ses **réglages**.
 ### Relier les machines
 
 1. **Rôle.** Sur la machine qui a le clavier et la souris, choisissez **Principale** ; sur les autres, **Pilotée**. Donnez à chacune un **nom affiché** parlant (« Bureau », « Atelier »…) : c'est lui qui apparaît dans les menus et la bulle d'arrivée.
-2. **Secret partagé.** Copiez celui de la principale (bouton « Copier ») et collez-le dans les réglages de chaque pilotée. Il doit être **identique** partout.
+2. **Secret partagé.** Le plus simple : sur la principale, Accueil › « Afficher un code » ; sur la pilotée, Accueil › saisissez les six chiffres puis « Rejoindre ». Elle reçoit le secret et redémarre. Le code vaut deux minutes et trois essais. Sinon, copiez le secret de la principale (bouton « Copier ») et collez-le dans les réglages de chaque pilotée : il doit être **identique** partout.
 3. **Connexion.** Rien à saisir : chaque pilotée trouve la principale sur le réseau local (« Machines principales trouvées », onglet Connexion). Si elle ne la trouve pas (réseau qui bloque Bonjour, sous-réseaux différents…), indiquez l'**adresse de la principale** dans « Se connecter à » : elle est affichée dans l'onglet Connexion de la principale.
 4. Cliquez sur **Enregistrer et redémarrer** sur chaque machine.
 5. **Disposition.** Une pilotée qui se connecte pour la première fois est placée à côté de la principale (à droite par défaut). Dans les réglages de la principale, onglet **Changer de machine**, faites glisser les pilotées sur la grille pour reproduire la place réelle des écrans.
@@ -280,7 +280,7 @@ Peu après son démarrage, puis toutes les six heures, Baskul cherche une nouvel
 - Le `secret` doit être **identique** sur toutes les machines. En cas d'erreur, le menu affiche « secret incorrect ».
 - Il faut **une seule** principale ; les autres machines sont pilotées. Le menu signale l'erreur sinon.
 - Toutes les machines doivent avoir la **même version** de Baskul. Sinon, le menu affiche « versions incompatibles ».
-- La principale doit accepter les connexions entrantes (port TCP 24870 par défaut) : pare-feu de Windows (*Autoriser une application via le pare-feu*, réseaux privés) ou de macOS (*Réglages → Réseau → Pare-feu → Options*).
+- La principale doit accepter les connexions entrantes (port TCP 24870 par défaut, et 24871 pendant un appairage par code) : pare-feu de Windows (*Autoriser une application via le pare-feu*, réseaux privés) ou de macOS (*Réglages → Réseau → Pare-feu → Options*).
 - Les machines doivent être sur le même réseau. Si la découverte automatique ne trouve pas la principale (Wi-Fi invité, réseau d'entreprise, sous-réseaux différents…), indiquez son adresse dans « Se connecter à », et pensez à lui donner une IP fixe dans votre box (bail DHCP statique).
 - Plusieurs cartes réseau (Ethernet et Wi-Fi, VPN…) : choisissez la bonne dans « Carte réseau », onglet Connexion.
 - Deux pilotées ne peuvent pas porter le même nom : la seconde est refusée et son menu l'indique. Changez son « Nom affiché ».
@@ -411,6 +411,7 @@ core/src/          cœur (baskul-core)
   status.rs        état de la connexion, partagé avec l'icône et l'app
   activity.rs      activité récente (connexions, bascules…), déduite de l'état
   latency.rs       temps d'aller-retour avec chaque machine (diagnostic réseau)
+  pairing.rs       ajout d'une machine par code court (SPAKE2, puis Noise)
   i18n.rs          traductions des menus et de l'état (locales/*.json)
 src/               couche système (baskul-desktop)
   lib.rs           démarrage (prepare, start), arguments, instance unique, reprise des réglages de Bascule
@@ -422,6 +423,7 @@ src/               couche système (baskul-desktop)
   programs.rs      programmes au premier plan qui suspendent la bascule par les bords
   profiles.rs      profils de réglages (profiles.json)
   transfer.rs      export et import des réglages (JSON)
+  pair.rs          appairage par code : code de la principale, saisie sur la pilotée
   api.rs           API : fenêtre de réglages (dans le processus) ; commandes et second lancement (127.0.0.1 + jeton)
   cli.rs           commandes `baskul switch …` et `baskul status`
   platform/

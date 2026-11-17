@@ -3,14 +3,7 @@ import { computed, ref, type Component } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useThemeVars } from "naive-ui";
-import {
-  IconCircleCheckFilled,
-  IconCircleXFilled,
-  IconCopy,
-  IconEye,
-  IconEyeOff,
-  IconHourglassHigh,
-} from "@tabler/icons-vue";
+import { IconCircleCheckFilled, IconCircleXFilled, IconHourglassHigh } from "@tabler/icons-vue";
 import HAlert from "@/components/c/hAlert.vue";
 import HButton from "@/components/c/hButton.vue";
 import HCard from "@/components/c/hCard.vue";
@@ -27,7 +20,7 @@ import HTime from "@/components/c/hTime.vue";
 import ActivityCard from "@/components/ActivityCard.vue";
 import ExpandTransition from "@/components/ExpandTransition.vue";
 import NetworkCard from "@/components/NetworkCard.vue";
-import { useCopy } from "@/composables/useCopy";
+import PairingCard from "@/components/PairingCard.vue";
 import { useCurrentTime } from "@/composables/useCurrentTime";
 import { useLoader } from "@/composables/useLoader";
 import { useSettingsStore } from "@/stores/settings";
@@ -60,7 +53,6 @@ const CLOCK_MS = 15_000;
 
 const settings = useSettingsStore();
 const statusStore = useStatusStore();
-const { copy } = useCopy();
 const router = useRouter();
 const themeVars = useThemeVars();
 const { t } = useI18n();
@@ -68,7 +60,6 @@ const now = useCurrentTime(CLOCK_MS);
 
 const switching = useLoader();
 const switchingTarget = ref("");
-const showSecret = ref(false);
 
 const status = computed(() => statusStore.status);
 const config = computed(() => settings.config);
@@ -166,23 +157,6 @@ const clipboardText = computed(() => {
   }
   return clipboard.images ? t("home.clipboardImages") : t("home.clipboardText");
 });
-
-const pairingAddress = computed(() => {
-  const ip = settings.info?.address;
-  const port = config.value?.network.listen.split(":").pop();
-  return ip && port ? `${ip}:${port}` : (ip ?? "");
-});
-
-const secret = computed(() => config.value?.network.secret ?? "");
-const maskedSecret = computed(() => "•".repeat(Math.min(secret.value.length, 16)));
-
-function copyPairing() {
-  const text = t("home.pairingClipboard", {
-    address: pairingAddress.value,
-    secret: secret.value,
-  });
-  void copy(text, "home.pairingCopied");
-}
 
 function connectedTitle() {
   const [first] = peers.value;
@@ -424,54 +398,7 @@ function openLog() {
                 <activity-card class="home-tile" />
               </h-grid-item>
               <h-grid-item>
-                <h-card class="home-tile" size="small" :title="$t('home.pairing')">
-                  <transition mode="out-in" name="fade">
-                    <h-flex v-if="isPrimary" :size="12" vertical>
-                      <h-text depth="3">{{ $t("home.pairingText") }}</h-text>
-                      <h-descriptions :column="1" label-placement="left" size="small">
-                        <h-descriptions-item
-                          v-if="pairingAddress"
-                          :label="$t('home.pairingAddress')">
-                          <h-text code>{{ pairingAddress }}</h-text>
-                        </h-descriptions-item>
-                        <h-descriptions-item :label="$t('home.pairingSecret')">
-                          <h-flex align="center" :size="4" :wrap="false">
-                            <h-text code>{{ showSecret ? secret : maskedSecret }}</h-text>
-                            <h-button
-                              :aria-label="
-                                showSecret
-                                  ? $t('home.pairingHideSecret')
-                                  : $t('home.pairingShowSecret')
-                              "
-                              quaternary
-                              size="tiny"
-                              @click="showSecret = !showSecret">
-                              <template #icon>
-                                <h-icon :component="showSecret ? IconEyeOff : IconEye" />
-                              </template>
-                            </h-button>
-                          </h-flex>
-                        </h-descriptions-item>
-                      </h-descriptions>
-                      <div>
-                        <h-button secondary type="primary" @click="copyPairing()">
-                          <template #icon>
-                            <h-icon><icon-copy /></h-icon>
-                          </template>
-                          {{ $t("home.pairingCopy") }}
-                        </h-button>
-                      </div>
-                    </h-flex>
-                    <h-flex v-else :size="12" vertical>
-                      <h-text depth="3">{{ $t("home.pairingSecondary") }}</h-text>
-                      <div>
-                        <h-button secondary type="primary" @click="editSettings('connexion')">
-                          {{ $t("home.pairingCheck") }}
-                        </h-button>
-                      </div>
-                    </h-flex>
-                  </transition>
-                </h-card>
+                <pairing-card class="home-tile" :is-primary="isPrimary" />
               </h-grid-item>
             </h-grid>
           </h-flex>
