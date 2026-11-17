@@ -3,6 +3,9 @@
 
 .DS_Store
 
+# Éditeurs
+.idea/
+
 # App de réglages (Tauri + Vue)
 /app/node_modules
 /app/dist
