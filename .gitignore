@@ -1,7 +1,10 @@
 /target
 /dist
 
+# Système et éditeurs
 .DS_Store
+.idea/
+.vscode/
 
 # App de réglages (Tauri + Vue)
 /app/node_modules
