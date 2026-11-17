@@ -1,9 +1,8 @@
 /target
 /dist
 
+# Système et éditeurs
 .DS_Store
-
-# Éditeurs
 .idea/
 .vscode/
 
