@@ -54,6 +54,7 @@ export interface BaskulConfig {
     language: "system" | "fr" | "en";
     tray_icon: "color" | "mono";
     arrival_bubble: boolean;
+    notifications: boolean;
   };
   updates: { check: boolean };
   log: { level: string };

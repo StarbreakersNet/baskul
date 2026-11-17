@@ -200,7 +200,7 @@ MetaLeft = "AltLeft"     # Windows du PC → ⌥
 
 Dans le menu de Baskul, choisissez **Réglages…** : la fenêtre de Baskul s'ouvre. Relancer Baskul alors qu'il tourne déjà (double-clic sur l'app) l'ouvre aussi. Le menu de gauche mène à :
 
-- **Accueil** : l'état de Baskul en direct (machines connectées, celle que pilotent le clavier et la souris, raccourcis), avec des boutons « Aller sur » / « Revenir ici », l'activité récente (connexions, bascules, verrouillage du curseur) et, pour ajouter une machine, l'adresse et le secret à copier ;
+- **Accueil** : l'état de Baskul en direct (machines connectées, celle que pilotent le clavier et la souris, raccourcis), avec des boutons « Aller sur » / « Revenir ici », l'activité récente (démarrages, connexions, bascules, verrouillage du curseur), gardée par Baskul dans `activity.json` à côté de `config.toml`, même fenêtre fermée et après un redémarrage ; et, pour ajouter une machine, l'adresse et le secret à copier ;
 - **Réglages** : modifiez, puis cliquez sur **Enregistrer et redémarrer** (ou `Ctrl+S`, `⌘S` sur Mac), dans la barre du bas ; Baskul redémarre et la fenêtre affiche aussitôt le nouvel état ;
 - **Journal** : les dernières lignes du journal de Baskul, en direct et en couleurs, à filtrer par niveau ou par texte, et à copier ;
 - **À propos** : versions, mises à jour, fichier de configuration, licence, liens vers GitHub et les notes de version.
@@ -244,7 +244,7 @@ Le fichier complet et commenté est dans [`docs/config.exemple.toml`](docs/confi
 | | `max_size_mb`, `max_files_mb` | Tailles maximales (texte et images ; fichiers) |
 | | `skip_sensitive` | Ignorer les mots de passe |
 | `[activity]` | `mirror = true` | Activité partagée |
-| `[ui]` | `theme`, `language`, `tray_icon` | Thème et langue de la fenêtre, icône en couleurs ou monochrome |
+| `[ui]` | `theme`, `language`, `tray_icon`, `notifications` | Thème et langue de la fenêtre, icône en couleurs ou monochrome, notifications du système quand une machine se connecte ou se déconnecte |
 | | `arrival_bubble = true` | Bulle d'arrivée |
 | `[updates]` | `check = true` | Recherche et téléchargement automatiques des mises à jour |
 | `[log]` | `level = "debug"` | Journal détaillé, utile pour un diagnostic |
@@ -354,7 +354,7 @@ yarn test                # tests (utils, traductions)
 Le code suit les conventions de [`AGENTS.md`](AGENTS.md) et de [`docs/conventions/`](docs/conventions/README.md) (les mêmes que le site des Starbreakers) : wrappers `h-*` autour de Naive UI, stores Pinia seuls à appeler Baskul, props typées, commentaires réduits à l'indispensable. La CI vérifie le format, le lint et les types.
 
 - `src/types/Config.ts` reprend la configuration de `core/src/config.rs`. Pour un nouveau réglage : `config.rs` (structure, modèle commenté, validation), puis `types/Config.ts` et la section concernée dans `src/components/settings/`.
-- Les stores (`src/stores/`) tiennent l'état et parlent à Baskul : `status` (état en direct, redémarrage), `activity` (activité récente, déduite de l'état), `settings` (chargement, enregistrement), `update`, `log`, `network`, `hotkeyCapture`.
+- Les stores (`src/stores/`) tiennent l'état et parlent à Baskul : `status` (état en direct, redémarrage), `activity` (activité récente, lue chez Baskul quand elle change), `settings` (chargement, enregistrement), `update`, `log`, `network`, `hotkeyCapture`.
 - `src/components/LayoutEditor.vue` : la grille des machines (glisser-déposer au pointeur, ou sélection puis clic), avec les calculs dans `src/utils/layoutGrid.ts`.
 - Pages (`src/views/`) et menu latéral (`src/AppLayout.vue`) : vue-router. Icônes : [Tabler Icons](https://tabler.io/icons) (`@tabler/icons-vue`).
 - **Identité visuelle** (logo, couleurs, thème Naive UI) : [`docs/identite.md`](docs/identite.md).
@@ -402,6 +402,7 @@ core/src/          cœur (baskul-core)
   capture.rs       saisie d'un raccourci pour l'app (crochet clavier)
   smooth.rs        défilement fluide (algorithme de Mac Mouse Fix, simulation du trackpad)
   status.rs        état de la connexion, partagé avec l'icône et l'app
+  activity.rs      activité récente (connexions, bascules…), déduite de l'état
   i18n.rs          traductions des menus et de l'état (locales/*.json)
 src/               couche système (baskul-desktop)
   lib.rs           démarrage (prepare, start), arguments, instance unique, reprise des réglages de Bascule
@@ -409,6 +410,7 @@ src/               couche système (baskul-desktop)
   icon.rs          image de l'icône (couleur ou monochrome)
   tray.rs          icône : image, info-bulle, menu et actions, quel que soit le système
   logging.rs       journaux
+  history.rs       activité récente gardée dans activity.json
   api.rs           API : fenêtre de réglages (dans le processus) ; commandes et second lancement (127.0.0.1 + jeton)
   cli.rs           commandes `baskul switch …` et `baskul status`
   platform/
@@ -418,7 +420,7 @@ src/               couche système (baskul-desktop)
 locales/           traductions (fr, en), partagées par Baskul et l'app
 app/               app Baskul : Tauri 2 + Vue 3 + Naive UI
   src/             front de la fenêtre de réglages : vues, composants, wrappers h-*, stores Pinia (docs/conventions/)
-  src-tauri/       exécutable : démarrage de Baskul, icône (tray.rs), fenêtre de réglages, commandes Tauri
+  src-tauri/       exécutable : démarrage de Baskul, icône (tray.rs), fenêtre de réglages, notifications, commandes Tauri
 ```
 
 Tests : `cargo test -p baskul-core -p baskul-desktop` (dont des tests de bout en bout sur de vraies connexions TCP, avec plusieurs pilotées). Le code Windows et macOS se vérifie aussi depuis Linux avec `./scripts/xcheck.sh`.

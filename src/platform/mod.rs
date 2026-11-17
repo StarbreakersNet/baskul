@@ -42,6 +42,10 @@ pub fn start(settings: Settings, config_path: PathBuf, args: Args) {
         // choix attendent la boucle de messages.
         #[cfg(windows)]
         self::windows::set_tray_backend(&settings);
+        #[cfg(windows)]
+        if settings.ui.notifications {
+            self::windows::register_notification_source();
+        }
         #[cfg(not(windows))]
         self::linux::set_tray_backend(&settings, &config_path, &args);
         let spawned =

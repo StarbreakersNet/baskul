@@ -1284,6 +1284,31 @@ fn set_autostart(on: bool, args: &Args) {
     }
 }
 
+/// Identifiant de l'app (tauri.conf.json), sous lequel l'app envoie ses notifications.
+const APP_ID: &str = "fr.baskul.app";
+
+/// Baskul n'est pas installé (pas de raccourci dans le menu Démarrer) : sans
+/// cette clé, Windows ignore ses notifications au lieu de les afficher.
+pub fn register_notification_source() {
+    let k = wide(&format!(r"Software\Classes\AppUserModelId\{APP_ID}"));
+    let v = wide("DisplayName");
+    let data = wide("Baskul");
+    // SAFETY: chaînes terminées par un zéro, taille en octets correcte.
+    let r = unsafe {
+        RegSetKeyValueW(
+            HKEY_CURRENT_USER,
+            k.as_ptr(),
+            v.as_ptr(),
+            REG_SZ,
+            data.as_ptr() as *const c_void,
+            (data.len() * 2) as u32,
+        )
+    };
+    if r != ERROR_SUCCESS {
+        log::warn!("enregistrement des notifications impossible (code {r})");
+    }
+}
+
 /// Exécute un choix du menu de l'icône (thread de Baskul).
 fn handle_action(action: Action) {
     let Some((path, args)) = with_ui(|ui| (ui.config_path.clone(), ui.args.clone())) else { return };
