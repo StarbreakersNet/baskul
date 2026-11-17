@@ -52,7 +52,7 @@ pub fn read(config_path: &Path) -> Vec<Profile> {
     }
 }
 
-fn write(config_path: &Path, profiles: &[Profile]) -> Result<(), String> {
+pub fn write(config_path: &Path, profiles: &[Profile]) -> Result<(), String> {
     let path = file(config_path);
     let text = serde_json::to_string_pretty(profiles).map_err(|e| format!("profils : {e}"))?;
     let tmp = path.with_extension("json.tmp");

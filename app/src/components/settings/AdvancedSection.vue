@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   IconArrowsExchange,
+  IconFileExport,
   IconFileSettings,
   IconFileText,
   IconInfoCircle,
@@ -8,6 +9,7 @@ import {
   IconTerminal2,
 } from "@tabler/icons-vue";
 import { computed } from "vue";
+import { useDialog } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import HButton from "@/components/c/hButton.vue";
 import HFlex from "@/components/c/hFlex.vue";
@@ -19,6 +21,7 @@ import SettingRow from "@/components/SettingRow.vue";
 import { useCopy } from "@/composables/useCopy";
 import { useSettingsStore } from "@/stores/settings";
 import { useStatusStore } from "@/stores/status";
+import { useTransferStore } from "@/stores/transfer";
 import { shellCommand } from "@/utils/address";
 import type { BaskulConfig } from "@/types/Config";
 import type { ChoiceOption } from "@/types/Choice";
@@ -35,6 +38,8 @@ const COMMANDS = ["switch here", "switch primary", "switch next", "switch toggle
 
 const settings = useSettingsStore();
 const statusStore = useStatusStore();
+const transfer = useTransferStore();
+const dialog = useDialog();
 const { copy } = useCopy();
 const { t } = useI18n();
 
@@ -47,6 +52,19 @@ const isoSwapOptions = computed<ChoiceOption<BaskulConfig["keyboard"]["iso_swap"
 const levelOptions = computed(() =>
   LOG_LEVELS.map(value => ({ value, label: t(`settings.advanced.levels.${value}`) }))
 );
+async function chooseImport() {
+  const path = await transfer.pickImport();
+  if (path) {
+    dialog.warning({
+      title: t("transfer.confirmTitle"),
+      content: t("transfer.confirmText"),
+      positiveText: t("transfer.import"),
+      negativeText: t("common.cancel"),
+      onPositiveClick: () => void transfer.importSettings(path),
+    });
+  }
+}
+
 // "Copier" donne la commande complète, avec le chemin de Baskul sur cette machine
 const commands = computed(() =>
   COMMANDS.map(args => ({
@@ -100,6 +118,17 @@ const commands = computed(() =>
       </template>
       <h-button size="small" @click="settings.openConfigFile()">
         {{ $t("common.openFile") }}
+      </h-button>
+    </setting-row>
+    <setting-row :icon="IconFileExport" :help="$t('transfer.help')" :label="$t('transfer.label')">
+      <h-button
+        :loading="transfer.exporting.loading"
+        size="small"
+        @click="transfer.exportSettings(info.hostname)">
+        {{ $t("transfer.export") }}
+      </h-button>
+      <h-button :loading="transfer.importing.loading" size="small" @click="chooseImport()">
+        {{ $t("transfer.import") }}
       </h-button>
     </setting-row>
     <setting-row

@@ -451,6 +451,16 @@
       "delete": "Supprimer le profil \"{name}\"",
       "deleteText": "Les réglages actuels ne changent pas.",
       "deleteConfirm": "Supprimer"
+    },
+    "transfer": {
+      "label": "Exporter ou importer",
+      "help": "Un fichier JSON avec les réglages et les profils, pour les reprendre sur une autre machine. À l'import, cette machine garde son rôle, son nom, ses adresses, sa carte réseau et sa grille ; le secret partagé vient du fichier.",
+      "export": "Exporter…",
+      "import": "Importer…",
+      "exported": "Réglages exportés",
+      "imported": "Réglages importés",
+      "confirmTitle": "Importer ces réglages ?",
+      "confirmText": "Les réglages actuels sont remplacés (sauf le rôle, le nom, les adresses, la carte réseau et la grille), puis Baskul redémarre. Les modifications non enregistrées sont perdues."
     }
   }
 }
