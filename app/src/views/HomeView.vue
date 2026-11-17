@@ -16,7 +16,6 @@ import HButton from "@/components/c/hButton.vue";
 import HCard from "@/components/c/hCard.vue";
 import HDescriptions from "@/components/c/hDescriptions.vue";
 import HDescriptionsItem from "@/components/c/hDescriptionsItem.vue";
-import HEmpty from "@/components/c/hEmpty.vue";
 import HFlex from "@/components/c/hFlex.vue";
 import HGrid from "@/components/c/hGrid.vue";
 import HGridItem from "@/components/c/hGridItem.vue";
@@ -25,16 +24,13 @@ import HTag from "@/components/c/hTag.vue";
 import HSkeleton from "@/components/c/hSkeleton.vue";
 import HText from "@/components/c/hText.vue";
 import HTime from "@/components/c/hTime.vue";
-import HTimeline from "@/components/c/hTimeline.vue";
-import HTimelineItem from "@/components/c/hTimelineItem.vue";
+import ActivityCard from "@/components/ActivityCard.vue";
 import ExpandTransition from "@/components/ExpandTransition.vue";
 import { useCopy } from "@/composables/useCopy";
 import { useCurrentTime } from "@/composables/useCurrentTime";
 import { useLoader } from "@/composables/useLoader";
-import { useActivityStore } from "@/stores/activity";
 import { useSettingsStore } from "@/stores/settings";
 import { useStatusStore } from "@/stores/status";
-import { describeActivity } from "@/utils/activity";
 import { formatHotkey, hotkeyParts } from "@/utils/hotkey";
 import { osIcon, osLabel } from "@/utils/os";
 import { capitalize } from "@/utils/text";
@@ -63,7 +59,6 @@ const CLOCK_MS = 15_000;
 
 const settings = useSettingsStore();
 const statusStore = useStatusStore();
-const activity = useActivityStore();
 const { copy } = useCopy();
 const router = useRouter();
 const themeVars = useThemeVars();
@@ -73,10 +68,6 @@ const now = useCurrentTime(CLOCK_MS);
 const switching = useLoader();
 const switchingTarget = ref("");
 const showSecret = ref(false);
-
-const activityItems = computed(() =>
-  activity.events.map(event => ({ ...event, label: describeActivity(event) }))
-);
 
 const status = computed(() => statusStore.status);
 const config = computed(() => settings.config);
@@ -421,40 +412,7 @@ function openLog() {
 
           <h-grid cols="1 640:2" responsive="self" :x-gap="16" :y-gap="16">
             <h-grid-item>
-              <h-card class="home-tile" size="small" :title="$t('home.activity')">
-                <template #header-extra>
-                  <transition name="fade">
-                    <h-button
-                      v-if="activity.events.length"
-                      text
-                      type="primary"
-                      @click="activity.clear()">
-                      {{ $t("home.activityClear") }}
-                    </h-button>
-                  </transition>
-                </template>
-                <transition mode="out-in" name="fade">
-                  <h-timeline v-if="activity.events.length" class="home-activity">
-                    <transition-group name="home-event">
-                      <h-timeline-item
-                        v-for="item in activityItems"
-                        :key="item.id"
-                        :type="item.label.color">
-                        <template #header>
-                          {{ $t(`home.${item.label.key}`, item.label.params) }}
-                        </template>
-                        <template #footer>
-                          <h-time :time="item.at" :to="Math.max(now, item.at)" type="relative" />
-                        </template>
-                      </h-timeline-item>
-                    </transition-group>
-                  </h-timeline>
-                  <h-empty
-                    v-else
-                    class="home-activity-empty"
-                    :description="$t('home.activityEmpty')" />
-                </transition>
-              </h-card>
+              <activity-card class="home-tile" />
             </h-grid-item>
             <h-grid-item>
               <h-card class="home-tile" size="small" :title="$t('home.pairing')">
@@ -564,27 +522,6 @@ function openLog() {
 
 .home-since {
   font-size: 12px;
-}
-
-.home-activity {
-  max-height: 260px;
-  overflow-y: auto;
-  padding: 4px 4px 0 2px;
-}
-
-.home-event-enter-active {
-  transition:
-    opacity 0.3s ease,
-    transform 0.3s ease;
-}
-
-.home-event-enter-from {
-  opacity: 0;
-  transform: translateY(-6px);
-}
-
-.home-activity-empty {
-  padding: 16px 0;
 }
 
 .home-empty {

@@ -161,7 +161,16 @@
       "activityClear": "Clear",
       "pairingShowSecret": "Show secret",
       "pairingHideSecret": "Hide secret",
-      "eventStarted": "Baskul started"
+      "eventStarted": "Baskul started",
+      "eventRestarted": "Baskul restarted",
+      "eventRestarts": "Baskul restarted {count} times",
+      "eventReconnected": "\"{name}\": connection lost for {seconds} s",
+      "eventReconnects": "\"{name}\": connection lost {count} times",
+      "eventSwitches": "{count} switches between this computer and {names}",
+      "eventLocks": "Cursor locked and unlocked {count} times",
+      "eventWarnings": "Warning ({count} times): {text}",
+      "today": "Today",
+      "yesterday": "Yesterday"
     },
     "settings": {
       "restarting": "Restarting Baskul…",
