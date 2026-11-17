@@ -33,11 +33,14 @@
       "searching": "looking for the main computer on the network…",
       "noAddress": "main computer address missing (automatic discovery is off)",
       "noPrimary": "not connected to the main computer",
-      "nameTaken": "another controlled computer is already named “{name}”: change its “Display name”"
+      "nameTaken": "another controlled computer is already named “{name}”: change its “Display name”",
+      "edgesPaused": "edge switching paused ({program})"
     },
     "notify": {
       "connected": "\"{peer}\" connected",
-      "disconnected": "\"{peer}\" disconnected"
+      "disconnected": "\"{peer}\" disconnected",
+      "edgesPaused": "Edge switching paused: \"{program}\" is in the foreground",
+      "edgesResumed": "Edge switching resumed"
     }
   },
   "app": {
@@ -170,7 +173,12 @@
       "eventLocks": "Cursor locked and unlocked {count} times",
       "eventWarnings": "Warning ({count} times): {text}",
       "today": "Today",
-      "yesterday": "Yesterday"
+      "yesterday": "Yesterday",
+      "eventEdgesPaused": "Edge switching paused (\"{name}\")",
+      "eventEdgesResumed": "Edge switching resumed",
+      "edgesPausedTitle": "Edge switching paused",
+      "edgesPausedText": "\"{program}\" is in the foreground. Keyboard shortcuts still work.",
+      "eventEdgesRuns": "Edge switching paused {count} times ({names})"
     },
     "settings": {
       "restarting": "Restarting Baskul…",
@@ -367,6 +375,13 @@
         "hotkey": "Shortcut to go there",
         "hotkeyHelp": "The keyboard and mouse move straight to this computer.",
         "isolated": "“{names}” touches no other computer: only a shortcut leads there. | “{names}” touch no other computer: only shortcuts lead there."
+      },
+      "pause": {
+        "label": "Programs that pause edges",
+        "help": "While one of them is in the foreground on this computer (a game that captures the mouse…), the cursor does not switch computers through screen edges. Executable or app name.",
+        "placeholder": "Add",
+        "addForeground": "Add \"{name}\"",
+        "addForegroundHint": "Last program used"
       }
     },
     "log": {

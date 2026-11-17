@@ -23,6 +23,7 @@ mod history;
 mod icon;
 pub mod logging;
 pub mod platform;
+mod programs;
 pub mod tray;
 mod update;
 
@@ -290,6 +291,7 @@ pub fn start(prepared: Prepared) {
     } else if args.settings {
         platform::open_settings(&path, false);
     }
+    programs::start(settings.pause_edges_for.clone());
     platform::start(*settings, path, args);
 }
 

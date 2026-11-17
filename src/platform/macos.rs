@@ -36,7 +36,7 @@ use objc2_app_kit::{
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationPolicy, NSBitmapImageFileType, NSBitmapImageRep, NSEvent,
     NSEventModifierFlags, NSEventType, NSPasteboard, NSPasteboardItem, NSPasteboardTypeFileURL, NSPasteboardTypeHTML,
-    NSPasteboardTypeString, NSPasteboardTypeTIFF, NSPasteboardWriting,
+    NSPasteboardTypeString, NSPasteboardTypeTIFF, NSPasteboardWriting, NSWorkspace,
 };
 use objc2_foundation::{
     NSActivityOptions, NSArray, NSData, NSDictionary, NSObjectProtocol, NSPoint, NSProcessInfo, NSRect, NSSize,
@@ -2090,6 +2090,24 @@ pub fn fatal(msg: &str) -> ! {
 
 pub fn first_run(path: &Path) {
     super::open_settings(path, true);
+}
+
+/// App au premier plan : son nom affiché et celui de son exécutable ; rien si c'est Baskul.
+pub fn foreground_programs() -> Vec<String> {
+    autoreleasepool(|_| {
+        let Some(app) = NSWorkspace::sharedWorkspace().frontmostApplication() else { return Vec::new() };
+        if app.processIdentifier() == std::process::id() as i32 {
+            return Vec::new();
+        }
+        let mut names = Vec::new();
+        if let Some(name) = app.localizedName() {
+            names.push(name.to_string());
+        }
+        if let Some(name) = app.executableURL().and_then(|url| url.lastPathComponent()) {
+            names.push(name.to_string());
+        }
+        names
+    })
 }
 
 pub fn open_in_editor(path: &Path) {

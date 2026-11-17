@@ -166,11 +166,19 @@ pub struct ScreenCfg {
     pub edge_switching: bool,
     pub secondary_position: EdgeCfg,
     pub corner_size: i32,
+    /// Programmes qui suspendent la bascule par les bords tant qu'ils sont au
+    /// premier plan (jeux…), par le nom de leur exécutable ou de l'app.
+    pub pause_edges_for: Vec<String>,
 }
 
 impl Default for ScreenCfg {
     fn default() -> Self {
-        ScreenCfg { edge_switching: true, secondary_position: EdgeCfg::Right, corner_size: 10 }
+        ScreenCfg {
+            edge_switching: true,
+            secondary_position: EdgeCfg::Right,
+            corner_size: 10,
+            pause_edges_for: Vec::new(),
+        }
     }
 }
 
@@ -454,6 +462,8 @@ pub struct Settings {
     pub secret: String,
     pub layout: Vec<Placement>,
     pub edge_switching: bool,
+    /// Programmes qui suspendent la bascule par les bords au premier plan.
+    pub pause_edges_for: Vec<String>,
     pub secondary_position: Edge,
     pub corner_size: i32,
     pub mouse_speed: f64,
@@ -548,6 +558,13 @@ impl Config {
             secret,
             layout,
             edge_switching: self.screen.edge_switching,
+            pause_edges_for: self
+                .screen
+                .pause_edges_for
+                .iter()
+                .map(|p| p.trim().to_string())
+                .filter(|p| !p.is_empty())
+                .collect(),
             secondary_position: self.screen.secondary_position.into(),
             corner_size: self.screen.corner_size.max(0),
             mouse_speed: self.mouse.speed,
@@ -922,6 +939,11 @@ secondary_position = "right"
 # d'une fenêtre agrandie, "Afficher le bureau"…) sans changer d'écran.
 # 0 = aucun.
 corner_size = 10
+# Programmes qui suspendent la bascule par les bords tant qu'ils sont au
+# premier plan sur cette machine (jeux qui capturent la souris…) : nom de
+# l'exécutable ou de l'app, sans tenir compte des majuscules ni de ".exe".
+# Les raccourcis clavier marchent toujours. Exemple : ["Wow", "Moon Sweeper"]
+pause_edges_for = []
 
 [layout]
 # (Machine principale) Grille des machines. La principale est en (0, 0) ;

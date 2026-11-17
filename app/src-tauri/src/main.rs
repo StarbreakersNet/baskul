@@ -188,7 +188,8 @@ fn notices() -> MutexGuard<'static, activity::Notices> {
     NOTICES.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// Notification du système pour les connexions et déconnexions (voir [`activity::Notices`]).
+/// Notification du système : connexions et déconnexions (voir [`activity::Notices`]),
+/// bascule par les bords suspendue.
 fn notify(app: &AppHandle, kind: &activity::Kind) {
     match kind {
         activity::Kind::Connected { peer } if notices().connected(peer) => {
@@ -204,6 +205,10 @@ fn notify(app: &AppHandle, kind: &activity::Kind) {
                 }
             });
         }
+        activity::Kind::EdgesPaused { program } => {
+            show_notification(app, i18n::tf("notify.edgesPaused", &[("program", program)]));
+        }
+        activity::Kind::EdgesResumed => show_notification(app, i18n::t("notify.edgesResumed")),
         _ => {}
     }
 }

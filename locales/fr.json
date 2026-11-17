@@ -33,11 +33,14 @@
       "searching": "recherche de la machine principale sur le réseau…",
       "noAddress": "adresse de la machine principale manquante (découverte automatique désactivée)",
       "noPrimary": "pas de connexion avec la machine principale",
-      "nameTaken": "une autre machine pilotée porte déjà le nom \"{name}\" : changez son \"Nom affiché\""
+      "nameTaken": "une autre machine pilotée porte déjà le nom \"{name}\" : changez son \"Nom affiché\"",
+      "edgesPaused": "bascule par les bords suspendue ({program})"
     },
     "notify": {
       "connected": "\"{peer}\" est connectée",
-      "disconnected": "\"{peer}\" s'est déconnectée"
+      "disconnected": "\"{peer}\" s'est déconnectée",
+      "edgesPaused": "Bascule par les bords suspendue : \"{program}\" est au premier plan",
+      "edgesResumed": "Bascule par les bords rétablie"
     }
   },
   "app": {
@@ -170,7 +173,12 @@
       "eventLocks": "Curseur verrouillé et déverrouillé {count} fois",
       "eventWarnings": "Avertissement ({count} fois) : {text}",
       "today": "Aujourd'hui",
-      "yesterday": "Hier"
+      "yesterday": "Hier",
+      "eventEdgesPaused": "Bascule par les bords suspendue (\"{name}\")",
+      "eventEdgesResumed": "Bascule par les bords rétablie",
+      "edgesPausedTitle": "Bascule par les bords suspendue",
+      "edgesPausedText": "\"{program}\" est au premier plan. Les raccourcis clavier marchent toujours.",
+      "eventEdgesRuns": "Bascule par les bords suspendue {count} fois ({names})"
     },
     "settings": {
       "restarting": "Redémarrage de Baskul…",
@@ -367,6 +375,13 @@
         "hotkey": "Raccourci pour y aller",
         "hotkeyHelp": "Le clavier et la souris passent directement sur cette pilotée.",
         "isolated": "\"{names}\" ne touche aucune autre machine : seul un raccourci y mène. | \"{names}\" ne touchent aucune autre machine : seuls des raccourcis y mènent."
+      },
+      "pause": {
+        "label": "Programmes qui suspendent les bords",
+        "help": "Tant que l'un d'eux est au premier plan sur cette machine (un jeu qui capture la souris…), le curseur ne change pas de machine par les bords. Nom de l'exécutable ou de l'app.",
+        "placeholder": "Ajouter",
+        "addForeground": "Ajouter \"{name}\"",
+        "addForegroundHint": "Dernier programme utilisé"
       }
     },
     "log": {

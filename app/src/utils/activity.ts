@@ -25,6 +25,8 @@ const LABELS: Record<ActivityKind, { key: string; runKey: string; color: Activit
   locked: { key: "eventLocked", runKey: "eventLocks", color: "default" },
   unlocked: { key: "eventUnlocked", runKey: "eventLocks", color: "default" },
   warning: { key: "eventWarning", runKey: "eventWarnings", color: "error" },
+  edgesPaused: { key: "eventEdgesPaused", runKey: "eventEdgesRuns", color: "warning" },
+  edgesResumed: { key: "eventEdgesResumed", runKey: "eventEdgesRuns", color: "default" },
 };
 
 function singleKey(event: ActivityEvent) {
@@ -38,7 +40,7 @@ export function describeActivity(event: ActivityEvent, locale = "fr"): ActivityL
     key: isRun ? LABELS[event.kind].runKey : singleKey(event),
     color: LABELS[event.kind].color,
     params: {
-      name: event.peer ?? "",
+      name: event.peer ?? event.program ?? "",
       names: new Intl.ListFormat(locale, { type: "conjunction" }).format(
         (event.names ?? []).map(name => `"${name}"`)
       ),

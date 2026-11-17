@@ -28,6 +28,11 @@ pub fn first_run(path: &Path) {
     super::open_settings(path, true);
 }
 
+/// Pas de détection du programme au premier plan sous Linux.
+pub fn foreground_programs() -> Vec<String> {
+    Vec::new()
+}
+
 pub fn open_in_editor(path: &Path) {
     let _ = std::process::Command::new("xdg-open").arg(path).spawn();
 }

@@ -7,7 +7,9 @@ export type ActivityKind =
   | "switchedHere"
   | "locked"
   | "unlocked"
-  | "warning";
+  | "warning"
+  | "edgesPaused"
+  | "edgesResumed";
 
 /** Événement de `read_activity`, ou suite d'événements semblables regroupés (core/src/activity.rs) */
 export interface ActivityEvent {
@@ -29,4 +31,6 @@ export interface ActivityEvent {
   restarted?: boolean;
   /** reconnected : durée de la coupure (ms) */
   gap?: number;
+  /** edgesPaused */
+  program?: string;
 }

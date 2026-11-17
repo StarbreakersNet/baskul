@@ -39,7 +39,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use windows_sys::Win32::Foundation::{
-    ERROR_SUCCESS, GlobalFree, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, SIZE, WPARAM,
+    CloseHandle, ERROR_SUCCESS, GlobalFree, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, SIZE, WPARAM,
 };
 use windows_sys::Win32::Graphics::Gdi::{
     AC_SRC_ALPHA, AC_SRC_OVER, ANTIALIASED_QUALITY, BI_BITFIELDS, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BITMAPV5HEADER,
@@ -62,9 +62,11 @@ use windows_sys::Win32::System::Registry::{
 use windows_sys::Win32::System::RemoteDesktop::{NOTIFY_FOR_THIS_SESSION, WTSRegisterSessionNotification};
 use windows_sys::Win32::System::SystemInformation::GetTickCount;
 use windows_sys::Win32::System::Threading::{
-    ABOVE_NORMAL_PRIORITY_CLASS, AttachThreadInput, GetCurrentProcess, GetCurrentThread, GetCurrentThreadId,
-    PROCESS_POWER_THROTTLING_CURRENT_VERSION, PROCESS_POWER_THROTTLING_EXECUTION_SPEED, PROCESS_POWER_THROTTLING_STATE,
-    ProcessPowerThrottling, SetPriorityClass, SetProcessInformation, SetThreadPriority, THREAD_PRIORITY_HIGHEST,
+    ABOVE_NORMAL_PRIORITY_CLASS, AttachThreadInput, GetCurrentProcess, GetCurrentProcessId, GetCurrentThread,
+    GetCurrentThreadId, OpenProcess, PROCESS_NAME_WIN32, PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+    PROCESS_POWER_THROTTLING_EXECUTION_SPEED, PROCESS_POWER_THROTTLING_STATE, PROCESS_QUERY_LIMITED_INFORMATION,
+    ProcessPowerThrottling, QueryFullProcessImageNameW, SetPriorityClass, SetProcessInformation, SetThreadPriority,
+    THREAD_PRIORITY_HIGHEST,
 };
 use windows_sys::Win32::UI::HiDpi::{
     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, GetDpiForMonitor, MDT_EFFECTIVE_DPI, SetProcessDpiAwarenessContext,
@@ -215,6 +217,35 @@ pub fn fatal(msg: &str) -> ! {
 
 pub fn first_run(path: &Path) {
     super::open_settings(path, true);
+}
+
+/// Exécutable de la fenêtre au premier plan (`Wow.exe`) ; rien si c'est Baskul ou si
+/// Windows refuse de le dire (programme lancé en administrateur…).
+pub fn foreground_programs() -> Vec<String> {
+    // SAFETY: handles vérifiés avant usage et refermés ; tampon de la taille annoncée.
+    let path = unsafe {
+        let fg = GetForegroundWindow();
+        let mut pid = 0u32;
+        if !fg.is_null() {
+            GetWindowThreadProcessId(fg, &mut pid);
+        }
+        if pid == 0 || pid == GetCurrentProcessId() {
+            return Vec::new();
+        }
+        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if process.is_null() {
+            return Vec::new();
+        }
+        let mut buf = [0u16; 1024];
+        let mut len = buf.len() as u32;
+        let ok = QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, buf.as_mut_ptr(), &mut len);
+        CloseHandle(process);
+        if ok == 0 {
+            return Vec::new();
+        }
+        String::from_utf16_lossy(&buf[..len as usize])
+    };
+    Path::new(&path).file_name().map(|n| n.to_string_lossy().into_owned()).into_iter().collect()
 }
 
 pub fn open_in_editor(path: &Path) {

@@ -257,6 +257,13 @@ function openLog() {
         <h-alert type="warning">{{ status.warning }}</h-alert>
       </div>
     </expand-transition>
+    <expand-transition>
+      <div v-if="status?.edges_paused_by" class="home-notice">
+        <h-alert :title="$t('home.edgesPausedTitle')" type="info">
+          {{ $t("home.edgesPausedText", { program: status.edges_paused_by }) }}
+        </h-alert>
+      </div>
+    </expand-transition>
     <h-flex :size="16" vertical>
       <h-card>
         <h-flex align="center" :size="16" :wrap="false">

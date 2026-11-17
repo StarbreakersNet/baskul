@@ -2,6 +2,7 @@
 //! menu et la fenêtre de réglages.
 
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Conn {
@@ -25,6 +26,9 @@ pub struct Snapshot {
     pub warning: Option<String>,
     /// Autres machines connectées, dans l'ordre de connexion.
     pub peers: Vec<Peer>,
+    /// Programme de la liste `[screen] pause_edges_for` au premier plan : la
+    /// bascule par les bords est suspendue.
+    pub edges_paused_by: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -48,6 +52,10 @@ impl Snapshot {
         if self.locked {
             s.push_str(" — ");
             s.push_str(&t("status.locked"));
+        }
+        if let Some(program) = &self.edges_paused_by {
+            s.push_str(" — ");
+            s.push_str(&tf("status.edgesPaused", &[("program", program)]));
         }
         if let Some(w) = &self.warning {
             s.push_str(" — ");
@@ -74,6 +82,7 @@ static STATE: Mutex<State> = Mutex::new(State {
         locked: false,
         warning: None,
         peers: Vec::new(),
+        edges_paused_by: None,
     },
     idle: Conn::Waiting(String::new()),
 });
@@ -138,6 +147,19 @@ pub fn set_locked(locked: bool) {
 
 pub fn set_warning(w: Option<String>) {
     update(|s| s.snap.warning = w);
+}
+
+/// Lu à chaque passage contre un bord : sans verrou.
+static EDGES_PAUSED: AtomicBool = AtomicBool::new(false);
+
+/// Programme au premier plan qui suspend la bascule par les bords (`None` : elle reprend).
+pub fn set_edges_paused_by(program: Option<String>) {
+    EDGES_PAUSED.store(program.is_some(), Ordering::Release);
+    update(|s| s.snap.edges_paused_by = program);
+}
+
+pub fn edges_paused() -> bool {
+    EDGES_PAUSED.load(Ordering::Acquire)
 }
 
 pub fn snapshot() -> Snapshot {

@@ -13,6 +13,8 @@ const KINDS: ActivityKind[] = [
   "locked",
   "unlocked",
   "warning",
+  "edgesPaused",
+  "edgesResumed",
 ];
 
 function event(kind: ActivityKind, extra: Partial<ActivityEvent> = {}): ActivityEvent {

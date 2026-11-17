@@ -43,6 +43,10 @@ pub enum Kind {
     Warning {
         text: String,
     },
+    EdgesPaused {
+        program: String,
+    },
+    EdgesResumed,
 }
 
 impl Kind {
@@ -52,6 +56,7 @@ impl Kind {
             Kind::Started { .. } => "started".into(),
             Kind::SwitchedTo { .. } | Kind::SwitchedHere => "switch".into(),
             Kind::Locked | Kind::Unlocked => "lock".into(),
+            Kind::EdgesPaused { .. } | Kind::EdgesResumed => "edges".into(),
             Kind::Reconnected { peer, .. } => format!("reconnected:{peer}"),
             Kind::Warning { text } => format!("warning:{text}"),
             Kind::Connected { .. } | Kind::Disconnected { .. } => return None,
@@ -62,6 +67,7 @@ impl Kind {
     fn name(&self) -> Option<&str> {
         match self {
             Kind::SwitchedTo { peer } | Kind::Reconnected { peer, .. } => Some(peer),
+            Kind::EdgesPaused { program } => Some(program),
             _ => None,
         }
     }
@@ -78,7 +84,7 @@ pub struct Event {
     pub until: u64,
     #[serde(default = "one")]
     pub count: u32,
-    /// Machines concernées par une suite (bascules, reconnexions).
+    /// Machines ou programmes concernés par une suite (bascules, reconnexions, bords suspendus).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub names: Vec<String>,
     /// Le plus récent de la suite.
@@ -258,6 +264,12 @@ pub fn changes(before: &Snapshot, after: &Snapshot) -> Vec<Kind> {
     if before.locked != after.locked {
         kinds.push(if after.locked { Kind::Locked } else { Kind::Unlocked });
     }
+    if before.edges_paused_by != after.edges_paused_by {
+        kinds.push(match &after.edges_paused_by {
+            Some(program) => Kind::EdgesPaused { program: program.clone() },
+            None => Kind::EdgesResumed,
+        });
+    }
     if let Some(text) = &after.warning {
         if before.warning.as_ref() != Some(text) {
             kinds.push(Kind::Warning { text: text.clone() });
@@ -279,6 +291,7 @@ mod tests {
             locked: false,
             warning: None,
             peers: vec![Peer { name: "Mac".into(), os: "macos".into(), since: 0 }],
+            edges_paused_by: None,
         }
     }
 
@@ -338,6 +351,15 @@ mod tests {
     }
 
     #[test]
+    fn edges_paused() {
+        let before = snap();
+        let mut after = snap();
+        after.edges_paused_by = Some("Wow".into());
+        assert_eq!(changes(&before, &after), vec![Kind::EdgesPaused { program: "Wow".into() }]);
+        assert_eq!(changes(&after, &before), vec![Kind::EdgesResumed]);
+    }
+
+    #[test]
     fn switches_in_a_row_are_one_entry() {
         let events = feed(&[(to("Mac"), 0), (Kind::SwitchedHere, 1_000), (to("Salon"), 2_000), (to("Mac"), 3_000)]);
         assert_eq!(events.len(), 1);
@@ -369,6 +391,14 @@ mod tests {
         assert_eq!(events[1].count, 2);
         // Coupure trop longue : déconnexion et connexion restent
         assert_eq!(feed(&[(mac(), 0), (back(), FLAP_MS)]).len(), 2);
+    }
+
+    #[test]
+    fn edge_pauses_in_a_row_are_one_entry() {
+        let pause = |program: &str| Kind::EdgesPaused { program: program.into() };
+        let events = feed(&[(pause("Wow"), 0), (Kind::EdgesResumed, 1_000), (pause("Moon Sweeper"), 2_000)]);
+        assert_eq!((events.len(), events[0].count), (1, 3));
+        assert_eq!(events[0].names, ["Wow", "Moon Sweeper"]);
     }
 
     #[test]
