@@ -8,7 +8,8 @@ export type ActivityKind =
   | "unlocked"
   | "warning"
   | "edgesPaused"
-  | "edgesResumed";
+  | "edgesResumed"
+  | "paired";
 
 /** Événement de `read_activity` (core/src/activity.rs) */
 export interface ActivityEvent {
@@ -16,7 +17,7 @@ export interface ActivityEvent {
   /** Date (ms) */
   at: number;
   kind: ActivityKind;
-  /** connected, disconnected, switchedTo */
+  /** connected, disconnected, switchedTo, paired */
   peer?: string;
   /** warning */
   text?: string;

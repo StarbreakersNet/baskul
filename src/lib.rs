@@ -22,6 +22,7 @@ mod cli;
 mod history;
 mod icon;
 pub mod logging;
+mod pair;
 pub mod platform;
 mod profiles;
 mod programs;

@@ -20,6 +20,7 @@ const LABELS: Record<ActivityKind, { key: string; color: ActivityColor }> = {
   warning: { key: "eventWarning", color: "error" },
   edgesPaused: { key: "eventEdgesPaused", color: "warning" },
   edgesResumed: { key: "eventEdgesResumed", color: "default" },
+  paired: { key: "eventPaired", color: "success" },
 };
 
 export function describeActivity(event: ActivityEvent): ActivityLabel {

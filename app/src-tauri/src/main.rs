@@ -119,6 +119,24 @@ async fn import_settings(path: String) -> Result<Value, Error> {
     call("POST", "/api/import", Some(json!({ "path": path }))).await
 }
 
+/// Ajout d'une machine par code (principale) : `start`, `poll` ou `cancel`.
+#[tauri::command]
+async fn pairing(action: String) -> Result<Value, Error> {
+    let method = match action.as_str() {
+        "start" => "POST",
+        "poll" => "GET",
+        "cancel" => "DELETE",
+        _ => return Err(Error::Refused(format!("action inconnue : {action}"))),
+    };
+    call(method, "/api/pairing", None).await
+}
+
+/// Pilotée : rejoint la principale avec le code ; Baskul redémarre ensuite.
+#[tauri::command]
+async fn join_primary(address: String, code: String) -> Result<Value, Error> {
+    call("POST", "/api/pairing/join", Some(json!({ "address": address, "code": code }))).await
+}
+
 /// Allers-retours mesurés avec chaque machine connectée.
 #[tauri::command]
 async fn read_latency() -> Result<Value, Error> {
@@ -275,6 +293,8 @@ fn main() {
             open_log_file,
             read_activity,
             read_latency,
+            pairing,
+            join_primary,
             clear_activity,
             list_profiles,
             save_profile,

@@ -12,6 +12,9 @@ const KINDS: ActivityKind[] = [
   "locked",
   "unlocked",
   "warning",
+  "edgesPaused",
+  "edgesResumed",
+  "paired",
 ];
 
 describe("activité récente", () => {

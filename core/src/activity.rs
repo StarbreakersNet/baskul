@@ -13,15 +13,29 @@ pub const MAX_EVENTS: usize = 100;
 #[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum Kind {
     Started,
-    Connected { peer: String },
-    Disconnected { peer: String },
-    SwitchedTo { peer: String },
+    Connected {
+        peer: String,
+    },
+    Disconnected {
+        peer: String,
+    },
+    SwitchedTo {
+        peer: String,
+    },
     SwitchedHere,
     Locked,
     Unlocked,
-    Warning { text: String },
-    EdgesPaused { program: String },
+    Warning {
+        text: String,
+    },
+    EdgesPaused {
+        program: String,
+    },
     EdgesResumed,
+    /// Une pilotée a reçu le secret avec le code d'appairage.
+    Paired {
+        peer: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
