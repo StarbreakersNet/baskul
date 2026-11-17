@@ -16,6 +16,7 @@ import HotkeyInput from "@/components/HotkeyInput.vue";
 import LayoutEditor from "@/components/LayoutEditor.vue";
 import LinuxNotice from "@/components/LinuxNotice.vue";
 import NumberInput from "@/components/NumberInput.vue";
+import PausePrograms from "@/components/PausePrograms.vue";
 import PositionPicker from "@/components/PositionPicker.vue";
 import SettingRow from "@/components/SettingRow.vue";
 import ExpandTransition from "@/components/ExpandTransition.vue";
@@ -78,6 +79,7 @@ const isMissingHotkey = computed(
       :label="$t('settings.switching.edges')">
       <h-switch v-model:value="config.screen.edge_switching" />
     </setting-row>
+    <pause-programs v-model="config.screen.pause_edges_for" />
     <setting-row
       :icon="IconLayoutGrid"
       :help="$t('settings.switching.positionHelp')"

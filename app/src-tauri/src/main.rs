@@ -180,12 +180,14 @@ fn show_settings(app: &AppHandle, welcome: bool) {
     }
 }
 
-/// Notification du système pour les connexions et déconnexions. Hors du thread
+/// Notification du système : connexions, déconnexions, bascule par les bords suspendue. Hors du thread
 /// qui produit l'événement (réseau, crochets).
 fn notify(app: &AppHandle, event: &activity::Event) {
     let body = match &event.kind {
         activity::Kind::Connected { peer } => i18n::tf("notify.connected", &[("peer", peer)]),
         activity::Kind::Disconnected { peer } => i18n::tf("notify.disconnected", &[("peer", peer)]),
+        activity::Kind::EdgesPaused { program } => i18n::tf("notify.edgesPaused", &[("program", program)]),
+        activity::Kind::EdgesResumed => i18n::t("notify.edgesResumed"),
         _ => return,
     };
     let app = app.clone();

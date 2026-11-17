@@ -156,8 +156,10 @@ impl SecondaryCore {
                 if ix == 0 && iy == 0 {
                     return None;
                 }
-                // Pas de sortie pendant un glisser (bouton enfoncé).
-                let exits: &[Edge] = if self.buttons.iter().any(|b| *b) { &[] } else { &self.exits };
+                // Pas de sortie pendant un glisser (bouton enfoncé), ni quand un programme de
+                // `pause_edges_for` est au premier plan.
+                let exits: &[Edge] =
+                    if self.buttons.iter().any(|b| *b) || status::edges_paused() { &[] } else { &self.exits };
                 match self.layout.step(self.pos, ix, iy, exits) {
                     Step::Move(p) => {
                         let (mdx, mdy) = (p.x - self.pos.x, p.y - self.pos.y);

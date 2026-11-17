@@ -20,6 +20,8 @@ pub enum Kind {
     Locked,
     Unlocked,
     Warning { text: String },
+    EdgesPaused { program: String },
+    EdgesResumed,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -120,6 +122,12 @@ pub fn changes(before: &Snapshot, after: &Snapshot) -> Vec<Kind> {
     if before.locked != after.locked {
         kinds.push(if after.locked { Kind::Locked } else { Kind::Unlocked });
     }
+    if before.edges_paused_by != after.edges_paused_by {
+        kinds.push(match &after.edges_paused_by {
+            Some(program) => Kind::EdgesPaused { program: program.clone() },
+            None => Kind::EdgesResumed,
+        });
+    }
     if let Some(text) = &after.warning {
         if before.warning.as_ref() != Some(text) {
             kinds.push(Kind::Warning { text: text.clone() });
@@ -141,6 +149,7 @@ mod tests {
             locked: false,
             warning: None,
             peers: vec![Peer { name: "Mac".into(), os: "macos".into(), since: 0 }],
+            edges_paused_by: None,
         }
     }
 
@@ -184,6 +193,15 @@ mod tests {
         let mut other = before.clone();
         other.warning = Some("b".into());
         assert_eq!(changes(&before, &other), vec![Kind::Warning { text: "b".into() }]);
+    }
+
+    #[test]
+    fn edges_paused() {
+        let before = snap();
+        let mut after = snap();
+        after.edges_paused_by = Some("Wow".into());
+        assert_eq!(changes(&before, &after), vec![Kind::EdgesPaused { program: "Wow".into() }]);
+        assert_eq!(changes(&after, &before), vec![Kind::EdgesResumed]);
     }
 
     #[test]

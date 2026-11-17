@@ -18,9 +18,15 @@ const LABELS: Record<ActivityKind, { key: string; color: ActivityColor }> = {
   locked: { key: "eventLocked", color: "default" },
   unlocked: { key: "eventUnlocked", color: "default" },
   warning: { key: "eventWarning", color: "error" },
+  edgesPaused: { key: "eventEdgesPaused", color: "warning" },
+  edgesResumed: { key: "eventEdgesResumed", color: "default" },
 };
 
 export function describeActivity(event: ActivityEvent): ActivityLabel {
   const { key, color } = LABELS[event.kind];
-  return { key, color, params: { name: event.peer ?? "", text: event.text ?? "" } };
+  return {
+    key,
+    color,
+    params: { name: event.peer ?? event.program ?? "", text: event.text ?? "" },
+  };
 }

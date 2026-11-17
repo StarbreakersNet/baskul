@@ -235,6 +235,7 @@ mod tests {
             locked: true,
             warning: None,
             peers: peers.iter().map(|n| Peer { name: n.to_string(), os: "macos".into(), since: 0 }).collect(),
+            edges_paused_by: None,
         }
     }
 
