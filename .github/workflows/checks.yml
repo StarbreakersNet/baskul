@@ -1,0 +1,55 @@
+name: checks
+
+# Format, lint, tests et types, pour le Rust et le front (docs/conventions/).
+# À chaque PR et sur main ; le workflow build les reprend avant de compiler.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+
+jobs:
+  checks:
+    name: Rust et front
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - run: cargo fmt --all --check
+      - run: cargo test -p baskul-core -p baskul-desktop
+      - run: cargo clippy -p baskul-core -p baskul-desktop --all-targets -- -D warnings
+      - run: ./scripts/xcheck.sh
+      # Front (docs/conventions/) : vérifie sans corriger, contrairement à yarn lint
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Front - dépendances
+        working-directory: app
+        run: corepack yarn install --immutable
+      - name: Front - format (Prettier)
+        working-directory: app
+        run: corepack yarn prettier --check src/
+      - name: Front - lint (oxlint)
+        working-directory: app
+        run: corepack yarn oxlint src -D correctness --import-plugin -D import/first
+      - name: Front - lint (ESLint)
+        working-directory: app
+        run: corepack yarn eslint .
+      - name: Front - noms de fichiers
+        working-directory: app
+        run: corepack yarn lint:names
+      - name: Front - types
+        working-directory: app
+        run: corepack yarn type-check
