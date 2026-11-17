@@ -5,6 +5,7 @@
 
 # Éditeurs
 .idea/
+.vscode/
 
 # App de réglages (Tauri + Vue)
 /app/node_modules
