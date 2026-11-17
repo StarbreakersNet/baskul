@@ -3,6 +3,8 @@
 
 # Système et éditeurs
 .DS_Store
+Thumbs.db
+desktop.ini
 .idea/
 .vscode/
 
