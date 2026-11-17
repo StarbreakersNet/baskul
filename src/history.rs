@@ -82,8 +82,15 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join(FILE);
         let events = vec![
-            Event { id: 1, at: 5, kind: Kind::Started },
-            Event { id: 2, at: 6, kind: Kind::Connected { peer: "Mac".into() } },
+            Event { id: 1, at: 5, until: 5, count: 1, names: Vec::new(), kind: Kind::Started { restarted: false } },
+            Event {
+                id: 2,
+                at: 6,
+                until: 9,
+                count: 3,
+                names: vec!["Mac".into()],
+                kind: Kind::SwitchedTo { peer: "Mac".into() },
+            },
         ];
         write(&path, &events).unwrap();
         assert_eq!(read(&path), events);

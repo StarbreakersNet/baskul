@@ -11,12 +11,12 @@ export const useActivityStore = defineStore("activity", () => {
   const events = ref<ActivityEvent[]>([]);
   const isLoaded = ref(false);
 
-  let syncedId: number | null = null;
+  let syncedRevision: number | null = null;
 
-  /** `lastId` : identifiant du dernier événement, donné par l'état de Baskul */
-  async function sync(lastId: number) {
-    if (lastId !== syncedId) {
-      syncedId = lastId;
+  /** `revision` : change à chaque modification de l'activité, donné par l'état de Baskul */
+  async function sync(revision: number) {
+    if (revision !== syncedRevision) {
+      syncedRevision = revision;
       try {
         const { events: list } = await daemonClient.readActivity();
         events.value = [...list].reverse();

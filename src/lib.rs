@@ -246,7 +246,7 @@ pub fn prepare() -> Prepared {
         log::error!("{e}");
     }
     history::start(&path);
-    activity::record(activity::Kind::Started);
+    activity::record(activity::Kind::Started { restarted: args.relaunched });
 
     let checked = loaded.and_then(|(cfg, created)| cfg.validate().map(|s| (s, created)));
     let (settings, created) = match checked {

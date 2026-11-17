@@ -468,7 +468,7 @@ fn status_info(server: &Server) -> Value {
         }),
         "version": crate::VERSION,
         "started": server.started,
-        "activity": crate::activity::last_id(),
+        "activity": crate::activity::revision(),
         "edges_paused_by": s.edges_paused_by,
         "foreground": crate::programs::last_foreground(),
         "update": crate::update::info(),

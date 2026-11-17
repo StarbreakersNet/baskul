@@ -182,8 +182,8 @@ fn show_settings(app: &AppHandle, welcome: bool) {
 
 /// Notification du système : connexions, déconnexions, bascule par les bords suspendue. Hors du thread
 /// qui produit l'événement (réseau, crochets).
-fn notify(app: &AppHandle, event: &activity::Event) {
-    let body = match &event.kind {
+fn notify(app: &AppHandle, kind: &activity::Kind) {
+    let body = match kind {
         activity::Kind::Connected { peer } => i18n::tf("notify.connected", &[("peer", peer)]),
         activity::Kind::Disconnected { peer } => i18n::tf("notify.disconnected", &[("peer", peer)]),
         activity::Kind::EdgesPaused { program } => i18n::tf("notify.edgesPaused", &[("program", program)]),
@@ -212,7 +212,7 @@ fn main() {
             platform::set_settings_opener(move |welcome| show_settings(&handle, welcome));
             if notifications {
                 let handle = app.handle().clone();
-                activity::on_event(move |event| notify(&handle, event));
+                activity::on_event(move |kind| notify(&handle, kind));
             }
             baskul_desktop::start(prepared);
             tray::install(app.handle());

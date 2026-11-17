@@ -165,10 +165,20 @@
       "pairingShowSecret": "Afficher le secret",
       "pairingHideSecret": "Masquer le secret",
       "eventStarted": "Baskul a démarré",
+      "eventRestarted": "Baskul a redémarré",
+      "eventRestarts": "Baskul a redémarré {count} fois",
+      "eventReconnected": "\"{name}\" : connexion perdue {seconds} s",
+      "eventReconnects": "\"{name}\" : connexion perdue {count} fois",
+      "eventSwitches": "{count} bascules entre cette machine et {names}",
+      "eventLocks": "Curseur verrouillé et déverrouillé {count} fois",
+      "eventWarnings": "Avertissement ({count} fois) : {text}",
+      "today": "Aujourd'hui",
+      "yesterday": "Hier",
       "eventEdgesPaused": "Bascule par les bords suspendue (\"{name}\")",
       "eventEdgesResumed": "Bascule par les bords rétablie",
       "edgesPausedTitle": "Bascule par les bords suspendue",
-      "edgesPausedText": "\"{program}\" est au premier plan. Les raccourcis clavier marchent toujours."
+      "edgesPausedText": "\"{program}\" est au premier plan. Les raccourcis clavier marchent toujours.",
+      "eventEdgesRuns": "Bascule par les bords suspendue {count} fois ({names})"
     },
     "settings": {
       "restarting": "Redémarrage de Baskul…",

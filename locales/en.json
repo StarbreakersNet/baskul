@@ -165,10 +165,20 @@
       "pairingShowSecret": "Show secret",
       "pairingHideSecret": "Hide secret",
       "eventStarted": "Baskul started",
+      "eventRestarted": "Baskul restarted",
+      "eventRestarts": "Baskul restarted {count} times",
+      "eventReconnected": "\"{name}\": connection lost for {seconds} s",
+      "eventReconnects": "\"{name}\": connection lost {count} times",
+      "eventSwitches": "{count} switches between this computer and {names}",
+      "eventLocks": "Cursor locked and unlocked {count} times",
+      "eventWarnings": "Warning ({count} times): {text}",
+      "today": "Today",
+      "yesterday": "Yesterday",
       "eventEdgesPaused": "Edge switching paused (\"{name}\")",
       "eventEdgesResumed": "Edge switching resumed",
       "edgesPausedTitle": "Edge switching paused",
-      "edgesPausedText": "\"{program}\" is in the foreground. Keyboard shortcuts still work."
+      "edgesPausedText": "\"{program}\" is in the foreground. Keyboard shortcuts still work.",
+      "eventEdgesRuns": "Edge switching paused {count} times ({names})"
     },
     "settings": {
       "restarting": "Restarting Baskul…",
