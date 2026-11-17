@@ -107,6 +107,18 @@ async fn apply_profile(name: String) -> Result<Value, Error> {
     call("POST", "/api/profiles/apply", Some(json!({ "name": name }))).await
 }
 
+/// Exporte la configuration et les profils dans un fichier JSON.
+#[tauri::command]
+async fn export_settings(path: String) -> Result<Value, Error> {
+    call("POST", "/api/export", Some(json!({ "path": path }))).await
+}
+
+/// Importe un export ; Baskul redémarre ensuite (la fenêtre se rouvre).
+#[tauri::command]
+async fn import_settings(path: String) -> Result<Value, Error> {
+    call("POST", "/api/import", Some(json!({ "path": path }))).await
+}
+
 /// Activité récente, de la plus ancienne à la plus récente.
 #[tauri::command]
 async fn read_activity() -> Result<Value, Error> {
@@ -230,6 +242,7 @@ fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
             let handle = app.handle().clone();
             platform::set_settings_opener(move |welcome| show_settings(&handle, welcome));
@@ -260,6 +273,8 @@ fn main() {
             save_profile,
             delete_profile,
             apply_profile,
+            export_settings,
+            import_settings,
             capture_hotkey,
             network_info,
             switch_to,

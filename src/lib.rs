@@ -25,6 +25,7 @@ pub mod logging;
 pub mod platform;
 mod profiles;
 mod programs;
+mod transfer;
 pub mod tray;
 mod update;
 

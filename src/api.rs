@@ -323,6 +323,14 @@ fn dispatch(method: &str, path: &str, body: &[u8], server: &Server) -> Response 
                 Err(e) => Response::error(422, &e),
             }
         }
+        ("POST", "/api/export") => match file_path(body).and_then(|f| crate::transfer::export(&server.path, &f)) {
+            Ok(()) => Response::json(200, json!({})),
+            Err(e) => Response::error(422, &e),
+        },
+        ("POST", "/api/import") => match file_path(body).and_then(|f| crate::transfer::import(&server.path, &f)) {
+            Ok(()) => Response { restart: can_restart, ..Response::json(200, json!({ "restart": can_restart })) },
+            Err(e) => Response::error(422, &e),
+        },
         ("GET", "/api/activity") => Response::json(200, json!({ "events": crate::activity::list() })),
         ("DELETE", "/api/activity") => {
             crate::history::clear();
@@ -368,6 +376,8 @@ fn dispatch(method: &str, path: &str, body: &[u8], server: &Server) -> Response 
             | "/api/activity"
             | "/api/profiles"
             | "/api/profiles/apply"
+            | "/api/export"
+            | "/api/import"
             | "/api/open-log"
             | "/api/update"
             | "/api/update/check"
@@ -376,6 +386,12 @@ fn dispatch(method: &str, path: &str, body: &[u8], server: &Server) -> Response 
         ) => Response::error(405, "méthode non autorisée"),
         _ => Response::error(404, "introuvable"),
     }
+}
+
+/// Corps `{"path": "…"}` de l'export et de l'import (fichier choisi dans la fenêtre).
+fn file_path(body: &[u8]) -> Result<PathBuf, String> {
+    let v: Value = serde_json::from_slice(body).map_err(|e| format!("données reçues invalides : {e}"))?;
+    v["path"].as_str().map(PathBuf::from).ok_or_else(|| "fichier manquant".into())
 }
 
 /// Corps `{"name": "…"}` des requêtes sur les profils.

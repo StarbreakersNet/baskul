@@ -151,6 +151,8 @@ Si la connexion avec la pilotée en cours tombe, Baskul attend quelques secondes
 
 **Profils de réglages.** Le bouton en haut de la fenêtre (« Réglages personnalisés » ou le nom du profil actif) enregistre les réglages actuels sous un nom (« Jeu », « Bureau »…) et passe d'un profil à l'autre ; le menu de l'icône les propose aussi. Un profil retient la souris, le défilement, les boutons, le clavier, le presse-papiers, les bords de l'écran et l'activité partagée ; le rôle, le nom, la connexion, la grille et les raccourcis ne changent pas. Les profils sont dans `profiles.json`, à côté de `config.toml`. Appliquer un profil redémarre Baskul (une ou deux secondes).
 
+**Exporter et importer.** Onglet Avancé : « Exporter… » écrit les réglages et les profils dans un fichier JSON ; « Importer… » les reprend sur une autre machine (ou après une réinstallation). La machine garde son rôle, son nom, ses adresses, sa carte réseau et sa grille ; le secret partagé vient du fichier. Baskul redémarre ensuite.
+
 **Programmes qui suspendent les bords.** Un jeu qui capture la souris (FPS, MMO…) peut faire passer le curseur sur une autre machine par erreur. Ajoutez-le à « Programmes qui suspendent les bords » (onglet Changer de machine, ou Souris sur une pilotée) : tant qu'il est au premier plan sur cette machine, la bascule par les bords est suspendue ; les raccourcis clavier marchent toujours. Baskul le signale dans l'info-bulle de l'icône, sur l'accueil et par une notification. La fenêtre propose d'ajouter le dernier programme utilisé. Windows et macOS.
 
 **Bulle d'arrivée.** Quand le clavier et la souris arrivent sur une machine, son nom s'affiche un instant près du curseur, avec le logo de son système, puis s'efface. Elle ne prend pas le focus et laisse passer les clics. Réglage « Bulle d'arrivée », onglet Interface, sur chaque machine.
@@ -418,6 +420,7 @@ src/               couche système (baskul-desktop)
   history.rs       activité récente gardée dans activity.json
   programs.rs      programmes au premier plan qui suspendent la bascule par les bords
   profiles.rs      profils de réglages (profiles.json)
+  transfer.rs      export et import des réglages (JSON)
   api.rs           API : fenêtre de réglages (dans le processus) ; commandes et second lancement (127.0.0.1 + jeton)
   cli.rs           commandes `baskul switch …` et `baskul status`
   platform/
