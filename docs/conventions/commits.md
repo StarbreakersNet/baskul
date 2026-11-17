@@ -69,5 +69,6 @@ Une branche se nomme `type/sujet`, avec les mêmes types que les commits et un s
 - **Une PR part de `main`**, pour être relue et fusionnée seule, dans n'importe quel ordre.
 - Elle n'est **empilée** sur une autre PR ouverte que si elle en dépend vraiment (elle utilise son code, ou modifie les mêmes lignes). Sa base est alors la branche dont elle dépend, et sa description commence par le dire, avec le lien de cette PR. Une fois la première fusionnée, la suivante repasse sur `main`.
 - Le titre de la PR suit le même format : la PR est fusionnée par un commit de fusion (*merge commit*), dont le message est le titre de la PR suivi de sa description.
+- **Pas de mention de l'outil** qui a écrit le code : ni "Generated with…" ni lien vers une session, dans la description d'une PR comme dans un commentaire. Les commits parlent d'eux-mêmes ; seule la ligne `Co-Authored-By:` d'un agent de code est admise, à la fin du message de commit.
 - Un commit, un changement : un correctif glissé dans une nouvelle fonction a son propre commit.
 - Les commits de la PR restent tels quels dans l'historique de `main` : pas de commit "wip" ni "fix lint" dans une PR prête à relire, on les fusionne avant (`git commit --fixup`, puis `git rebase --autosquash`).

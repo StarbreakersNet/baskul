@@ -21,7 +21,7 @@ Lire d'abord le fichier de [`docs/conventions/`](docs/conventions/README.md) qui
 
 - **Front**, dans `app/` : `yarn format`, `yarn lint`, `yarn type-check` et `yarn test`, sans nouvelle erreur ni nouvel avertissement dans les fichiers touchés.
 - **Rust** : `cargo fmt --all`, `cargo clippy -p baskul-core -p baskul-desktop --all-targets -- -D warnings`, `cargo test -p baskul-core -p baskul-desktop` et `./scripts/xcheck.sh` (code Windows et macOS vérifié depuis Linux).
-- **Commits** : [Conventional Commits](docs/conventions/commits.md), type et portée en anglais, description en français : `feat(front): activité récente sur l'accueil`. Le titre de la PR suit le même format.
+- **Commits** : [Conventional Commits](docs/conventions/commits.md), type et portée en anglais, description en français : `feat(front): activité récente sur l'accueil`. Le titre de la PR suit le même format. Aucune mention "Generated with…" ni lien de session, ni dans une PR ni dans un commentaire ; seule une ligne `Co-Authored-By:` est admise dans un commit.
 - Si une règle de la charte semble inadaptée, le signaler plutôt que la contourner.
 
 ## Nommage
