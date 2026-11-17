@@ -234,5 +234,23 @@ async function goTo(target: string) {
   - pas de `$router` dans le template : la navigation se fait dans une fonction du script. **`lint`**
 - `v-for` toujours avec une `:key` stable, tirée de la donnée (id, nom), pas de l'index. **`lint`** Jamais de `v-if` sur le même élément qu'un `v-for`. **`lint`**
 - Textes affichés : toujours `$t("…")`, jamais en dur (voir [`AGENTS.md`](../../AGENTS.md)).
-- `v-show` pour ce qui s'affiche et se masque souvent. `v-if` pour le reste.
+- `v-show` pour ce qui s'affiche et se masque souvent, `v-if` pour le reste : dans les deux cas dans une transition (voir plus bas).
 - Quand un composant reçoit plusieurs slots, chacun a son `<template #nom>`, y compris `#default`.
+
+## Rien n'apparaît d'un coup
+
+Tout ce qui apparaît, disparaît ou change de place sous les yeux de l'utilisateur le fait **avec une transition**, ou **à une place réservée par un squelette** (`h-skeleton`) le temps du chargement. Un `v-if`, `v-else` ou `v-show` qui change pendant que la page est affichée est toujours dans une transition.
+
+| Cas | Transition |
+|---|---|
+| Un élément qui se superpose ou ne pousse rien (étiquette, bouton dans une ligne, fantôme du glisser-déposer) | `<transition name="fade">` |
+| Deux contenus à la même place (`v-if` / `v-else`) | `<transition mode="out-in" name="fade">` |
+| Un bloc qui pousse ce qui suit (alerte, ligne, détail) | `<expand-transition>` : hauteur animée |
+| Une liste (`v-for`) | `<expand-transition group>`, ou un `<transition-group>` nommé dans le composant |
+| Une ligne de réglage selon une autre valeur | `<setting-row :show="…">` plutôt qu'un `v-if` sur la ligne |
+| Des données pas encore chargées | `h-skeleton` à la place du contenu, puis `fade` en `out-in` |
+
+- Les transitions `fade` et `expand` sont dans `assets/main.scss`, avec leur version sans mouvement (`prefers-reduced-motion`). Une transition propre à un composant se nomme avec son préfixe (`home-tile`) et se déclare dans son `<style>`.
+- Pas de marge sur ce qui s'anime en hauteur : l'écart est un `padding` d'un conteneur (`<div class="home-notice">` autour de l'alerte), sinon il apparaît d'un coup. Pour la même raison, un bloc qui apparaît dans un `h-flex` à espacement (`:size`) se place hors de ce `h-flex`.
+- Un enfant reconnu par son parent Naive UI (`h-grid-item`, `h-tab-pane`, `h-descriptions-item`) ne peut pas être enveloppé dans une transition : on anime son contenu, on désactive (`disabled`) au lieu de retirer, ou on passe à une grille CSS avec `<transition-group>`.
+- N'est pas concerné ce qui ne change pas pendant la vie du composant (une prop de structure comme `icon` sur `setting-row`).

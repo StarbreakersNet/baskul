@@ -21,9 +21,11 @@ import HGrid from "@/components/c/hGrid.vue";
 import HGridItem from "@/components/c/hGridItem.vue";
 import HIcon from "@/components/c/hIcon.vue";
 import HTag from "@/components/c/hTag.vue";
+import HSkeleton from "@/components/c/hSkeleton.vue";
 import HText from "@/components/c/hText.vue";
 import HTime from "@/components/c/hTime.vue";
 import ActivityCard from "@/components/ActivityCard.vue";
+import ExpandTransition from "@/components/ExpandTransition.vue";
 import { useCopy } from "@/composables/useCopy";
 import { useCurrentTime } from "@/composables/useCurrentTime";
 import { useLoader } from "@/composables/useLoader";
@@ -249,45 +251,53 @@ function openLog() {
 </script>
 
 <template>
-  <h-flex :size="16" vertical>
-    <h-alert v-if="status?.warning" type="warning">{{ status.warning }}</h-alert>
-
-    <h-card>
-      <h-flex align="center" :size="16" :wrap="false">
-        <h-icon :color="connection.color" :size="44"><component :is="connection.icon" /></h-icon>
-        <h-flex :size="2" vertical>
-          <h-text class="home-title" strong>{{ connection.title }}</h-text>
-          <h-text v-if="connection.help && !isConnected" depth="3">{{ connection.help }}</h-text>
+  <div>
+    <expand-transition>
+      <div v-if="status?.warning" class="home-notice">
+        <h-alert type="warning">{{ status.warning }}</h-alert>
+      </div>
+    </expand-transition>
+    <h-flex :size="16" vertical>
+      <h-card>
+        <h-flex align="center" :size="16" :wrap="false">
+          <h-icon :color="connection.color" :size="44"><component :is="connection.icon" /></h-icon>
+          <h-flex :size="2" vertical>
+            <h-text class="home-title" strong>{{ connection.title }}</h-text>
+            <expand-transition>
+              <h-text v-if="connection.help && !isConnected" depth="3" tag="div">
+                {{ connection.help }}
+              </h-text>
+            </expand-transition>
+          </h-flex>
         </h-flex>
-      </h-flex>
 
-      <!-- NGrid en mode responsive="self" ne reçoit pas les styles scoped : marge sur un conteneur -->
-      <div class="home-machines">
-        <h-grid cols="1 480:2 800:3" responsive="self" :x-gap="12" :y-gap="12">
-          <h-grid-item v-for="machine in machines" :key="machine.key">
-            <h-card
-              :bordered="false"
-              class="home-tile"
-              embedded
-              size="small"
-              :style="machine.isActive ? activeTileStyle : {}">
-              <h-flex align="center" :size="4" vertical>
-                <h-icon
-                  :color="machine.isActive ? themeVars.primaryColor : undefined"
-                  :depth="machine.isActive ? undefined : 3"
-                  :size="36">
-                  <component :is="osIcon(machine.os)" />
-                </h-icon>
-                <h-text strong>{{ machine.name }}</h-text>
-                <h-text class="small-text" depth="3">{{ machine.subtitle }}</h-text>
-                <h-text v-if="machine.since" class="home-since" depth="3">
-                  <i18n-t keypath="home.since" tag="span">
-                    <template #time><h-time format="HH:mm" :time="machine.since" /></template>
-                    <template #ago>
-                      <h-time :time="machine.since" :to="now" type="relative" />
-                    </template>
-                  </i18n-t>
-                </h-text>
+        <transition-group class="home-machines" name="home-tile" tag="div">
+          <h-card
+            v-for="machine in machines"
+            :key="machine.key"
+            :bordered="false"
+            class="home-tile"
+            embedded
+            size="small"
+            :style="machine.isActive ? activeTileStyle : {}">
+            <h-flex align="center" :size="4" vertical>
+              <h-icon
+                :color="machine.isActive ? themeVars.primaryColor : undefined"
+                :depth="machine.isActive ? undefined : 3"
+                :size="36">
+                <component :is="osIcon(machine.os)" />
+              </h-icon>
+              <h-text strong>{{ machine.name }}</h-text>
+              <h-text class="small-text" depth="3">{{ machine.subtitle }}</h-text>
+              <h-text v-if="machine.since" class="home-since" depth="3">
+                <i18n-t keypath="home.since" tag="span">
+                  <template #time><h-time format="HH:mm" :time="machine.since" /></template>
+                  <template #ago>
+                    <h-time :time="machine.since" :to="now" type="relative" />
+                  </template>
+                </i18n-t>
+              </h-text>
+              <transition mode="out-in" name="fade">
                 <h-tag v-if="machine.isActive" :bordered="false" round size="small" type="primary">
                   {{ $t("home.keyboardMouse") }}
                 </h-tag>
@@ -298,6 +308,8 @@ function openLog() {
                   size="small">
                   {{ $t("home.cursorLocked") }}
                 </h-tag>
+              </transition>
+              <transition name="fade">
                 <h-button
                   v-if="machine.target"
                   :loading="switching.loading && switchingTarget === machine.target"
@@ -306,143 +318,168 @@ function openLog() {
                   @click="goTo(machine.target)">
                   {{ machine.targetLabel }}
                 </h-button>
-              </h-flex>
-            </h-card>
-          </h-grid-item>
-          <h-grid-item v-if="!isConnected">
-            <h-card :bordered="false" class="home-tile" embedded size="small">
-              <h-flex align="center" class="home-empty" justify="center" :size="4" vertical>
-                <h-text depth="3">
-                  {{ isPrimary ? $t("home.noClients") : $t("home.noPrimary") }}
-                </h-text>
-              </h-flex>
-            </h-card>
-          </h-grid-item>
-        </h-grid>
-      </div>
-    </h-card>
+              </transition>
+            </h-flex>
+          </h-card>
+          <h-card
+            v-if="!isConnected"
+            key="empty"
+            :bordered="false"
+            class="home-tile"
+            embedded
+            size="small">
+            <h-flex align="center" class="home-empty" justify="center" :size="4" vertical>
+              <h-text depth="3">
+                {{ isPrimary ? $t("home.noClients") : $t("home.noPrimary") }}
+              </h-text>
+            </h-flex>
+          </h-card>
+        </transition-group>
+      </h-card>
 
-    <h-grid v-if="settings.info && config" cols="1 640:2" responsive="self" :x-gap="16" :y-gap="16">
-      <h-grid-item>
-        <h-card class="home-tile" size="small" :title="$t('home.thisMachine')">
-          <h-descriptions :column="1" label-placement="left" size="small">
-            <h-descriptions-item :label="$t('home.role')">
-              {{ isPrimary ? $t("home.rolePrimary") : $t("home.roleSecondary") }}
-            </h-descriptions-item>
-            <h-descriptions-item :label="$t('home.system')">
-              {{ osLabel(settings.info.os) }}
-            </h-descriptions-item>
-            <h-descriptions-item v-if="settings.info.address" :label="$t('home.ipAddress')">
-              <h-text code>{{ settings.info.address }}</h-text>
-            </h-descriptions-item>
-            <h-descriptions-item :label="$t('home.connection')">
-              {{ connectionText }}
-            </h-descriptions-item>
-            <h-descriptions-item :label="$t('home.version')">
-              {{ settings.info.version }}
-            </h-descriptions-item>
-          </h-descriptions>
-        </h-card>
-      </h-grid-item>
-      <h-grid-item>
-        <h-card v-if="isPrimary" class="home-tile" size="small" :title="$t('home.switching')">
-          <template #header-extra>
-            <h-button text type="primary" @click="editSettings('baskul')">
-              {{ $t("common.edit") }}
-            </h-button>
-          </template>
-          <h-descriptions :column="1" label-placement="left" size="small">
-            <h-descriptions-item
-              v-for="hotkey in hotkeys"
-              :key="hotkey.label"
-              :label="hotkey.label">
-              <h-tag v-if="hotkey.keys" class="mono" size="small">
-                {{ formatHotkey(hotkeyParts(hotkey.keys)) }}
-              </h-tag>
-              <h-text v-else depth="3">{{ $t("common.none") }}</h-text>
-            </h-descriptions-item>
-            <h-descriptions-item :label="$t('home.screenEdges')">
-              {{ edgesText }}
-            </h-descriptions-item>
-          </h-descriptions>
-        </h-card>
-        <h-card v-else class="home-tile" size="small" :title="$t('home.control')">
-          <template #header-extra>
-            <h-button text type="primary" @click="editSettings('souris')">
-              {{ $t("common.edit") }}
-            </h-button>
-          </template>
-          <h-descriptions :column="1" label-placement="left" size="small">
-            <h-descriptions-item :label="$t('home.mouseSpeed')">
-              × {{ config.mouse.speed }}
-            </h-descriptions-item>
-            <h-descriptions-item :label="$t('home.scrolling')">
-              {{ scrollText }}
-            </h-descriptions-item>
-            <h-descriptions-item :label="$t('home.clipboard')">
-              {{ clipboardText }}
-            </h-descriptions-item>
-          </h-descriptions>
-        </h-card>
-      </h-grid-item>
-    </h-grid>
+      <transition mode="out-in" name="fade">
+        <h-flex v-if="settings.info && config" :size="16" vertical>
+          <h-grid cols="1 640:2" responsive="self" :x-gap="16" :y-gap="16">
+            <h-grid-item>
+              <h-card class="home-tile" size="small" :title="$t('home.thisMachine')">
+                <h-descriptions :column="1" label-placement="left" size="small">
+                  <h-descriptions-item :label="$t('home.role')">
+                    {{ isPrimary ? $t("home.rolePrimary") : $t("home.roleSecondary") }}
+                  </h-descriptions-item>
+                  <h-descriptions-item :label="$t('home.system')">
+                    {{ osLabel(settings.info.os) }}
+                  </h-descriptions-item>
+                  <h-descriptions-item v-if="settings.info.address" :label="$t('home.ipAddress')">
+                    <h-text code>{{ settings.info.address }}</h-text>
+                  </h-descriptions-item>
+                  <h-descriptions-item :label="$t('home.connection')">
+                    {{ connectionText }}
+                  </h-descriptions-item>
+                  <h-descriptions-item :label="$t('home.version')">
+                    {{ settings.info.version }}
+                  </h-descriptions-item>
+                </h-descriptions>
+              </h-card>
+            </h-grid-item>
+            <h-grid-item>
+              <transition mode="out-in" name="fade">
+                <h-card
+                  v-if="isPrimary"
+                  class="home-tile"
+                  size="small"
+                  :title="$t('home.switching')">
+                  <template #header-extra>
+                    <h-button text type="primary" @click="editSettings('baskul')">
+                      {{ $t("common.edit") }}
+                    </h-button>
+                  </template>
+                  <h-descriptions :column="1" label-placement="left" size="small">
+                    <h-descriptions-item
+                      v-for="hotkey in hotkeys"
+                      :key="hotkey.label"
+                      :label="hotkey.label">
+                      <h-tag v-if="hotkey.keys" class="mono" size="small">
+                        {{ formatHotkey(hotkeyParts(hotkey.keys)) }}
+                      </h-tag>
+                      <h-text v-else depth="3">{{ $t("common.none") }}</h-text>
+                    </h-descriptions-item>
+                    <h-descriptions-item :label="$t('home.screenEdges')">
+                      {{ edgesText }}
+                    </h-descriptions-item>
+                  </h-descriptions>
+                </h-card>
+                <h-card v-else class="home-tile" size="small" :title="$t('home.control')">
+                  <template #header-extra>
+                    <h-button text type="primary" @click="editSettings('souris')">
+                      {{ $t("common.edit") }}
+                    </h-button>
+                  </template>
+                  <h-descriptions :column="1" label-placement="left" size="small">
+                    <h-descriptions-item :label="$t('home.mouseSpeed')">
+                      × {{ config.mouse.speed }}
+                    </h-descriptions-item>
+                    <h-descriptions-item :label="$t('home.scrolling')">
+                      {{ scrollText }}
+                    </h-descriptions-item>
+                    <h-descriptions-item :label="$t('home.clipboard')">
+                      {{ clipboardText }}
+                    </h-descriptions-item>
+                  </h-descriptions>
+                </h-card>
+              </transition>
+            </h-grid-item>
+          </h-grid>
 
-    <h-grid v-if="config" cols="1 640:2" responsive="self" :x-gap="16" :y-gap="16">
-      <h-grid-item>
-        <activity-card class="home-tile" />
-      </h-grid-item>
-      <h-grid-item v-if="isPrimary || !isConnected">
-        <h-card class="home-tile" size="small" :title="$t('home.pairing')">
-          <h-flex v-if="isPrimary" :size="12" vertical>
-            <h-text depth="3">{{ $t("home.pairingText") }}</h-text>
-            <h-descriptions :column="1" label-placement="left" size="small">
-              <h-descriptions-item v-if="pairingAddress" :label="$t('home.pairingAddress')">
-                <h-text code>{{ pairingAddress }}</h-text>
-              </h-descriptions-item>
-              <h-descriptions-item :label="$t('home.pairingSecret')">
-                <h-flex align="center" :size="4" :wrap="false">
-                  <h-text code>{{ showSecret ? secret : maskedSecret }}</h-text>
-                  <h-button
-                    :aria-label="
-                      showSecret ? $t('home.pairingHideSecret') : $t('home.pairingShowSecret')
-                    "
-                    quaternary
-                    size="tiny"
-                    @click="showSecret = !showSecret">
-                    <template #icon>
-                      <h-icon :component="showSecret ? IconEyeOff : IconEye" />
-                    </template>
-                  </h-button>
-                </h-flex>
-              </h-descriptions-item>
-            </h-descriptions>
-            <div>
-              <h-button secondary type="primary" @click="copyPairing()">
-                <template #icon>
-                  <h-icon><icon-copy /></h-icon>
-                </template>
-                {{ $t("home.pairingCopy") }}
-              </h-button>
-            </div>
-          </h-flex>
-          <h-flex v-else :size="12" vertical>
-            <h-text depth="3">{{ $t("home.pairingSecondary") }}</h-text>
-            <div>
-              <h-button secondary type="primary" @click="editSettings('connexion')">
-                {{ $t("home.pairingCheck") }}
-              </h-button>
-            </div>
-          </h-flex>
-        </h-card>
-      </h-grid-item>
-    </h-grid>
+          <h-grid cols="1 640:2" responsive="self" :x-gap="16" :y-gap="16">
+            <h-grid-item>
+              <activity-card class="home-tile" />
+            </h-grid-item>
+            <h-grid-item>
+              <h-card class="home-tile" size="small" :title="$t('home.pairing')">
+                <transition mode="out-in" name="fade">
+                  <h-flex v-if="isPrimary" :size="12" vertical>
+                    <h-text depth="3">{{ $t("home.pairingText") }}</h-text>
+                    <h-descriptions :column="1" label-placement="left" size="small">
+                      <h-descriptions-item v-if="pairingAddress" :label="$t('home.pairingAddress')">
+                        <h-text code>{{ pairingAddress }}</h-text>
+                      </h-descriptions-item>
+                      <h-descriptions-item :label="$t('home.pairingSecret')">
+                        <h-flex align="center" :size="4" :wrap="false">
+                          <h-text code>{{ showSecret ? secret : maskedSecret }}</h-text>
+                          <h-button
+                            :aria-label="
+                              showSecret
+                                ? $t('home.pairingHideSecret')
+                                : $t('home.pairingShowSecret')
+                            "
+                            quaternary
+                            size="tiny"
+                            @click="showSecret = !showSecret">
+                            <template #icon>
+                              <h-icon :component="showSecret ? IconEyeOff : IconEye" />
+                            </template>
+                          </h-button>
+                        </h-flex>
+                      </h-descriptions-item>
+                    </h-descriptions>
+                    <div>
+                      <h-button secondary type="primary" @click="copyPairing()">
+                        <template #icon>
+                          <h-icon><icon-copy /></h-icon>
+                        </template>
+                        {{ $t("home.pairingCopy") }}
+                      </h-button>
+                    </div>
+                  </h-flex>
+                  <h-flex v-else :size="12" vertical>
+                    <h-text depth="3">{{ $t("home.pairingSecondary") }}</h-text>
+                    <div>
+                      <h-button secondary type="primary" @click="editSettings('connexion')">
+                        {{ $t("home.pairingCheck") }}
+                      </h-button>
+                    </div>
+                  </h-flex>
+                </transition>
+              </h-card>
+            </h-grid-item>
+          </h-grid>
+        </h-flex>
+        <h-flex v-else :size="16" vertical>
+          <h-grid cols="1 640:2" responsive="self" :x-gap="16" :y-gap="16">
+            <h-grid-item v-for="index in 4" :key="index">
+              <h-skeleton :height="200" :sharp="false" />
+            </h-grid-item>
+          </h-grid>
+        </h-flex>
+      </transition>
 
-    <h-flex :size="8">
-      <h-button @click="editSettings()">{{ $t("home.settings") }}</h-button>
-      <h-button @click="openLog()">{{ $t("home.log") }}</h-button>
-      <h-button @click="statusStore.restart()">{{ $t("common.restart") }}</h-button>
+      <h-flex :size="8">
+        <h-button @click="editSettings()">{{ $t("home.settings") }}</h-button>
+        <h-button @click="openLog()">{{ $t("home.log") }}</h-button>
+        <h-button @click="statusStore.restart()">{{ $t("common.restart") }}</h-button>
+      </h-flex>
     </h-flex>
-  </h-flex>
+  </div>
 </template>
 
 <style lang="scss" scoped>
@@ -450,8 +487,33 @@ function openLog() {
   font-size: 18px;
 }
 
+// Marge en padding : elle grandit avec l'alerte
+.home-notice {
+  padding-bottom: 16px;
+}
+
 .home-machines {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
   margin-top: 20px;
+}
+
+.home-tile-enter-active,
+.home-tile-leave-active {
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+
+.home-tile-enter-from,
+.home-tile-leave-to {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+.home-tile-move {
+  transition: transform 0.25s ease;
 }
 
 .home-tile {

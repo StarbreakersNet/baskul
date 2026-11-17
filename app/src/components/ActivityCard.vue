@@ -53,13 +53,13 @@ function dayTitle(day: number) {
 <template>
   <h-card size="small" :title="$t('home.activity')">
     <template #header-extra>
-      <transition name="activity-fade">
+      <transition name="fade">
         <h-button v-if="activity.events.length" text type="primary" @click="activity.clear()">
           {{ $t("home.activityClear") }}
         </h-button>
       </transition>
     </template>
-    <transition mode="out-in" name="activity-fade">
+    <transition mode="out-in" name="fade">
       <div v-if="days.length" key="days" class="activity-days">
         <h-collapse :default-expanded-names="firstDay">
           <h-collapse-item
@@ -80,7 +80,7 @@ function dayTitle(day: number) {
                     {{ $t(`home.${item.label.key}`, item.label.params) }}
                   </template>
                   <template #footer>
-                    <transition mode="out-in" name="activity-fade">
+                    <transition mode="out-in" name="fade">
                       <span v-if="item.count > 1" key="run">
                         <h-time format="HH:mm" :time="item.at" />
                         →
@@ -116,16 +116,6 @@ function dayTitle(day: number) {
   padding: 16px 0;
 }
 
-.activity-fade-enter-active,
-.activity-fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.activity-fade-enter-from,
-.activity-fade-leave-to {
-  opacity: 0;
-}
-
 .activity-event-enter-active {
   transition:
     opacity 0.3s ease,
@@ -138,8 +128,6 @@ function dayTitle(day: number) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .activity-fade-enter-active,
-  .activity-fade-leave-active,
   .activity-event-enter-active {
     transition: none;
   }

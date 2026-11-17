@@ -4,6 +4,7 @@ import HAlert from "@/components/c/hAlert.vue";
 import HButton from "@/components/c/hButton.vue";
 import HFlex from "@/components/c/hFlex.vue";
 import HText from "@/components/c/hText.vue";
+import ExpandTransition from "@/components/ExpandTransition.vue";
 import { useUpdateInstall } from "@/composables/useUpdateInstall";
 import { useUpdateStore } from "@/stores/update";
 
@@ -18,22 +19,23 @@ const isInstalling = computed(() => update.info?.state === "installing");
 </script>
 
 <template>
-  <h-alert
-    v-if="readyVersion"
-    class="update-banner"
-    :title="$t('update.readyTitle', { version: readyVersion })"
-    type="success">
-    <h-flex align="center" justify="space-between" :size="12">
-      <h-text>{{ $t("update.readyText") }}</h-text>
-      <h-button :loading="isInstalling" size="small" type="primary" @click="install()">
-        {{ $t("update.restart") }}
-      </h-button>
-    </h-flex>
-  </h-alert>
+  <expand-transition>
+    <div v-if="readyVersion" class="update-banner">
+      <h-alert :title="$t('update.readyTitle', { version: readyVersion })" type="success">
+        <h-flex align="center" justify="space-between" :size="12">
+          <h-text>{{ $t("update.readyText") }}</h-text>
+          <h-button :loading="isInstalling" size="small" type="primary" @click="install()">
+            {{ $t("update.restart") }}
+          </h-button>
+        </h-flex>
+      </h-alert>
+    </div>
+  </expand-transition>
 </template>
 
 <style lang="scss" scoped>
+// Marge en padding : elle grandit avec le bandeau au lieu d'apparaître d'un coup
 .update-banner {
-  margin-bottom: 16px;
+  padding-bottom: 16px;
 }
 </style>
