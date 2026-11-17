@@ -28,5 +28,4 @@ pub mod services;
 pub mod smooth;
 pub mod status;
 
-/// Version de Baskul (commune au cœur, au daemon et à l'app de réglages).
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

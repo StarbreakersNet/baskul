@@ -41,7 +41,6 @@ use std::time::{Duration, Instant};
 
 pub use baskul_core::VERSION;
 
-/// Options de la ligne de commande.
 #[derive(Debug, Default, Clone)]
 pub struct Args {
     pub config: Option<PathBuf>,

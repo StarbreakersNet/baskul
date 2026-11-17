@@ -2,7 +2,7 @@
 //!
 //! Le même format sert sur toutes les machines ; chaque machine ignore les
 //! sections qui ne la concernent pas. Tous les réglages se changent sans
-//! recompiler : il suffit de redémarrer Baskul (menu « Redémarrer »).
+//! recompiler : il suffit de redémarrer Baskul (menu "Redémarrer").
 
 use crate::hotkey::Hotkey;
 use crate::protocol::{DEFAULT_PORT, Edge, Role};
@@ -57,7 +57,7 @@ pub enum ScrollMode {
     Smooth,
 }
 
-/// Défilement fluide : distance parcourue par cran (réglage « Vitesse » de
+/// Défilement fluide : distance parcourue par cran (réglage "Vitesse" de
 /// Mac Mouse Fix).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -68,14 +68,14 @@ pub enum SmoothSpeed {
     High,
 }
 
-/// Défilement fluide : durée de l'élan (réglage « Douceur » de Mac Mouse Fix).
+/// Défilement fluide : durée de l'élan (réglage "Douceur" de Mac Mouse Fix).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Smoothness {
-    /// Animation courte, freinage rapide (« Normale »).
+    /// Animation courte, freinage rapide ("Normale").
     #[default]
     Regular,
-    /// Élan plus long, comme un trackpad (« Élevée »).
+    /// Élan plus long, comme un trackpad ("Élevée").
     High,
 }
 
@@ -84,7 +84,7 @@ pub enum Smoothness {
 pub enum SideButtonsMode {
     /// Boutons 4/5 transmis tels quels (Chrome, Firefox, VS Code…).
     Buttons,
-    /// Geste « balayage » précédent/suivant (Safari, Finder, Xcode…).
+    /// Geste "balayage" précédent/suivant (Safari, Finder, Xcode…).
     Swipe,
 }
 
@@ -149,7 +149,7 @@ pub struct LayoutCfg {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MachineCfg {
-    /// Nom de la pilotée (son « Nom affiché »).
+    /// Nom de la pilotée (son "Nom affiché").
     pub name: String,
     /// Case : `x` vers la droite, `y` vers le bas.
     pub x: i32,
@@ -178,7 +178,7 @@ impl Default for ScreenCfg {
 #[serde(default, deny_unknown_fields)]
 pub struct ActivityCfg {
     /// Activité partagée : cette machine reste active (écran allumé, statut
-    /// « actif » dans les messageries) tant que l'utilisateur l'est sur une
+    /// "actif" dans les messageries) tant que l'utilisateur l'est sur une
     /// autre.
     pub mirror: bool,
 }
@@ -223,7 +223,7 @@ pub struct ScrollCfg {
     pub pixels_per_notch: f64,
     pub smooth_speed: SmoothSpeed,
     pub smoothness: Smoothness,
-    /// Un cran isolé ne fait défiler que 10 pixels (option « Précision » de
+    /// Un cran isolé ne fait défiler que 10 pixels (option "Précision" de
     /// Mac Mouse Fix).
     pub smooth_precision: bool,
     /// Douceur élevée : défilement simulé comme sur un trackpad (gestes et
@@ -328,7 +328,7 @@ impl Default for HotkeysCfg {
     }
 }
 
-/// Thème de l'app de réglages.
+/// Thème de la fenêtre de réglages.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Theme {
@@ -338,7 +338,7 @@ pub enum Theme {
     Dark,
 }
 
-/// Langue de Baskul (app de réglages et menus).
+/// Langue de Baskul (fenêtre de réglages et menus).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Language {
@@ -503,9 +503,9 @@ impl Config {
         let mut remap = BTreeMap::new();
         for (from, to) in &self.keyboard.remap {
             let f = crate::keymap::hid_from_name(from)
-                .ok_or_else(|| format!("[keyboard.remap] touche inconnue « {from} »"))?;
+                .ok_or_else(|| format!("[keyboard.remap] touche inconnue {from:?}"))?;
             let t =
-                crate::keymap::hid_from_name(to).ok_or_else(|| format!("[keyboard.remap] touche inconnue « {to} »"))?;
+                crate::keymap::hid_from_name(to).ok_or_else(|| format!("[keyboard.remap] touche inconnue {to:?}"))?;
             remap.insert(f, t);
         }
         let switch_hotkey = Hotkey::parse(&self.hotkeys.switch_to_secondary)
@@ -531,7 +531,7 @@ impl Config {
             "info" | "" => log::LevelFilter::Info,
             "debug" => log::LevelFilter::Debug,
             "trace" => log::LevelFilter::Trace,
-            other => return Err(format!("[log] level inconnu « {other} »")),
+            other => return Err(format!("[log] level inconnu {other:?}")),
         };
         let name = if self.name.trim().is_empty() { hostname() } else { self.name.trim().to_string() };
         Ok(Settings {
@@ -574,15 +574,15 @@ impl LayoutCfg {
                 return Err("[layout] une machine n'a pas de nom".into());
             }
             if (m.x, m.y) == (0, 0) {
-                return Err(format!("[layout] « {name} » : la case (0, 0) est celle de la machine principale"));
+                return Err(format!("[layout] {name:?} : la case (0, 0) est celle de la machine principale"));
             }
             if out.iter().any(|p| p.name == name) {
-                return Err(format!("[layout] « {name} » est placée deux fois"));
+                return Err(format!("[layout] {name:?} est placée deux fois"));
             }
             if let Some(p) = out.iter().find(|p| p.cell == (m.x, m.y)) {
-                return Err(format!("[layout] « {name} » et « {} » sont sur la même case", p.name));
+                return Err(format!("[layout] {name:?} et {:?} sont sur la même case", p.name));
             }
-            let hotkey = Hotkey::parse(&m.hotkey).map_err(|e| format!("[layout] « {name} », hotkey : {e}"))?;
+            let hotkey = Hotkey::parse(&m.hotkey).map_err(|e| format!("[layout] {name:?}, hotkey : {e}"))?;
             out.push(Placement { name: name.to_string(), cell: (m.x, m.y), hotkey });
         }
         Ok(out)
@@ -678,7 +678,7 @@ pub fn update_text(old: &str, cfg: &Config) -> Result<String, String> {
     let template = default_config_text(default_role(), "");
     let old = if old.trim().is_empty() { template.as_str() } else { old };
     // Les guillemets typographiques ne sont remplacés que s'il le faut : les
-    // « » des commentaires restent intacts.
+    // "" des commentaires restent intacts.
     let mut doc: toml_edit::DocumentMut =
         old.parse().or_else(|_| straight_quotes(old).parse()).map_err(|e| format!("configuration invalide : {e}"))?;
     let new_text = toml::to_string(cfg).map_err(|e| format!("conversion de la configuration : {e}"))?;
@@ -772,7 +772,6 @@ fn with_default_port(s: &str) -> String {
     format!("{s}:{DEFAULT_PORT}")
 }
 
-/// Dossier de configuration de Baskul.
 pub fn config_dir() -> PathBuf {
     config_base().join("Baskul")
 }
@@ -784,8 +783,8 @@ fn config_base() -> PathBuf {
 /// Ancien nom de l'app (versions 0.6 et précédentes).
 pub const OLD_NAME: &str = "Bascule";
 
-/// Reprend les réglages de l'ancien nom (dossier « Bascule ») tant qu'il n'y
-/// a pas de dossier « Baskul ». Refuse si l'ancienne version tourne encore
+/// Reprend les réglages de l'ancien nom (dossier "Bascule") tant qu'il n'y
+/// a pas de dossier "Baskul". Refuse si l'ancienne version tourne encore
 /// (elle tient son verrou d'instance).
 pub fn migrate_old_config_dir() -> Result<bool, String> {
     migrate_dir(&config_base().join(OLD_NAME), &config_dir())
@@ -814,7 +813,6 @@ pub fn default_config_path() -> PathBuf {
     config_dir().join("config.toml")
 }
 
-/// Dossier des journaux.
 pub fn log_dir() -> PathBuf {
     if cfg!(target_os = "macos") {
         if let Some(home) = dirs::home_dir() {
@@ -875,7 +873,7 @@ pub fn default_config_text(role: &str, secret: &str) -> String {
 
 const TEMPLATE: &str = r##"# =====================================================================
 #  Baskul — configuration
-#  Après modification : menu Baskul > « Redémarrer ».
+#  Après modification : menu Baskul > "Redémarrer".
 # =====================================================================
 
 # Rôle de cette machine :
@@ -916,8 +914,8 @@ edge_switching = true
 # (section [layout]) : "right", "left", "top" ou "bottom".
 secondary_position = "right"
 # Taille en pixels des coins où le passage d'un écran à l'autre est
-# désactivé : on peut ainsi « lancer » la souris dans un coin (bouton ✕
-# d'une fenêtre agrandie, « Afficher le bureau »…) sans changer d'écran.
+# désactivé : on peut ainsi "lancer" la souris dans un coin (bouton ✕
+# d'une fenêtre agrandie, "Afficher le bureau"…) sans changer d'écran.
 # 0 = aucun.
 corner_size = 10
 
@@ -926,7 +924,7 @@ corner_size = 10
 # x augmente vers la droite, y vers le bas. On passe d'une machine à sa
 # voisine par le bord commun de leurs écrans. Une pilotée qui se connecte
 # pour la première fois est placée d'elle-même à côté de la principale.
-# « hotkey » (facultatif) : raccourci pour aller directement sur elle.
+# "hotkey" (facultatif) : raccourci pour aller directement sur elle.
 # Exemple : machines = [{ name = "Atelier", x = 1, y = 0, hotkey = "Ctrl+Alt+1" }]
 machines = []
 
@@ -962,12 +960,12 @@ invert_horizontal = false
 # (Machine pilotée, macOS) Boutons latéraux 4/5 de la souris :
 #   "buttons" = transmis tels quels comme boutons 4/5
 #               (Chrome, Firefox, Edge, VS Code, JetBrains…)
-#   "swipe"   = transformés en geste « balayage » précédent/suivant, compris
+#   "swipe"   = transformés en geste "balayage" précédent/suivant, compris
 #               par presque toutes les apps Mac (Safari, Finder, Xcode, Notes…)
 side_buttons = "buttons"
 
 [keyboard]
-# (Machine pilotée, macOS) Échange des touches « ² » / « < > » pour les Mac à
+# (Machine pilotée, macOS) Échange des touches "²" / "< >" pour les Mac à
 # clavier ISO (claviers français). "auto" détecte le type de clavier du Mac.
 # Si ces deux touches sont inversées, essayez "on" ou "off".
 iso_swap = "auto"
@@ -995,20 +993,20 @@ files = true
 max_size_mb = 32
 # Taille maximale des fichiers copiés (Mo).
 max_files_mb = 256
-# Ne pas transférer les contenus marqués « sensibles » (gestionnaires de mots
+# Ne pas transférer les contenus marqués "sensibles" (gestionnaires de mots
 # de passe…).
 skip_sensitive = true
 
 [activity]
 # Activité partagée : tant que vous êtes actif sur une autre machine, celle-ci
 # reste active elle aussi (pas de veille de l'écran ni d'économiseur, statut
-# « actif » dans Teams, Discord, Slack…). Quand vous vous absentez, toutes
+# "actif" dans Teams, Discord, Slack…). Quand vous vous absentez, toutes
 # les machines le voient.
 mirror = true
 
 [hotkeys]
 # Format : modificateurs (Ctrl, Shift, Alt, Win / Cmd) puis une touche,
-# séparés par « + ». Exemples : "Shift+F12", "Ctrl+Alt+B". Vide = désactivé.
+# séparés par "+". Exemples : "Shift+F12", "Ctrl+Alt+B". Vide = désactivé.
 #
 # (Machine principale) Envoie le curseur sur la dernière pilotée utilisée,
 # là où il était.
@@ -1037,7 +1035,7 @@ arrival_bubble = true
 
 [updates]
 # Recherche les nouvelles versions de Baskul (au démarrage puis toutes les six
-# heures) et les télécharge en arrière-plan ; « Redémarrer pour mettre à
+# heures) et les télécharge en arrière-plan ; "Redémarrer pour mettre à
 # jour » (menu de l'icône ou app de réglages) les installe.
 check = true
 

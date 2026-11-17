@@ -12,7 +12,6 @@ use std::time::{Duration, Instant};
 
 /// Injection des événements dans le système local.
 pub trait Emulator {
-    /// Écrans locaux.
     fn layout(&mut self) -> Layout;
     /// Déplace le curseur en `p` (`dx`, `dy` : déplacement correspondant).
     fn move_to(&mut self, p: Point, dx: i32, dy: i32);
@@ -22,7 +21,6 @@ pub trait Emulator {
     fn wheel(&mut self, dx: i32, dy: i32);
     /// Touche physique (code HID).
     fn key(&mut self, code: u32, down: bool, repeat: bool);
-    /// Relâche tout ce qui est enfoncé.
     fn release_all(&mut self);
     /// Le curseur arrive sur cette machine (réveil de l'écran…).
     fn entered(&mut self) {}
@@ -33,7 +31,7 @@ pub trait Emulator {
         None
     }
     /// L'utilisateur est actif sur la machine principale : repousse la veille
-    /// de l'écran, l'économiseur et le statut « absent » des messageries.
+    /// de l'écran, l'économiseur et le statut "absent" des messageries.
     fn keep_active(&mut self) {}
 }
 
@@ -220,7 +218,6 @@ impl SecondaryCore {
         status::set_remote_active(true);
     }
 
-    /// Connexion perdue : on relâche tout.
     pub fn disconnected<E: Emulator>(&mut self, emu: &mut E) {
         self.active = false;
         self.buttons = [false; 5];

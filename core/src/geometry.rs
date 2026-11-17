@@ -3,7 +3,7 @@
 //!
 //! Les coordonnées suivent la convention des deux systèmes : origine en haut à
 //! gauche de l'écran principal, y vers le bas. Windows travaille en pixels
-//! physiques (processus « per-monitor DPI aware »), macOS en points.
+//! physiques (processus "per-monitor DPI aware"), macOS en points.
 
 use crate::protocol::Edge;
 
@@ -100,7 +100,6 @@ impl Layout {
         self.displays.is_empty()
     }
 
-    /// Rectangle englobant tous les écrans.
     pub fn bounds(&self) -> Rect {
         let mut it = self.displays.iter();
         match it.next() {

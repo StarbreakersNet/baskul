@@ -9,7 +9,6 @@
 //! USB HID ↔ scancode Windows (set 1, 0xE0xx pour les touches étendues) ↔ keycode
 //! virtuel macOS (kVK_*, convention clavier ANSI).
 
-/// Une entrée de la table.
 #[derive(Debug, Clone, Copy)]
 pub struct K {
     /// Code USB HID : (page << 16) | usage.
@@ -22,7 +21,7 @@ pub struct K {
     pub name: &'static str,
 }
 
-/// Valeur « pas de keycode Mac ».
+/// Valeur "pas de keycode Mac".
 pub const MAC_NONE: u16 = 0xffff;
 
 pub const PAGE_KEYBOARD: u32 = 0x07;
@@ -281,7 +280,6 @@ pub fn hid_from_win(scancode: u16) -> Option<u32> {
     }
 }
 
-/// HID → scancode Windows.
 pub fn win_from_hid(hid: u32) -> Option<u16> {
     entry_by_hid(hid).map(|k| k.win).filter(|w| *w != 0)
 }
@@ -314,7 +312,7 @@ pub fn hid_from_mac(keycode: u16) -> Option<u32> {
 /// Échange des deux touches qui diffèrent entre claviers ANSI et ISO sur Mac.
 ///
 /// Sur un Mac à clavier ISO (cas des claviers français), la touche à gauche du
-/// « 1 » produit le keycode 0x0A (kVK_ISO_Section) et la touche à droite du Shift
+/// "1" produit le keycode 0x0A (kVK_ISO_Section) et la touche à droite du Shift
 /// gauche produit 0x32 (kVK_ANSI_Grave) — l'inverse de la convention ANSI de la
 /// table. Cette fonction applique l'échange dans les deux sens.
 pub fn iso_swap_mac(keycode: u16) -> u16 {
@@ -447,14 +445,14 @@ mod tests {
         assert_eq!(hid_from_win(0x0054), Some(HID_PRINT_SCREEN));
         assert_eq!(hid_from_win(0x0045), Some(HID_PAUSE));
         assert_eq!(hid_from_win(0xe045), Some(HID_NUM_LOCK));
-        // Maj droit, avec ou sans le drapeau « étendu ».
+        // Maj droit, avec ou sans le drapeau "étendu".
         assert_eq!(hid_from_win(0x0036), Some(HID_SHIFT_RIGHT));
         assert_eq!(mac_from_hid(hid_from_win(0xe036).unwrap()), Some(mac::RIGHT_SHIFT));
     }
 
     #[test]
     fn iso_keys() {
-        // Touche « ² » (gauche du 1) et touche « < > » (droite du Shift gauche).
+        // Touche "²" (gauche du 1) et touche "< >" (droite du Shift gauche).
         assert_eq!(hid_from_win(0x0029), Some(HID_BACKQUOTE));
         assert_eq!(hid_from_win(0x0056), Some(HID_INTL_BACKSLASH));
         assert_eq!(iso_swap_mac(mac_from_hid(HID_BACKQUOTE).unwrap()), mac::ISO_SECTION);

@@ -51,7 +51,7 @@ pub struct Content {
 pub trait Backend {
     /// Compteur qui change à chaque modification du presse-papiers.
     fn sequence(&mut self) -> Option<u64>;
-    /// Le contenu actuel est marqué « sensible » (gestionnaire de mots de passe…).
+    /// Le contenu actuel est marqué "sensible" (gestionnaire de mots de passe…).
     fn is_sensitive(&mut self) -> bool;
     fn read(&mut self, opts: &ReadOptions) -> Result<Content, Unread>;
     /// Écrit un contenu reçu ; `roots` : fichiers et dossiers de premier niveau,
@@ -99,7 +99,7 @@ fn fingerprint(bytes: &[u8]) -> u64 {
     h ^ (bytes.len() as u64)
 }
 
-/// Chemin relatif sûr (pas de « .. », pas de chemin absolu ni de lecteur).
+/// Chemin relatif sûr (pas de "..", pas de chemin absolu ni de lecteur).
 fn safe_relative(path: &str) -> Option<PathBuf> {
     let mut out = PathBuf::new();
     for c in path.split('/') {
