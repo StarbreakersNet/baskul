@@ -1539,7 +1539,10 @@ fn primary_permissions_ok() -> bool {
 
 /// Identifiant de Baskul.app (Info.plist) : c'est sous ce nom que macOS
 /// enregistre ses autorisations.
-const BUNDLE_ID: &str = "fr.baskul.app";
+const BUNDLE_ID: &str = "net.starbreakers.baskul";
+
+/// Identifiant des versions 0.8.1 et antérieures.
+const OLD_BUNDLE_ID: &str = "fr.baskul.app";
 
 /// Autorisations macOS qui manquent pour ce rôle (noms de `tccutil`).
 fn missing_permissions(role: Role) -> Vec<&'static str> {
@@ -1584,6 +1587,17 @@ fn forget_permissions(services: &[&str]) {
             ),
             Err(e) => log::warn!("tccutil introuvable : {e}"),
         }
+    }
+}
+
+/// Autorisations laissées par l'ancien identifiant : sans cela, les Réglages
+/// de macOS listeraient deux fois Baskul. Elles n'existent plus, le plus
+/// souvent : l'échec n'est pas signalé.
+fn forget_old_permissions() {
+    match std::process::Command::new("/usr/bin/tccutil").args(["reset", "All", OLD_BUNDLE_ID]).output() {
+        Ok(out) if out.status.success() => log::info!("autorisations macOS de {OLD_BUNDLE_ID:?} oubliées"),
+        Ok(_) => {}
+        Err(e) => log::warn!("tccutil introuvable : {e}"),
     }
 }
 
@@ -2011,7 +2025,11 @@ fn bubble_tick() {
 // Ouverture à la connexion (LaunchAgent)
 // ---------------------------------------------------------------------------
 
-const LOGIN_LABEL: &str = "fr.baskul.app";
+const LOGIN_LABEL: &str = "net.starbreakers.baskul";
+
+/// Noms précédents de l'ouverture à la connexion : Bascule, puis l'ancien
+/// identifiant de Baskul.app.
+const OLD_LOGIN_LABELS: [&str; 2] = ["fr.bascule.app", "fr.baskul.app"];
 
 fn login_plist() -> Option<PathBuf> {
     Some(dirs::home_dir()?.join("Library/LaunchAgents").join(format!("{LOGIN_LABEL}.plist")))
@@ -2025,11 +2043,18 @@ fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }
 
-/// Ancien nom (Bascule) : son ouverture à la connexion passe à Baskul.
+/// L'ouverture à la connexion enregistrée sous un ancien nom passe au nom actuel.
 fn migrate_old_login_item() {
-    let Some(old) = dirs::home_dir().map(|h| h.join("Library/LaunchAgents/fr.bascule.app.plist")) else { return };
-    if old.exists() && std::fs::remove_file(&old).is_ok() {
-        log::info!("ouverture à la connexion reprise de {}", crate::config::OLD_NAME);
+    let Some(agents) = dirs::home_dir().map(|h| h.join("Library/LaunchAgents")) else { return };
+    let mut migrated = false;
+    for label in OLD_LOGIN_LABELS {
+        let old = agents.join(format!("{label}.plist"));
+        if old.exists() && std::fs::remove_file(&old).is_ok() {
+            log::info!("ouverture à la connexion reprise de {label:?}");
+            migrated = true;
+        }
+    }
+    if migrated {
         set_login_item(true);
     }
 }
@@ -2155,6 +2180,7 @@ pub fn start(settings: Settings, config_path: PathBuf, args: Args) {
     // redemander. Seulement au premier lancement d'une nouvelle version : une
     // autorisation valable n'est jamais touchée.
     if new_version_started() {
+        forget_old_permissions();
         forget_permissions(&missing_permissions(settings.role));
     }
     let permissions_ok;

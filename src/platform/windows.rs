@@ -1316,7 +1316,7 @@ fn set_autostart(on: bool, args: &Args) {
 }
 
 /// Identifiant de l'app (tauri.conf.json), sous lequel l'app envoie ses notifications.
-const APP_ID: &str = "fr.baskul.app";
+const APP_ID: &str = "net.starbreakers.baskul";
 
 /// Baskul n'est pas installé (pas de raccourci dans le menu Démarrer) : sans
 /// cette clé, Windows ignore ses notifications au lieu de les afficher.
