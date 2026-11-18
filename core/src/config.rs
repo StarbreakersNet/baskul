@@ -401,7 +401,7 @@ impl Default for UiCfg {
             language: Language::default(),
             tray_icon: TrayIcon::default(),
             arrival_bubble: true,
-            notifications: true,
+            notifications: false,
             background: Background::default(),
         }
     }
@@ -1074,7 +1074,7 @@ tray_icon = "color"
 arrival_bubble = true
 # Notification du système quand une autre machine se connecte ou se
 # déconnecte.
-notifications = true
+notifications = false
 # Fond animé de la fenêtre : "current" (courant), "wave" (vague colorée),
 # "breathing" (respiration), "ripple" (onde de connexion) ou "none" (aucun).
 background = "current"

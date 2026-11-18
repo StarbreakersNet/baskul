@@ -75,7 +75,7 @@ provide(
   computed(() => settings.info?.os ?? "")
 );
 
-const isCollapsed = ref(readLocalFlag(SIDER_COLLAPSED_KEY, false));
+const isCollapsed = ref(readLocalFlag(SIDER_COLLAPSED_KEY, true));
 const contentRef = useTemplateRef<HLayoutContentInst>("contentRef");
 const statusBadgeRef = useTemplateRef<ComponentPublicInstance>("statusBadgeRef");
 

@@ -111,7 +111,7 @@ function defaultConfig(role: Role): BaskulConfig {
       language: "system",
       tray_icon: "color",
       arrival_bubble: true,
-      notifications: true,
+      notifications: false,
       background: "current",
     },
     updates: { check: true },
