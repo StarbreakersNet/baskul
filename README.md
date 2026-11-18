@@ -153,7 +153,7 @@ Si la connexion avec la pilotée en cours tombe, Baskul attend quelques secondes
 
 **Exporter et importer.** Onglet Avancé : « Exporter… » écrit les réglages et les profils dans un fichier JSON ; « Importer… » les reprend sur une autre machine (ou après une réinstallation). La machine garde son rôle, son nom, ses adresses, sa carte réseau et sa grille ; le secret partagé vient du fichier. Baskul redémarre ensuite.
 
-**Programmes qui suspendent les bords.** Un jeu qui capture la souris (FPS, MMO…) peut faire passer le curseur sur une autre machine par erreur. Ajoutez-le à « Programmes qui suspendent les bords » (onglet Changer de machine, ou Souris sur une pilotée) : tant qu'il est au premier plan sur cette machine, la bascule par les bords est suspendue ; les raccourcis clavier marchent toujours. Baskul le signale dans l'info-bulle de l'icône, sur l'accueil et par une notification. La fenêtre propose d'ajouter le dernier programme utilisé. Windows et macOS.
+**Programmes qui suspendent les bords.** Un jeu qui capture la souris (FPS, MMO…) peut faire passer le curseur sur une autre machine par erreur. Ajoutez-le à « Programmes qui suspendent les bords » (onglet Changer de machine, ou Souris sur une pilotée) : tant qu'il est au premier plan sur cette machine, la bascule par les bords est suspendue ; les raccourcis clavier marchent toujours. Baskul le signale dans l'info-bulle de l'icône, sur l'accueil et, si les notifications sont activées (onglet Interface), par une notification. La fenêtre propose d'ajouter le dernier programme utilisé. Windows et macOS.
 
 **Bulle d'arrivée.** Quand le clavier et la souris arrivent sur une machine, son nom s'affiche un instant près du curseur, avec le logo de son système, puis s'efface. Elle ne prend pas le focus et laisse passer les clics. Réglage « Bulle d'arrivée », onglet Interface, sur chaque machine.
 
@@ -251,7 +251,7 @@ Le fichier complet et commenté est dans [`docs/config.exemple.toml`](docs/confi
 | | `max_size_mb`, `max_files_mb` | Tailles maximales (texte et images ; fichiers) |
 | | `skip_sensitive` | Ignorer les mots de passe |
 | `[activity]` | `mirror = true` | Activité partagée |
-| `[ui]` | `theme`, `language`, `tray_icon`, `notifications` | Thème et langue de la fenêtre, icône en couleurs ou monochrome, notifications du système quand une machine se connecte ou se déconnecte |
+| `[ui]` | `theme`, `language`, `tray_icon`, `notifications` | Thème et langue de la fenêtre, icône en couleurs ou monochrome, notifications du système quand une machine se connecte ou se déconnecte (désactivées par défaut) |
 | | `arrival_bubble = true` | Bulle d'arrivée |
 | `[updates]` | `check = true` | Recherche et téléchargement automatiques des mises à jour |
 | `[log]` | `level = "debug"` | Journal détaillé, utile pour un diagnostic |
