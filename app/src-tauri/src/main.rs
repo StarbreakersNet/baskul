@@ -16,6 +16,7 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 mod tray;
+mod window_state;
 
 use baskul_desktop::{activity, api, i18n, platform};
 use serde::Serialize;
@@ -226,6 +227,7 @@ fn show_settings(app: &AppHandle, welcome: bool) {
             };
             match WebviewWindowBuilder::from_config(&handle, &config).and_then(|b| b.build()) {
                 Ok(w) => {
+                    let _ = w.show();
                     let _ = w.set_focus();
                 }
                 Err(e) => {
@@ -295,6 +297,7 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(window_state::plugin())
         .setup(move |app| {
             let handle = app.handle().clone();
             platform::set_settings_opener(move |welcome| show_settings(&handle, welcome));
@@ -302,13 +305,22 @@ fn main() {
                 let handle = app.handle().clone();
                 activity::on_event(move |kind| notify(&handle, kind));
             }
+            window_state::start(app.handle());
             baskul_desktop::start(prepared);
             tray::install(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {
-            if window.label() == SETTINGS && matches!(event, WindowEvent::Destroyed) {
-                platform::set_settings_window_open(false);
+            if window.label() != SETTINGS {
+                return;
+            }
+            match event {
+                WindowEvent::Moved(_) | WindowEvent::Resized(_) => window_state::changed(),
+                WindowEvent::Destroyed => {
+                    window_state::changed();
+                    platform::set_settings_window_open(false);
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
