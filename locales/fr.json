@@ -12,6 +12,7 @@
       "returnHere": "Ramener le curseur sur cette machine",
       "lock": "Verrouiller le curseur sur cette machine",
       "goTo": "Aller sur \"{name}\"",
+      "returnTo": "Revenir sur \"{name}\"",
       "updateReady": "Redémarrer pour mettre à jour ({version})",
       "profile": "Profil \"{name}\""
     },

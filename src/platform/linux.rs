@@ -103,6 +103,7 @@ impl tray::Backend for LinuxTray {
             // Sans partage du clavier et de la souris.
             Action::ReturnHere
             | Action::GoTo(_)
+            | Action::ReturnToPrimary
             | Action::ToggleLock
             | Action::ToggleLogin
             | Action::AllowAccessibility => {}

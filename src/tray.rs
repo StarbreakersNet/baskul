@@ -8,8 +8,8 @@
 
 use crate::i18n;
 use crate::icon::{self, Style, Tone};
-use crate::protocol::Role;
-use crate::status;
+use crate::protocol::{Role, SwitchTo};
+use crate::{services, status};
 use std::sync::{Mutex, OnceLock};
 
 /// Choix du menu de l'icône.
@@ -19,6 +19,9 @@ pub enum Action {
     ReturnHere,
     /// Le clavier et la souris passent sur cette pilotée.
     GoTo(String),
+    /// Machine pilotée : le clavier et la souris repartent sur la machine
+    /// principale.
+    ReturnToPrimary,
     /// Applique un profil de réglages (Baskul redémarre).
     ApplyProfile(String),
     ToggleLock,
@@ -40,6 +43,7 @@ impl Action {
         match self {
             Action::ReturnHere => "return".into(),
             Action::GoTo(name) => format!("goto:{name}"),
+            Action::ReturnToPrimary => "primary".into(),
             Action::ApplyProfile(name) => format!("profile:{name}"),
             Action::ToggleLock => "lock".into(),
             Action::Settings => "settings".into(),
@@ -62,6 +66,7 @@ impl Action {
         }
         Some(match id {
             "return" => Action::ReturnHere,
+            "primary" => Action::ReturnToPrimary,
             "lock" => Action::ToggleLock,
             "settings" => Action::Settings,
             "log" => Action::OpenLog,
@@ -167,6 +172,17 @@ pub fn model() -> Option<Model> {
     Some(build(backend.as_ref(), &status::snapshot(), crate::update::ready_version(), &crate::profiles::menu()))
 }
 
+/// Machine pilotée : demande à la machine principale de reprendre le clavier
+/// et la souris (comme `baskul switch primary`). Appelable depuis n'importe
+/// quel thread.
+pub fn return_to_primary() {
+    if let Some((_, switch)) = services::switch_handler().as_ref() {
+        if let Err(e) = switch(SwitchTo::Primary) {
+            log::warn!("retour sur la machine principale impossible : {e}");
+        }
+    }
+}
+
 /// Choix du menu, par son identifiant.
 pub fn act(id: &str) {
     match (BACKEND.get(), Action::from_id(id)) {
@@ -203,6 +219,9 @@ fn build(
             menu.push(item(Action::GoTo(p.name.clone()), i18n::tf("menu.goTo", &[("name", &p.name)]), Some(active)));
         }
         menu.push(item(Action::ToggleLock, i18n::t("menu.lock"), Some(snap.locked)));
+        menu.push(Entry::Separator);
+    } else if let Some(primary) = snap.peers.first().filter(|_| snap.remote_active) {
+        menu.push(item(Action::ReturnToPrimary, i18n::tf("menu.returnTo", &[("name", &primary.name)]), None));
         menu.push(Entry::Separator);
     }
     for name in profiles {
@@ -272,6 +291,7 @@ mod tests {
         for a in [
             Action::ReturnHere,
             Action::GoTo("Mac « mini »:2".into()),
+            Action::ReturnToPrimary,
             Action::ToggleLock,
             Action::Settings,
             Action::OpenLog,
@@ -320,7 +340,20 @@ mod tests {
     fn secondary_menu_has_no_switching() {
         let m = build(&Fake(Role::Secondary), &snap(&["Principale"], None), None, &(Vec::new(), None));
         let a = actions(&m);
-        assert!(!a.iter().any(|(a, _)| matches!(a, Action::ReturnHere | Action::GoTo(_) | Action::ToggleLock)));
+        assert!(!a.iter().any(|(a, _)| matches!(
+            a,
+            Action::ReturnHere | Action::GoTo(_) | Action::ToggleLock | Action::ReturnToPrimary
+        )));
         assert_eq!(a.first(), Some(&(Action::Settings, None)));
+    }
+
+    #[test]
+    fn piloted_secondary_menu_offers_the_return() {
+        let mut s = snap(&["Principale"], None);
+        s.remote_active = true;
+        let m = build(&Fake(Role::Secondary), &s, None, &(Vec::new(), None));
+        let a = actions(&m);
+        assert_eq!(a.first(), Some(&(Action::ReturnToPrimary, None)));
+        assert!(!a.iter().any(|(a, _)| matches!(a, Action::ReturnHere | Action::GoTo(_) | Action::ToggleLock)));
     }
 }

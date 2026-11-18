@@ -1350,6 +1350,7 @@ fn handle_action(action: Action) {
         Action::GoTo(name) => {
             with_primary(|s| s.core.switch_to(&mut s.host, None, SwitchTo::Client(name)));
         }
+        Action::ReturnToPrimary => tray::return_to_primary(),
         Action::ToggleLock => {
             with_primary(|s| s.core.toggle_lock());
         }

@@ -13,6 +13,7 @@
       "lock": "Lock the Cursor to This Computer",
       "updateReady": "Restart to update ({version})",
       "goTo": "Go to “{name}”",
+      "returnTo": "Go Back to \"{name}\"",
       "profile": "Profile \"{name}\""
     },
     "status": {
