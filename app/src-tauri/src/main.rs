@@ -289,6 +289,9 @@ fn main() {
     let notifications = prepared.notifications();
 
     let app = tauri::Builder::default()
+        // Sous Windows, l'entrée brute du clavier, à laquelle Tauri abonne le programme quand
+        // sa fenêtre a le focus, privait le crochet clavier de Baskul des frappes.
+        .device_event_filter(tauri::DeviceEventFilter::Always)
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())

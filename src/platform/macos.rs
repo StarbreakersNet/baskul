@@ -1669,6 +1669,7 @@ fn handle_action(action: Action) {
     match action {
         Action::ReturnHere => with_core(&|s| s.core.return_home(&mut s.host)),
         Action::GoTo(name) => with_core(&|s| s.core.switch_to(&mut s.host, None, SwitchTo::Client(name.clone()))),
+        Action::ReturnToPrimary => tray::return_to_primary(),
         Action::ToggleLock => with_core(&|s| {
             s.core.toggle_lock();
         }),

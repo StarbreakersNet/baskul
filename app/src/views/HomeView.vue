@@ -193,6 +193,10 @@ function peerEntry(peer: { name: string; os: string; since: number }): MachineEn
     ? status.value?.active_peer === peer.name
     : isConnected.value && !isRemote;
   const label = isPrimary.value ? t("home.client") : t("home.primaryMachine");
+  let target: string | null = null;
+  if (!isActive) {
+    target = isPrimary.value ? peer.name : "primary";
+  }
   return {
     key: `peer:${peer.name}`,
     name: peer.name,
@@ -201,7 +205,7 @@ function peerEntry(peer: { name: string; os: string; since: number }): MachineEn
     since: peer.since,
     isSelf: false,
     isActive,
-    target: isPrimary.value && !isActive ? peer.name : null,
+    target,
     targetLabel: t("home.goTo"),
   };
 }
