@@ -11,6 +11,7 @@
 use crate::Args;
 use crate::config::MachineCfg;
 use crate::config::{IsoSwap, ScrollCfg, ScrollMode, Settings, SideButtonsMode, Smoothness, TrayIcon};
+use crate::gamepad::{self, GamepadWatch};
 use crate::geometry::{Layout, Point, Rect};
 use crate::i18n;
 use crate::icon;
@@ -39,8 +40,8 @@ use objc2_app_kit::{
     NSPasteboardTypeString, NSPasteboardTypeTIFF, NSPasteboardWriting, NSWorkspace,
 };
 use objc2_foundation::{
-    NSActivityOptions, NSArray, NSData, NSDictionary, NSObjectProtocol, NSPoint, NSProcessInfo, NSRect, NSSize,
-    NSString, NSTimer, NSURL,
+    NSActivityOptions, NSArray, NSData, NSDictionary, NSNumber, NSObjectProtocol, NSPoint, NSProcessInfo, NSRect,
+    NSSize, NSString, NSTimer, NSURL,
 };
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
@@ -63,6 +64,12 @@ type CFStringRef = *const c_void;
 type CFMachPortRef = *mut c_void;
 type CFRunLoopRef = *mut c_void;
 type CFRunLoopSourceRef = *mut c_void;
+type IOHIDManagerRef = *mut c_void;
+type IOHIDDeviceRef = *mut c_void;
+type IOHIDElementRef = *mut c_void;
+type IOHIDValueRef = *mut c_void;
+type HidValueCallback = unsafe extern "C" fn(*mut c_void, i32, *mut c_void, IOHIDValueRef);
+type HidDeviceCallback = unsafe extern "C" fn(*mut c_void, i32, *mut c_void, IOHIDDeviceRef);
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
@@ -180,6 +187,24 @@ unsafe extern "C" {
     fn IOServiceOpen(service: u32, owning_task: u32, ty: u32, connect: *mut u32) -> i32;
     fn IOObjectRelease(obj: u32) -> i32;
     fn IOPMAssertionDeclareUserActivity(name: CFStringRef, ty: u32, id: *mut u32) -> i32;
+    fn IOHIDManagerCreate(alloc: *const c_void, options: u32) -> IOHIDManagerRef;
+    fn IOHIDManagerSetDeviceMatchingMultiple(manager: IOHIDManagerRef, multiple: CFTypeRef);
+    fn IOHIDManagerRegisterInputValueCallback(manager: IOHIDManagerRef, callback: HidValueCallback, ctx: *mut c_void);
+    fn IOHIDManagerRegisterDeviceRemovalCallback(
+        manager: IOHIDManagerRef,
+        callback: HidDeviceCallback,
+        ctx: *mut c_void,
+    );
+    fn IOHIDManagerScheduleWithRunLoop(manager: IOHIDManagerRef, rl: CFRunLoopRef, mode: CFStringRef);
+    fn IOHIDManagerOpen(manager: IOHIDManagerRef, options: u32) -> i32;
+    fn IOHIDValueGetElement(value: IOHIDValueRef) -> IOHIDElementRef;
+    fn IOHIDValueGetIntegerValue(value: IOHIDValueRef) -> isize;
+    fn IOHIDElementGetDevice(element: IOHIDElementRef) -> IOHIDDeviceRef;
+    fn IOHIDElementGetCookie(element: IOHIDElementRef) -> u32;
+    fn IOHIDElementGetUsagePage(element: IOHIDElementRef) -> u32;
+    fn IOHIDElementGetUsage(element: IOHIDElementRef) -> u32;
+    fn IOHIDElementGetLogicalMin(element: IOHIDElementRef) -> isize;
+    fn IOHIDElementGetLogicalMax(element: IOHIDElementRef) -> isize;
 }
 
 unsafe extern "C" {
@@ -290,6 +315,7 @@ const F_DELTA_X: u32 = 4;
 const F_DELTA_Y: u32 = 5;
 const F_AUTOREPEAT: u32 = 8;
 const F_KEYCODE: u32 = 9;
+const F_USER_DATA: u32 = 42;
 const F_SCROLL_DELTA_1: u32 = 11;
 const F_SCROLL_DELTA_2: u32 = 12;
 const F_SCROLL_IS_CONTINUOUS: u32 = 88;
@@ -322,6 +348,8 @@ const SOURCE_HID_STATE: i32 = 1;
 const SCROLL_UNIT_PIXEL: u32 = 0;
 const SCROLL_UNIT_LINE: u32 = 1;
 const KEYBOARD_ISO: u32 = 0x4953_4F20; // 'ISO '
+/// Marque (`F_USER_DATA`) des événements que la capture laisse passer sans les compter.
+const BASKUL_EVENT: i64 = 0x4241_5343; // "BASC"
 const CF_UTF8: u32 = 0x0800_0100;
 
 fn cf_string(s: &std::ffi::CStr) -> CFStringRef {
@@ -1034,6 +1062,10 @@ impl Emulator for MacEmulator {
     fn keep_active(&mut self) {
         keep_active();
     }
+
+    fn wake(&mut self) {
+        wake();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1065,6 +1097,51 @@ fn keep_active() {
         let source = CGEventSourceCreate(SOURCE_HID_STATE);
         let ev = CGEventCreateMouseEvent(source, EV_MOUSE_MOVED, pos, 0);
         if !ev.is_null() {
+            CGEventPost(TAP_HID, ev);
+            CFRelease(ev);
+        }
+        if !source.is_null() {
+            CFRelease(source);
+        }
+    }
+}
+
+/// Retour après une absence : l'économiseur d'écran ne se ferme que si le
+/// curseur bouge vraiment, et un aller-retour immédiat serait fusionné en
+/// un déplacement nul. Le curseur revient donc un peu plus tard.
+fn wake() {
+    const NUDGE: i32 = 3;
+    const BACK_AFTER: Duration = Duration::from_millis(250);
+    keep_active();
+    // SAFETY: lecture de l'état des boutons.
+    if unsafe { (0..3).any(|b| CGEventSourceButtonState(SOURCE_HID_STATE, b)) } {
+        return;
+    }
+    let Some(from) = current_cursor() else { return };
+    let d = displays().nearest_display(from);
+    let dx = if from.x + NUDGE < d.right { NUDGE } else { -NUDGE };
+    let to = Point::new(from.x + dx, from.y);
+    post_wake_move(to, dx);
+    let _ = std::thread::Builder::new().name("baskul-wake".into()).spawn(move || {
+        std::thread::sleep(BACK_AFTER);
+        // Déplacé entre-temps : l'utilisateur est revenu, on n'y touche plus.
+        if current_cursor() == Some(to) {
+            post_wake_move(from, -dx);
+        }
+    });
+}
+
+/// Déplacement du curseur marqué : la capture de la machine principale le
+/// laisse passer sans le compter ni l'envoyer à une pilotée.
+fn post_wake_move(to: Point, dx: i32) {
+    let pos = CGPoint { x: f64::from(to.x), y: f64::from(to.y) };
+    // SAFETY: événement créé, envoyé puis libéré, comme sa source.
+    unsafe {
+        let source = CGEventSourceCreate(SOURCE_HID_STATE);
+        let ev = CGEventCreateMouseEvent(source, EV_MOUSE_MOVED, pos, 0);
+        if !ev.is_null() {
+            CGEventSetIntegerValueField(ev, F_DELTA_X, i64::from(dx));
+            CGEventSetIntegerValueField(ev, F_USER_DATA, BASKUL_EVENT);
             CGEventPost(TAP_HID, ev);
             CFRelease(ev);
         }
@@ -1258,6 +1335,10 @@ impl Host for MacHost {
 
     fn keep_active(&mut self) {
         keep_active();
+    }
+
+    fn wake(&mut self) {
+        wake();
     }
 
     fn save_layout(&mut self, machines: Vec<MachineCfg>) {
@@ -1490,6 +1571,10 @@ unsafe extern "C" fn tap_callback(_proxy: *mut c_void, ty: u32, ev: CGEventRef, 
         });
         return ev;
     }
+    // SAFETY: événement valide fourni par le tap.
+    if unsafe { CGEventGetIntegerValueField(ev, F_USER_DATA) } == BASKUL_EVENT {
+        return ev;
+    }
     let d = MAC_PRIMARY.with(|p| match p.try_borrow_mut() {
         Ok(mut g) => match g.as_mut() {
             Some(s) => s.on_event(ty, ev),
@@ -1530,6 +1615,70 @@ fn create_tap() -> CFMachPortRef {
         CGEventTapEnable(tap, true);
         tap
     }
+}
+
+// ---------------------------------------------------------------------------
+// Manettes
+// ---------------------------------------------------------------------------
+
+thread_local! {
+    static GAMEPADS: RefCell<GamepadWatch> = RefCell::new(GamepadWatch::default());
+}
+
+/// Manettes de la machine principale (HID : joystick, manette de jeu),
+/// suivies sur la boucle principale.
+fn watch_gamepads() {
+    const PAGE_DESKTOP: u32 = 0x01;
+    const USAGES: [u32; 3] = [0x04, 0x05, 0x08]; // Joystick, Game Pad, Multi-axis Controller
+    let matching = autoreleasepool(|_| {
+        let keys = [&*NSString::from_str("DeviceUsagePage"), &*NSString::from_str("DeviceUsage")];
+        let page = NSNumber::new_u32(PAGE_DESKTOP);
+        let dicts: Vec<_> =
+            USAGES.iter().map(|u| NSDictionary::from_slices(&keys, &[&*page, &*NSNumber::new_u32(*u)])).collect();
+        NSArray::from_retained_slice(&dicts)
+    });
+    // SAFETY: gestionnaire créé et conservé pour toute la durée du programme ;
+    // le tableau de critères est copié par IOHIDManagerSetDeviceMatchingMultiple.
+    let opened = unsafe {
+        let manager = IOHIDManagerCreate(null(), 0);
+        if manager.is_null() {
+            return;
+        }
+        IOHIDManagerSetDeviceMatchingMultiple(manager, Retained::as_ptr(&matching).cast());
+        IOHIDManagerRegisterInputValueCallback(manager, gamepad_value, null_mut());
+        IOHIDManagerRegisterDeviceRemovalCallback(manager, gamepad_removed, null_mut());
+        IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetMain(), kCFRunLoopCommonModes);
+        IOHIDManagerOpen(manager, 0)
+    };
+    if opened != 0 {
+        log::warn!("manettes inaccessibles (erreur 0x{opened:x})");
+    }
+}
+
+unsafe extern "C" fn gamepad_value(_ctx: *mut c_void, _result: i32, _sender: *mut c_void, value: IOHIDValueRef) {
+    // SAFETY: valeur valide pendant l'appel, comme l'élément qu'elle désigne.
+    let (pad, control, level) = unsafe {
+        let e = IOHIDValueGetElement(value);
+        let (page, usage) = (IOHIDElementGetUsagePage(e), IOHIDElementGetUsage(e));
+        let (min, max) = (IOHIDElementGetLogicalMin(e) as i64, IOHIDElementGetLogicalMax(e) as i64);
+        let Some(level) = gamepad::hid_level(page, usage, IOHIDValueGetIntegerValue(value) as i64, min, max) else {
+            return;
+        };
+        (IOHIDElementGetDevice(e) as u64, IOHIDElementGetCookie(e), level)
+    };
+    if GAMEPADS.with(|w| w.borrow_mut().moved(pad, control, level)) {
+        MAC_PRIMARY.with(|p| {
+            if let Ok(mut g) = p.try_borrow_mut() {
+                if let Some(s) = g.as_mut() {
+                    s.core.gamepad_input(&mut s.host);
+                }
+            }
+        });
+    }
+}
+
+unsafe extern "C" fn gamepad_removed(_ctx: *mut c_void, _result: i32, _sender: *mut c_void, device: IOHIDDeviceRef) {
+    GAMEPADS.with(|w| w.borrow_mut().forget(device as u64));
 }
 
 fn primary_permissions_ok() -> bool {
@@ -2257,6 +2406,7 @@ pub fn start(settings: Settings, config_path: PathBuf, args: Args) {
                     acc_y: 0.0,
                 })
             });
+            watch_gamepads();
             permissions_ok = primary_permissions_ok();
             if permissions_ok {
                 ensure_tap();

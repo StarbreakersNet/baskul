@@ -16,6 +16,7 @@
 
 use crate::Args;
 use crate::config::{MachineCfg, ScrollCfg, Settings, TrayIcon};
+use crate::gamepad::GamepadWatch;
 use crate::geometry::{Layout, Point, Rect};
 use crate::i18n;
 use crate::icon::Style;
@@ -80,6 +81,7 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     VK_MEDIA_PLAY_PAUSE, VK_MEDIA_PREV_TRACK, VK_MEDIA_STOP, VK_NUMLOCK, VK_PAUSE, VK_VOLUME_DOWN, VK_VOLUME_MUTE,
     VK_VOLUME_UP,
 };
+use windows_sys::Win32::UI::Input::XboxController::{XINPUT_GAMEPAD, XINPUT_STATE, XInputGetState};
 use windows_sys::Win32::UI::Shell::{DROPFILES, ShellExecuteW};
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
@@ -95,6 +97,8 @@ const WM_APP_SHOW: u32 = WM_APP + 5;
 const WM_APP_RESTART: u32 = WM_APP + 6;
 const WM_APP_ACTIVE: u32 = WM_APP + 7;
 const WM_APP_BUBBLE: u32 = WM_APP + 8;
+const WM_APP_WAKE: u32 = WM_APP + 9;
+const WM_APP_GAMEPAD: u32 = WM_APP + 10;
 
 /// Marque des entrées injectées par Baskul pour l'activité partagée : son
 /// propre crochet les laisse passer sans les traiter.
@@ -564,6 +568,10 @@ impl Host for WinHost {
     fn keep_active(&mut self) {
         // Traité juste après le retour du hook (pas d'injection depuis un hook).
         post(WM_APP_ACTIVE, 0, 0);
+    }
+
+    fn wake(&mut self) {
+        post(WM_APP_WAKE, 0, 0);
     }
 
     fn save_layout(&mut self, machines: Vec<MachineCfg>) {
@@ -1039,6 +1047,43 @@ fn keep_active() {
     mouse_input_tagged(0, 0, 0, MOUSEEVENTF_MOVE, BASKUL_INPUT);
 }
 
+/// Retour après une absence : l'économiseur d'écran ne se ferme que si le
+/// curseur bouge vraiment, et il lit sa position quand il traite le message
+/// (un aller-retour immédiat passerait inaperçu). Le curseur revient donc un
+/// peu plus tard.
+fn wake() {
+    const NUDGE: i32 = 3;
+    const BACK_AFTER: Duration = Duration::from_millis(250);
+    keep_active();
+    let Some(from) = cursor_pos() else { return };
+    let d = monitors().nearest_display(from);
+    let to = Point::new(if from.x + NUDGE < d.right { from.x + NUDGE } else { from.x - NUDGE }, from.y);
+    move_cursor(to, BASKUL_INPUT);
+    let _ = std::thread::Builder::new().name("baskul-wake".into()).spawn(move || {
+        std::thread::sleep(BACK_AFTER);
+        // Déplacé entre-temps : l'utilisateur est revenu, on n'y touche plus.
+        if cursor_pos() == Some(to) {
+            move_cursor(from, BASKUL_INPUT);
+        }
+    });
+}
+
+/// Déplacement absolu du curseur, en coordonnées du bureau.
+fn move_cursor(p: Point, extra: usize) {
+    // SAFETY: lecture de métriques système.
+    let (vx, vy, vw, vh) = unsafe {
+        (
+            GetSystemMetrics(SM_XVIRTUALSCREEN),
+            GetSystemMetrics(SM_YVIRTUALSCREEN),
+            GetSystemMetrics(SM_CXVIRTUALSCREEN),
+            GetSystemMetrics(SM_CYVIRTUALSCREEN),
+        )
+    };
+    let nx = ((p.x - vx) as i64 * 65535 / (vw - 1).max(1) as i64) as i32;
+    let ny = ((p.y - vy) as i64 * 65535 / (vh - 1).max(1) as i64) as i32;
+    mouse_input_tagged(nx, ny, 0, MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK, extra);
+}
+
 /// Temps écoulé depuis la dernière entrée de Windows.
 fn idle_time() -> Option<Duration> {
     let mut info = LASTINPUTINFO { cbSize: size_of::<LASTINPUTINFO>() as u32, dwTime: 0 };
@@ -1117,18 +1162,7 @@ impl Emulator for WinEmulator {
     }
 
     fn move_to(&mut self, p: Point, _dx: i32, _dy: i32) {
-        // SAFETY: lecture de métriques système.
-        let (vx, vy, vw, vh) = unsafe {
-            (
-                GetSystemMetrics(SM_XVIRTUALSCREEN),
-                GetSystemMetrics(SM_YVIRTUALSCREEN),
-                GetSystemMetrics(SM_CXVIRTUALSCREEN),
-                GetSystemMetrics(SM_CYVIRTUALSCREEN),
-            )
-        };
-        let nx = ((p.x - vx) as i64 * 65535 / (vw - 1).max(1) as i64) as i32;
-        let ny = ((p.y - vy) as i64 * 65535 / (vh - 1).max(1) as i64) as i32;
-        mouse_input(nx, ny, 0, MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK);
+        move_cursor(p, 0);
     }
 
     fn button(&mut self, button: MouseButton, down: bool) {
@@ -1177,6 +1211,71 @@ impl Emulator for WinEmulator {
     fn keep_active(&mut self) {
         keep_active();
     }
+
+    fn wake(&mut self) {
+        wake();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Manettes
+// ---------------------------------------------------------------------------
+
+/// Manettes XInput (Xbox, et celles que Steam présente comme telles) de la
+/// machine principale, sondées dans leur propre thread : sonder un
+/// emplacement vide peut prendre quelques millisecondes, trop pour le
+/// thread des hooks.
+fn watch_gamepads() {
+    const POLL: Duration = Duration::from_secs(1);
+    /// Un emplacement vide n'est sondé qu'un tour sur `PROBE_EMPTY`.
+    const PROBE_EMPTY: u32 = 5;
+    let spawned = std::thread::Builder::new().name("baskul-gamepads".into()).spawn(|| {
+        let mut watch = GamepadWatch::default();
+        let mut connected = [false; 4];
+        let mut tick = 0u32;
+        loop {
+            std::thread::sleep(POLL);
+            tick = tick.wrapping_add(1);
+            let mut moved = false;
+            for (slot, was_connected) in (0u32..).zip(connected.iter_mut()) {
+                if *was_connected || tick.is_multiple_of(PROBE_EMPTY) {
+                    moved |= poll_gamepad(&mut watch, slot, was_connected);
+                }
+            }
+            if moved {
+                post(WM_APP_GAMEPAD, 0, 0);
+            }
+        }
+    });
+    if let Err(e) = spawned {
+        log::warn!("surveillance des manettes impossible : {e}");
+    }
+}
+
+/// Lit la manette de l'emplacement `slot` ; renvoie `true` pour un vrai geste.
+fn poll_gamepad(watch: &mut GamepadWatch, slot: u32, connected: &mut bool) -> bool {
+    let mut state = XINPUT_STATE::default();
+    // SAFETY: structure de la taille attendue, emplacement de 0 à 3.
+    let found = unsafe { XInputGetState(slot, &mut state) } == ERROR_SUCCESS;
+    if !found && *connected {
+        watch.forget(u64::from(slot));
+    }
+    *connected = found;
+    found && watch.moved_any(u64::from(slot), &gamepad_levels(&state.Gamepad))
+}
+
+/// Position de chaque commande : 16 boutons, 2 gâchettes, 4 axes.
+fn gamepad_levels(g: &XINPUT_GAMEPAD) -> [f32; 22] {
+    let mut levels = [0.0; 22];
+    for (bit, level) in levels.iter_mut().take(16).enumerate() {
+        *level = f32::from((g.wButtons >> bit) & 1);
+    }
+    levels[16] = f32::from(g.bLeftTrigger) / 255.0;
+    levels[17] = f32::from(g.bRightTrigger) / 255.0;
+    for (level, axis) in levels[18..].iter_mut().zip([g.sThumbLX, g.sThumbLY, g.sThumbRX, g.sThumbRY]) {
+        *level = f32::from(axis) / 32768.0;
+    }
+    levels
 }
 
 // ---------------------------------------------------------------------------
@@ -1434,6 +1533,14 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) ->
         }
         WM_APP_ACTIVE => {
             keep_active();
+            0
+        }
+        WM_APP_WAKE => {
+            wake();
+            0
+        }
+        WM_APP_GAMEPAD => {
+            with_primary(|s| s.core.gamepad_input(&mut s.host));
             0
         }
         WM_APP_BUBBLE => {
@@ -1860,6 +1967,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
                 SetTimer(hwnd, TIMER_WATCHDOG, 500, None);
                 SetTimer(hwnd, TIMER_REHOOK, 60_000, None);
             }
+            watch_gamepads();
             services
         }
         Role::Secondary => {

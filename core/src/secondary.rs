@@ -33,6 +33,11 @@ pub trait Emulator {
     /// L'utilisateur est actif sur la machine principale : repousse la veille
     /// de l'écran, l'économiseur et le statut "absent" des messageries.
     fn keep_active(&mut self) {}
+    /// Comme `keep_active`, après une absence : fait aussi quitter
+    /// l'économiseur d'écran, qu'un déplacement nul ne ferme pas.
+    fn wake(&mut self) {
+        self.keep_active();
+    }
 }
 
 /// Dernier événement injecté par Baskul sur cette machine : ce qui suit
