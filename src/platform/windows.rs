@@ -16,6 +16,7 @@
 
 use crate::Args;
 use crate::config::{MachineCfg, ScrollCfg, Settings, TrayIcon};
+use crate::gamepad::GamepadWatch;
 use crate::geometry::{Layout, Point, Rect};
 use crate::i18n;
 use crate::icon::Style;
@@ -80,6 +81,7 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     VK_MEDIA_PLAY_PAUSE, VK_MEDIA_PREV_TRACK, VK_MEDIA_STOP, VK_NUMLOCK, VK_PAUSE, VK_VOLUME_DOWN, VK_VOLUME_MUTE,
     VK_VOLUME_UP,
 };
+use windows_sys::Win32::UI::Input::XboxController::{XINPUT_GAMEPAD, XINPUT_STATE, XInputGetState};
 use windows_sys::Win32::UI::Shell::{DROPFILES, ShellExecuteW};
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
@@ -96,6 +98,7 @@ const WM_APP_RESTART: u32 = WM_APP + 6;
 const WM_APP_ACTIVE: u32 = WM_APP + 7;
 const WM_APP_BUBBLE: u32 = WM_APP + 8;
 const WM_APP_WAKE: u32 = WM_APP + 9;
+const WM_APP_GAMEPAD: u32 = WM_APP + 10;
 
 /// Marque des entrées injectées par Baskul pour l'activité partagée : son
 /// propre crochet les laisse passer sans les traiter.
@@ -1215,6 +1218,67 @@ impl Emulator for WinEmulator {
 }
 
 // ---------------------------------------------------------------------------
+// Manettes
+// ---------------------------------------------------------------------------
+
+/// Manettes XInput (Xbox, et celles que Steam présente comme telles) de la
+/// machine principale, sondées dans leur propre thread : sonder un
+/// emplacement vide peut prendre quelques millisecondes, trop pour le
+/// thread des hooks.
+fn watch_gamepads() {
+    const POLL: Duration = Duration::from_secs(1);
+    /// Un emplacement vide n'est sondé qu'un tour sur `PROBE_EMPTY`.
+    const PROBE_EMPTY: u32 = 5;
+    let spawned = std::thread::Builder::new().name("baskul-gamepads".into()).spawn(|| {
+        let mut watch = GamepadWatch::default();
+        let mut connected = [false; 4];
+        let mut tick = 0u32;
+        loop {
+            std::thread::sleep(POLL);
+            tick = tick.wrapping_add(1);
+            let mut moved = false;
+            for (slot, was_connected) in (0u32..).zip(connected.iter_mut()) {
+                if *was_connected || tick.is_multiple_of(PROBE_EMPTY) {
+                    moved |= poll_gamepad(&mut watch, slot, was_connected);
+                }
+            }
+            if moved {
+                post(WM_APP_GAMEPAD, 0, 0);
+            }
+        }
+    });
+    if let Err(e) = spawned {
+        log::warn!("surveillance des manettes impossible : {e}");
+    }
+}
+
+/// Lit la manette de l'emplacement `slot` ; renvoie `true` pour un vrai geste.
+fn poll_gamepad(watch: &mut GamepadWatch, slot: u32, connected: &mut bool) -> bool {
+    let mut state = XINPUT_STATE::default();
+    // SAFETY: structure de la taille attendue, emplacement de 0 à 3.
+    let found = unsafe { XInputGetState(slot, &mut state) } == ERROR_SUCCESS;
+    if !found && *connected {
+        watch.forget(u64::from(slot));
+    }
+    *connected = found;
+    found && watch.moved_any(u64::from(slot), &gamepad_levels(&state.Gamepad))
+}
+
+/// Position de chaque commande : 16 boutons, 2 gâchettes, 4 axes.
+fn gamepad_levels(g: &XINPUT_GAMEPAD) -> [f32; 22] {
+    let mut levels = [0.0; 22];
+    for (bit, level) in levels.iter_mut().take(16).enumerate() {
+        *level = f32::from((g.wButtons >> bit) & 1);
+    }
+    levels[16] = f32::from(g.bLeftTrigger) / 255.0;
+    levels[17] = f32::from(g.bRightTrigger) / 255.0;
+    for (level, axis) in levels[18..].iter_mut().zip([g.sThumbLX, g.sThumbLY, g.sThumbRX, g.sThumbRY]) {
+        *level = f32::from(axis) / 32768.0;
+    }
+    levels
+}
+
+// ---------------------------------------------------------------------------
 // Icône
 // ---------------------------------------------------------------------------
 
@@ -1473,6 +1537,10 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) ->
         }
         WM_APP_WAKE => {
             wake();
+            0
+        }
+        WM_APP_GAMEPAD => {
+            with_primary(|s| s.core.gamepad_input(&mut s.host));
             0
         }
         WM_APP_BUBBLE => {
@@ -1899,6 +1967,7 @@ pub fn run(settings: Settings, config_path: PathBuf, args: Args) -> ! {
                 SetTimer(hwnd, TIMER_WATCHDOG, 500, None);
                 SetTimer(hwnd, TIMER_REHOOK, 60_000, None);
             }
+            watch_gamepads();
             services
         }
         Role::Secondary => {

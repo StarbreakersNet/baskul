@@ -16,6 +16,7 @@ pub mod clipboard;
 pub mod config;
 pub mod crypto;
 pub mod discovery;
+pub mod gamepad;
 pub mod geometry;
 pub mod hotkey;
 pub mod i18n;

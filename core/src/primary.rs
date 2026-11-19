@@ -350,6 +350,13 @@ impl PrimaryCore {
         self.notify_clients(host, active);
     }
 
+    /// Manette utilisée ici : toutes les pilotées sont tenues pour actives.
+    /// Pas cette machine : le jeu qui utilise la manette l'empêche lui-même
+    /// de se mettre en veille.
+    pub fn gamepad_input<H: Host>(&mut self, host: &mut H) {
+        self.notify_clients(host, None);
+    }
+
     /// Signal d'activité aux pilotées (sauf `except`) ; chacune décide selon
     /// son propre réglage.
     fn notify_clients<H: Host>(&mut self, host: &mut H, except: Option<PeerId>) {
@@ -1648,6 +1655,20 @@ mod tests {
         core.local_active_at = Some(Instant::now() - WAKE_AFTER);
         core.remote_motion(&mut host, 3, 0);
         assert_eq!((host.kept_active, host.woken), (1, 2));
+    }
+
+    #[test]
+    fn gamepad_counts_as_activity_for_every_client() {
+        let (mut core, mut host) = setup_two();
+        go_remote(&mut core, &mut host);
+        core.peer_active_at = None;
+        host.user_active_sent.clear();
+        core.gamepad_input(&mut host);
+        assert_eq!(host.user_active_sent, [ATELIER, SALON]);
+        assert_eq!((host.kept_active, host.woken), (0, 0));
+        // Une fois par intervalle, comme le clavier et la souris.
+        core.gamepad_input(&mut host);
+        assert_eq!(host.user_active_sent.len(), 2);
     }
 
     #[test]

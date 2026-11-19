@@ -11,6 +11,7 @@
 use crate::Args;
 use crate::config::MachineCfg;
 use crate::config::{IsoSwap, ScrollCfg, ScrollMode, Settings, SideButtonsMode, Smoothness, TrayIcon};
+use crate::gamepad::{self, GamepadWatch};
 use crate::geometry::{Layout, Point, Rect};
 use crate::i18n;
 use crate::icon;
@@ -39,8 +40,8 @@ use objc2_app_kit::{
     NSPasteboardTypeString, NSPasteboardTypeTIFF, NSPasteboardWriting, NSWorkspace,
 };
 use objc2_foundation::{
-    NSActivityOptions, NSArray, NSData, NSDictionary, NSObjectProtocol, NSPoint, NSProcessInfo, NSRect, NSSize,
-    NSString, NSTimer, NSURL,
+    NSActivityOptions, NSArray, NSData, NSDictionary, NSNumber, NSObjectProtocol, NSPoint, NSProcessInfo, NSRect,
+    NSSize, NSString, NSTimer, NSURL,
 };
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
@@ -63,6 +64,12 @@ type CFStringRef = *const c_void;
 type CFMachPortRef = *mut c_void;
 type CFRunLoopRef = *mut c_void;
 type CFRunLoopSourceRef = *mut c_void;
+type IOHIDManagerRef = *mut c_void;
+type IOHIDDeviceRef = *mut c_void;
+type IOHIDElementRef = *mut c_void;
+type IOHIDValueRef = *mut c_void;
+type HidValueCallback = unsafe extern "C" fn(*mut c_void, i32, *mut c_void, IOHIDValueRef);
+type HidDeviceCallback = unsafe extern "C" fn(*mut c_void, i32, *mut c_void, IOHIDDeviceRef);
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
@@ -180,6 +187,24 @@ unsafe extern "C" {
     fn IOServiceOpen(service: u32, owning_task: u32, ty: u32, connect: *mut u32) -> i32;
     fn IOObjectRelease(obj: u32) -> i32;
     fn IOPMAssertionDeclareUserActivity(name: CFStringRef, ty: u32, id: *mut u32) -> i32;
+    fn IOHIDManagerCreate(alloc: *const c_void, options: u32) -> IOHIDManagerRef;
+    fn IOHIDManagerSetDeviceMatchingMultiple(manager: IOHIDManagerRef, multiple: CFTypeRef);
+    fn IOHIDManagerRegisterInputValueCallback(manager: IOHIDManagerRef, callback: HidValueCallback, ctx: *mut c_void);
+    fn IOHIDManagerRegisterDeviceRemovalCallback(
+        manager: IOHIDManagerRef,
+        callback: HidDeviceCallback,
+        ctx: *mut c_void,
+    );
+    fn IOHIDManagerScheduleWithRunLoop(manager: IOHIDManagerRef, rl: CFRunLoopRef, mode: CFStringRef);
+    fn IOHIDManagerOpen(manager: IOHIDManagerRef, options: u32) -> i32;
+    fn IOHIDValueGetElement(value: IOHIDValueRef) -> IOHIDElementRef;
+    fn IOHIDValueGetIntegerValue(value: IOHIDValueRef) -> isize;
+    fn IOHIDElementGetDevice(element: IOHIDElementRef) -> IOHIDDeviceRef;
+    fn IOHIDElementGetCookie(element: IOHIDElementRef) -> u32;
+    fn IOHIDElementGetUsagePage(element: IOHIDElementRef) -> u32;
+    fn IOHIDElementGetUsage(element: IOHIDElementRef) -> u32;
+    fn IOHIDElementGetLogicalMin(element: IOHIDElementRef) -> isize;
+    fn IOHIDElementGetLogicalMax(element: IOHIDElementRef) -> isize;
 }
 
 unsafe extern "C" {
@@ -1592,6 +1617,70 @@ fn create_tap() -> CFMachPortRef {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Manettes
+// ---------------------------------------------------------------------------
+
+thread_local! {
+    static GAMEPADS: RefCell<GamepadWatch> = RefCell::new(GamepadWatch::default());
+}
+
+/// Manettes de la machine principale (HID : joystick, manette de jeu),
+/// suivies sur la boucle principale.
+fn watch_gamepads() {
+    const PAGE_DESKTOP: u32 = 0x01;
+    const USAGES: [u32; 3] = [0x04, 0x05, 0x08]; // Joystick, Game Pad, Multi-axis Controller
+    let matching = autoreleasepool(|_| {
+        let keys = [&*NSString::from_str("DeviceUsagePage"), &*NSString::from_str("DeviceUsage")];
+        let page = NSNumber::new_u32(PAGE_DESKTOP);
+        let dicts: Vec<_> =
+            USAGES.iter().map(|u| NSDictionary::from_slices(&keys, &[&*page, &*NSNumber::new_u32(*u)])).collect();
+        NSArray::from_retained_slice(&dicts)
+    });
+    // SAFETY: gestionnaire créé et conservé pour toute la durée du programme ;
+    // le tableau de critères est copié par IOHIDManagerSetDeviceMatchingMultiple.
+    let opened = unsafe {
+        let manager = IOHIDManagerCreate(null(), 0);
+        if manager.is_null() {
+            return;
+        }
+        IOHIDManagerSetDeviceMatchingMultiple(manager, Retained::as_ptr(&matching).cast());
+        IOHIDManagerRegisterInputValueCallback(manager, gamepad_value, null_mut());
+        IOHIDManagerRegisterDeviceRemovalCallback(manager, gamepad_removed, null_mut());
+        IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetMain(), kCFRunLoopCommonModes);
+        IOHIDManagerOpen(manager, 0)
+    };
+    if opened != 0 {
+        log::warn!("manettes inaccessibles (erreur 0x{opened:x})");
+    }
+}
+
+unsafe extern "C" fn gamepad_value(_ctx: *mut c_void, _result: i32, _sender: *mut c_void, value: IOHIDValueRef) {
+    // SAFETY: valeur valide pendant l'appel, comme l'élément qu'elle désigne.
+    let (pad, control, level) = unsafe {
+        let e = IOHIDValueGetElement(value);
+        let (page, usage) = (IOHIDElementGetUsagePage(e), IOHIDElementGetUsage(e));
+        let (min, max) = (IOHIDElementGetLogicalMin(e) as i64, IOHIDElementGetLogicalMax(e) as i64);
+        let Some(level) = gamepad::hid_level(page, usage, IOHIDValueGetIntegerValue(value) as i64, min, max) else {
+            return;
+        };
+        (IOHIDElementGetDevice(e) as u64, IOHIDElementGetCookie(e), level)
+    };
+    if GAMEPADS.with(|w| w.borrow_mut().moved(pad, control, level)) {
+        MAC_PRIMARY.with(|p| {
+            if let Ok(mut g) = p.try_borrow_mut() {
+                if let Some(s) = g.as_mut() {
+                    s.core.gamepad_input(&mut s.host);
+                }
+            }
+        });
+    }
+}
+
+unsafe extern "C" fn gamepad_removed(_ctx: *mut c_void, _result: i32, _sender: *mut c_void, device: IOHIDDeviceRef) {
+    GAMEPADS.with(|w| w.borrow_mut().forget(device as u64));
+}
+
 fn primary_permissions_ok() -> bool {
     // SAFETY: fonctions sans précondition.
     unsafe { AXIsProcessTrusted() && CGPreflightListenEventAccess() }
@@ -2317,6 +2406,7 @@ pub fn start(settings: Settings, config_path: PathBuf, args: Args) {
                     acc_y: 0.0,
                 })
             });
+            watch_gamepads();
             permissions_ok = primary_permissions_ok();
             if permissions_ok {
                 ensure_tap();
