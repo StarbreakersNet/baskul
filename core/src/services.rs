@@ -7,7 +7,7 @@ use crate::discovery;
 use crate::i18n;
 use crate::iface;
 use crate::net::{self, LinkEvent, LinkHandle, NetSettings};
-use crate::primary::{ACTIVITY_INTERVAL, PeerEvent, RECONNECT_GRACE};
+use crate::primary::{ACTIVITY_INTERVAL, PeerEvent, RECONNECT_GRACE, WAKE_AFTER};
 use crate::protocol::{ClipHeader, ClipImage};
 use crate::protocol::{DEFAULT_PORT, Message, Role, SwitchTo};
 use crate::secondary::{self, Emulator, SecondaryCore};
@@ -206,7 +206,11 @@ pub fn start_secondary<E: Emulator + Send + 'static>(
             LinkEvent::Message { msg: Message::UserActive, .. } => {
                 if mirror {
                     secondary::note_injected();
-                    emu.keep_active();
+                    if idle().is_some_and(|d| d >= WAKE_AFTER) {
+                        emu.wake();
+                    } else {
+                        emu.keep_active();
+                    }
                 }
             }
             LinkEvent::Message { peer, msg } => {
@@ -297,6 +301,7 @@ mod tests {
         Key(u32, bool, bool),
         ReleaseAll,
         KeepActive,
+        Wake,
     }
 
     #[derive(Clone, Default)]
@@ -323,6 +328,9 @@ mod tests {
         }
         fn keep_active(&mut self) {
             self.0.lock().unwrap().push(Ev::KeepActive);
+        }
+        fn wake(&mut self) {
+            self.0.lock().unwrap().push(Ev::Wake);
         }
     }
 
@@ -369,7 +377,8 @@ mod tests {
         let (id_a, name) = connected(&peer_rx);
         assert_eq!(name, "Atelier");
         let salon_emu = RecEmu::default();
-        let salon = start_secondary(&settings("secondary", "Salon", port), hooks, salon_emu.clone(), || None);
+        let salon =
+            start_secondary(&settings("secondary", "Salon", port), hooks, salon_emu.clone(), || Some(WAKE_AFTER));
         let (id_s, name) = connected(&peer_rx);
         assert_eq!(name, "Salon");
         assert_eq!(primary.link.peers().len(), 2);
@@ -406,7 +415,8 @@ mod tests {
         // Activité partagée : l'utilisateur est actif sur la machine principale.
         link.broadcast_input(Message::UserActive, None);
         assert!(wait_for(|| emu.0.lock().unwrap().last() == Some(&Ev::KeepActive)));
-        assert!(wait_for(|| salon_emu.0.lock().unwrap().last() == Some(&Ev::KeepActive)));
+        // Salon est inactive depuis longtemps : le signal la réveille.
+        assert!(wait_for(|| salon_emu.0.lock().unwrap().last() == Some(&Ev::Wake)));
 
         // Dans l'autre sens : commande `baskul switch` lancée sur Salon,
         // activité de son propre clavier.

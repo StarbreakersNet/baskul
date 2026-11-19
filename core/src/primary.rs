@@ -89,6 +89,11 @@ pub const RECONNECT_GRACE: Duration = Duration::from_secs(4);
 /// maintien en activité de cette machine).
 pub const ACTIVITY_INTERVAL: Duration = Duration::from_secs(10);
 
+/// Sans activité depuis ce délai, l'économiseur d'écran a pu démarrer (une
+/// minute au moins sous Windows et macOS) : le signal d'activité doit
+/// réveiller la machine, pas seulement la garder active.
+pub const WAKE_AFTER: Duration = Duration::from_secs(30);
+
 #[derive(Debug, Clone)]
 pub struct PrimaryOptions {
     /// Bascule en poussant la souris contre le bord de l'écran.
@@ -127,6 +132,11 @@ pub trait Host {
     /// envoyés à une pilotée, ou utilisés directement sur celle-ci) :
     /// repousse la veille de l'écran, l'économiseur et le statut "absent".
     fn keep_active(&mut self) {}
+    /// Comme `keep_active`, après une absence : fait aussi quitter
+    /// l'économiseur d'écran, qu'un déplacement nul ne ferme pas.
+    fn wake(&mut self) {
+        self.keep_active();
+    }
     /// La grille a changé (pilotée placée d'elle-même) : l'enregistrer.
     fn save_layout(&mut self, _machines: Vec<MachineCfg>) {}
     /// Le clavier et la souris reviennent sur cette machine, le curseur en
@@ -165,9 +175,9 @@ pub struct PrimaryCore {
     pressed: HashSet<u32>,
     /// Fin du délai de grâce de la pilotée en cours, déconnectée.
     grace_until: Option<Instant>,
-    /// Derniers signaux d'activité envoyés aux pilotées, et donnés à cette
-    /// machine.
+    /// Dernier signal d'activité envoyé aux pilotées.
     peer_active_at: Option<Instant>,
+    /// Dernière activité de cette machine : entrée locale, ou signal donné.
     local_active_at: Option<Instant>,
 }
 
@@ -334,6 +344,8 @@ impl PrimaryCore {
         if self.is_remote() {
             // Clavier et souris agissent là-bas : ce système ne voit rien.
             self.keep_active(host);
+        } else {
+            self.local_active_at = Some(Instant::now());
         }
         self.notify_clients(host, active);
     }
@@ -356,8 +368,13 @@ impl PrimaryCore {
 
     fn keep_active<H: Host>(&mut self, host: &mut H) {
         if self.opts.mirror_activity && due(self.local_active_at) {
+            let away = self.local_active_at.is_none_or(|t| t.elapsed() >= WAKE_AFTER);
             self.local_active_at = Some(Instant::now());
-            host.keep_active();
+            if away {
+                host.wake();
+            } else {
+                host.keep_active();
+            }
         }
     }
 
@@ -885,6 +902,7 @@ mod tests {
         /// Signaux d'activité envoyés aux pilotées, et donnés à cette machine.
         user_active_sent: Vec<PeerId>,
         kept_active: usize,
+        woken: usize,
         saved: Option<Vec<MachineCfg>>,
         /// Retours signalés (bulle d'arrivée).
         arrivals: usize,
@@ -921,6 +939,9 @@ mod tests {
         fn keep_active(&mut self) {
             self.kept_active += 1;
         }
+        fn wake(&mut self) {
+            self.woken += 1;
+        }
         fn save_layout(&mut self, machines: Vec<MachineCfg>) {
             self.saved = Some(machines);
         }
@@ -955,6 +976,7 @@ mod tests {
             shown_at: None,
             user_active_sent: vec![],
             kept_active: 0,
+            woken: 0,
             saved: None,
             arrivals: 0,
         };
@@ -1593,6 +1615,7 @@ mod tests {
         // Sur Atelier : cette machine et Salon ne voient plus rien passer.
         go_remote(&mut core, &mut host);
         core.peer_active_at = Some(Instant::now() - ACTIVITY_INTERVAL);
+        core.local_active_at = Some(Instant::now() - ACTIVITY_INTERVAL);
         core.remote_motion(&mut host, 3, 0);
         core.button(&mut host, MouseButton::Left, true);
         assert_eq!((&host.user_active_sent[2..], host.kept_active), (&[SALON][..], 1));
@@ -1604,6 +1627,27 @@ mod tests {
         core.peer_active_at = Some(Instant::now() - ACTIVITY_INTERVAL);
         core.peer_event(&mut host, PeerEvent::UserActive { from: SALON });
         assert_eq!((host.user_active_sent.last(), host.kept_active), (Some(&ATELIER), 2));
+    }
+
+    #[test]
+    fn activity_after_an_absence_wakes_this_machine() {
+        let (mut core, mut host) = setup();
+        // Entrée locale juste avant : la machine est éveillée.
+        core.key(&mut host, KEY_A, true);
+        core.key(&mut host, KEY_A, false);
+        core.peer_event(&mut host, PeerEvent::UserActive { from: ATELIER });
+        assert_eq!((host.kept_active, host.woken), (0, 0));
+        core.local_active_at = Some(Instant::now() - ACTIVITY_INTERVAL);
+        core.peer_event(&mut host, PeerEvent::UserActive { from: ATELIER });
+        assert_eq!((host.kept_active, host.woken), (1, 0));
+        // Longue absence : l'économiseur d'écran a pu démarrer.
+        core.local_active_at = Some(Instant::now() - WAKE_AFTER);
+        core.peer_event(&mut host, PeerEvent::UserActive { from: ATELIER });
+        assert_eq!((host.kept_active, host.woken), (1, 1));
+        go_remote(&mut core, &mut host);
+        core.local_active_at = Some(Instant::now() - WAKE_AFTER);
+        core.remote_motion(&mut host, 3, 0);
+        assert_eq!((host.kept_active, host.woken), (1, 2));
     }
 
     #[test]
