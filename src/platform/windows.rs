@@ -16,7 +16,7 @@
 
 use crate::Args;
 use crate::config::{MachineCfg, ScrollCfg, Settings, TrayIcon};
-use crate::gamepad::GamepadWatch;
+use crate::gamepad::{self, GamepadWatch};
 use crate::geometry::{Layout, Point, Rect};
 use crate::i18n;
 use crate::icon::Style;
@@ -30,7 +30,7 @@ use crate::status;
 use crate::tray::{self, Action, IconStyle};
 use crossbeam_channel::Receiver;
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
 use std::mem::{size_of, zeroed};
 use std::path::{Path, PathBuf};
@@ -40,7 +40,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use windows_sys::Win32::Foundation::{
-    CloseHandle, ERROR_SUCCESS, GlobalFree, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, SIZE, WPARAM,
+    CloseHandle, ERROR_SUCCESS, GlobalFree, HANDLE, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, SIZE, WPARAM,
 };
 use windows_sys::Win32::Graphics::Gdi::{
     AC_SRC_ALPHA, AC_SRC_OVER, ANTIALIASED_QUALITY, BI_BITFIELDS, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BITMAPV5HEADER,
@@ -82,6 +82,10 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
     VK_VOLUME_UP,
 };
 use windows_sys::Win32::UI::Input::XboxController::{XINPUT_GAMEPAD, XINPUT_STATE, XInputGetState};
+use windows_sys::Win32::UI::Input::{
+    GetRawInputData, GetRawInputDeviceInfoW, HRAWINPUT, RAWHID, RAWINPUT, RAWINPUTDEVICE, RAWINPUTHEADER,
+    RID_DEVICE_INFO, RID_INPUT, RIDEV_INPUTSINK, RIDEV_PAGEONLY, RIDI_DEVICEINFO, RIM_TYPEHID, RegisterRawInputDevices,
+};
 use windows_sys::Win32::UI::Shell::{DROPFILES, ShellExecuteW};
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
@@ -1221,51 +1225,152 @@ impl Emulator for WinEmulator {
 // Manettes
 // ---------------------------------------------------------------------------
 
-/// Manettes XInput (Xbox, et celles que Steam présente comme telles) de la
-/// machine principale, sondées dans leur propre thread : sonder un
-/// emplacement vide peut prendre quelques millisecondes, trop pour le
-/// thread des hooks.
+/// Manettes de la machine principale, suivies dans leur propre thread
+/// (sonder un emplacement XInput vide peut prendre quelques millisecondes,
+/// trop pour le thread des hooks) :
+/// - manettes XInput (Xbox), sondées chaque seconde ;
+/// - Steam Controller, lu directement (Raw Input) : Steam ne le présente
+///   comme une manette Xbox qu'au jeu lui-même, pas aux autres programmes.
 fn watch_gamepads() {
-    const POLL: Duration = Duration::from_secs(1);
-    /// Un emplacement vide n'est sondé qu'un tour sur `PROBE_EMPTY`.
-    const PROBE_EMPTY: u32 = 5;
-    let spawned = std::thread::Builder::new().name("baskul-gamepads".into()).spawn(|| {
-        let mut watch = GamepadWatch::default();
-        let mut connected = [false; 4];
-        let mut tick = 0u32;
-        loop {
-            std::thread::sleep(POLL);
-            tick = tick.wrapping_add(1);
-            let mut moved = false;
-            for (slot, was_connected) in (0u32..).zip(connected.iter_mut()) {
-                if *was_connected || tick.is_multiple_of(PROBE_EMPTY) {
-                    moved |= poll_gamepad(&mut watch, slot, was_connected);
-                }
-            }
-            if moved {
-                post(WM_APP_GAMEPAD, 0, 0);
-            }
-        }
-    });
+    let spawned = std::thread::Builder::new().name("baskul-gamepads".into()).spawn(run_gamepads);
     if let Err(e) = spawned {
         log::warn!("surveillance des manettes impossible : {e}");
     }
 }
 
-/// Lit la manette de l'emplacement `slot` ; renvoie `true` pour un vrai geste.
-fn poll_gamepad(watch: &mut GamepadWatch, slot: u32, connected: &mut bool) -> bool {
-    let mut state = XINPUT_STATE::default();
-    // SAFETY: structure de la taille attendue, emplacement de 0 à 3.
-    let found = unsafe { XInputGetState(slot, &mut state) } == ERROR_SUCCESS;
-    if !found && *connected {
-        watch.forget(u64::from(slot));
+fn run_gamepads() {
+    let class = wide("STATIC");
+    let empty = wide("");
+    // SAFETY: fenêtre de messages créée sur ce thread, qui reçoit ensuite ses
+    // messages ; minuterie du thread.
+    unsafe {
+        let hwnd = CreateWindowExW(
+            0,
+            class.as_ptr(),
+            empty.as_ptr(),
+            0,
+            0,
+            0,
+            0,
+            0,
+            HWND_MESSAGE,
+            null_mut(),
+            GetModuleHandleW(null()),
+            null(),
+        );
+        if hwnd.is_null() {
+            log::warn!("Steam Controller : fenêtre de réception impossible");
+        } else {
+            register_vendor_hid(hwnd);
+        }
+        SetTimer(null_mut(), 0, 1000, None);
     }
-    *connected = found;
-    found && watch.moved_any(u64::from(slot), &gamepad_levels(&state.Gamepad))
+    let mut pads = Gamepads::default();
+    // SAFETY: boucle de messages standard du thread.
+    unsafe {
+        let mut msg: MSG = zeroed();
+        while GetMessageW(&mut msg, null_mut(), 0, 0) > 0 {
+            let moved = match msg.message {
+                WM_TIMER => pads.poll_xinput(),
+                WM_INPUT => pads.raw_input(msg.lParam as HRAWINPUT),
+                _ => false,
+            };
+            if moved {
+                pads.notify();
+            }
+            DispatchMessageW(&msg);
+        }
+    }
+}
+
+/// Rapports HID des collections du fabricant (celle du Steam Controller en
+/// fait partie), même sans le premier plan.
+fn register_vendor_hid(hwnd: HWND) {
+    const PAGE_VENDOR: u16 = 0xFF00;
+    let device = RAWINPUTDEVICE {
+        usUsagePage: PAGE_VENDOR,
+        usUsage: 0,
+        dwFlags: RIDEV_INPUTSINK | RIDEV_PAGEONLY,
+        hwndTarget: hwnd,
+    };
+    // SAFETY: tableau d'un élément, taille correcte.
+    if unsafe { RegisterRawInputDevices(&device, 1, size_of::<RAWINPUTDEVICE>() as u32) } == 0 {
+        log::warn!("Steam Controller : lecture impossible (Raw Input refusé)");
+    }
+}
+
+#[derive(Default)]
+struct Gamepads {
+    watch: GamepadWatch,
+    xinput: [bool; 4],
+    tick: u32,
+    /// Périphériques Raw Input déjà vus : Steam Controller ou non.
+    steam: HashMap<usize, bool>,
+    notified_at: Option<Instant>,
+}
+
+impl Gamepads {
+    /// Au plus un message par seconde au thread des hooks.
+    fn notify(&mut self) {
+        if self.notified_at.is_none_or(|t| t.elapsed() >= Duration::from_secs(1)) {
+            self.notified_at = Some(Instant::now());
+            post(WM_APP_GAMEPAD, 0, 0);
+        }
+    }
+
+    fn poll_xinput(&mut self) -> bool {
+        /// Un emplacement vide n'est sondé qu'un tour sur `PROBE_EMPTY`.
+        const PROBE_EMPTY: u32 = 5;
+        self.tick = self.tick.wrapping_add(1);
+        let mut moved = false;
+        for slot in 0..4u32 {
+            if self.xinput[slot as usize] || self.tick.is_multiple_of(PROBE_EMPTY) {
+                moved |= self.poll_slot(slot);
+            }
+        }
+        moved
+    }
+
+    /// Lit la manette XInput de l'emplacement `slot` ; `true` pour un vrai geste.
+    fn poll_slot(&mut self, slot: u32) -> bool {
+        let mut state = XINPUT_STATE::default();
+        // SAFETY: structure de la taille attendue, emplacement de 0 à 3.
+        let found = unsafe { XInputGetState(slot, &mut state) } == ERROR_SUCCESS;
+        if std::mem::replace(&mut self.xinput[slot as usize], found) != found {
+            log::info!("manette XInput {} (emplacement {slot})", if found { "branchée" } else { "débranchée" });
+            self.watch.forget(u64::from(slot));
+        }
+        found && self.watch.moved_any(u64::from(slot), &xinput_levels(&state.Gamepad))
+    }
+
+    /// Rapports d'un message `WM_INPUT` ; `true` pour un vrai geste.
+    fn raw_input(&mut self, handle: HRAWINPUT) -> bool {
+        let Some((device, size, reports)) = read_raw_hid(handle) else { return false };
+        if size == 0 || !self.is_steam_controller(device) {
+            return false;
+        }
+        // Les 4 emplacements XInput ont les identifiants 0 à 3.
+        let pad = device as usize as u64 | 1 << 63;
+        let mut moved = false;
+        for levels in reports.chunks(size).filter_map(gamepad::steam_controller_levels) {
+            moved |= self.watch.moved_any(pad, &levels);
+        }
+        moved
+    }
+
+    fn is_steam_controller(&mut self, device: HANDLE) -> bool {
+        *self.steam.entry(device as usize).or_insert_with(|| {
+            let steam = hid_ids(device).is_some_and(|(vendor, product)| gamepad::is_steam_controller(vendor, product));
+            if steam {
+                log::info!("Steam Controller détecté");
+            }
+            steam
+        })
+    }
 }
 
 /// Position de chaque commande : 16 boutons, 2 gâchettes, 4 axes.
-fn gamepad_levels(g: &XINPUT_GAMEPAD) -> [f32; 22] {
+fn xinput_levels(g: &XINPUT_GAMEPAD) -> [f32; 22] {
     let mut levels = [0.0; 22];
     for (bit, level) in levels.iter_mut().take(16).enumerate() {
         *level = f32::from((g.wButtons >> bit) & 1);
@@ -1276,6 +1381,50 @@ fn gamepad_levels(g: &XINPUT_GAMEPAD) -> [f32; 22] {
         *level = f32::from(axis) / 32768.0;
     }
     levels
+}
+
+/// Rapports HID d'un message `WM_INPUT` : le périphérique, la taille d'un
+/// rapport et les rapports, bout à bout.
+fn read_raw_hid(handle: HRAWINPUT) -> Option<(HANDLE, usize, Vec<u8>)> {
+    let header = size_of::<RAWINPUTHEADER>() as u32;
+    let mut size = 0u32;
+    // SAFETY: demande de la taille seulement.
+    if unsafe { GetRawInputData(handle, RID_INPUT, null_mut(), &mut size, header) } != 0 {
+        return None;
+    }
+    // Tampon de u64 : aligné comme RAWINPUT.
+    let mut buf = vec![0u64; (size as usize).div_ceil(8)];
+    // SAFETY: tampon d'au moins `size` octets.
+    let read = unsafe { GetRawInputData(handle, RID_INPUT, buf.as_mut_ptr().cast(), &mut size, header) };
+    let start = std::mem::offset_of!(RAWINPUT, data) + std::mem::offset_of!(RAWHID, bRawData);
+    if read == u32::MAX || (read as usize) < start {
+        return None;
+    }
+    // SAFETY: le tampon, aligné, contient au moins l'en-tête et le début des données.
+    let raw = unsafe { &*buf.as_ptr().cast::<RAWINPUT>() };
+    if raw.header.dwType != RIM_TYPEHID {
+        return None;
+    }
+    // SAFETY: données HID, d'après l'en-tête.
+    let (each, count) = unsafe { (raw.data.hid.dwSizeHid as usize, raw.data.hid.dwCount as usize) };
+    // SAFETY: `read` octets écrits dans un tampon qui en contient au moins autant.
+    let bytes = unsafe { std::slice::from_raw_parts(buf.as_ptr().cast::<u8>(), read as usize) };
+    let reports = bytes.get(start..start + each * count)?;
+    Some((raw.header.hDevice, each, reports.to_vec()))
+}
+
+/// Fabricant et produit d'un périphérique HID.
+fn hid_ids(device: HANDLE) -> Option<(u32, u32)> {
+    let mut info = RID_DEVICE_INFO { cbSize: size_of::<RID_DEVICE_INFO>() as u32, ..Default::default() };
+    let mut size = info.cbSize;
+    // SAFETY: structure de la taille annoncée.
+    let read = unsafe { GetRawInputDeviceInfoW(device, RIDI_DEVICEINFO, (&raw mut info).cast(), &mut size) };
+    if read == u32::MAX || info.dwType != RIM_TYPEHID {
+        return None;
+    }
+    // SAFETY: champ valide pour un périphérique HID, d'après `dwType`.
+    let hid = unsafe { info.Anonymous.hid };
+    Some((hid.dwVendorId, hid.dwProductId))
 }
 
 // ---------------------------------------------------------------------------
@@ -1540,6 +1689,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) ->
             0
         }
         WM_APP_GAMEPAD => {
+            log::debug!("manette utilisée");
             with_primary(|s| s.core.gamepad_input(&mut s.host));
             0
         }
