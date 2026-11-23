@@ -40,7 +40,8 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use windows_sys::Win32::Foundation::{
-    CloseHandle, ERROR_SUCCESS, GlobalFree, HANDLE, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, SIZE, WPARAM,
+    CloseHandle, ERROR_SUCCESS, GetLastError, GlobalFree, HANDLE, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, SIZE,
+    WPARAM,
 };
 use windows_sys::Win32::Graphics::Gdi::{
     AC_SRC_ALPHA, AC_SRC_OVER, ANTIALIASED_QUALITY, BI_BITFIELDS, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BITMAPV5HEADER,
@@ -83,8 +84,9 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows_sys::Win32::UI::Input::XboxController::{XINPUT_GAMEPAD, XINPUT_STATE, XInputGetState};
 use windows_sys::Win32::UI::Input::{
-    GetRawInputData, GetRawInputDeviceInfoW, HRAWINPUT, RAWHID, RAWINPUT, RAWINPUTDEVICE, RAWINPUTHEADER,
-    RID_DEVICE_INFO, RID_INPUT, RIDEV_INPUTSINK, RIDEV_PAGEONLY, RIDI_DEVICEINFO, RIM_TYPEHID, RegisterRawInputDevices,
+    GetRawInputData, GetRawInputDeviceInfoW, GetRawInputDeviceList, HRAWINPUT, RAWHID, RAWINPUT, RAWINPUTDEVICE,
+    RAWINPUTDEVICELIST, RAWINPUTHEADER, RID_DEVICE_INFO, RID_DEVICE_INFO_HID, RID_INPUT, RIDEV_INPUTSINK,
+    RIDI_DEVICEINFO, RIM_TYPEHID, RegisterRawInputDevices,
 };
 use windows_sys::Win32::UI::Shell::{DROPFILES, ShellExecuteW};
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
@@ -1243,7 +1245,7 @@ fn run_gamepads() {
     let empty = wide("");
     // SAFETY: fenêtre de messages créée sur ce thread, qui reçoit ensuite ses
     // messages ; minuterie du thread.
-    unsafe {
+    let hwnd = unsafe {
         let hwnd = CreateWindowExW(
             0,
             class.as_ptr(),
@@ -1258,20 +1260,20 @@ fn run_gamepads() {
             GetModuleHandleW(null()),
             null(),
         );
-        if hwnd.is_null() {
-            log::warn!("Steam Controller : fenêtre de réception impossible");
-        } else {
-            register_vendor_hid(hwnd);
-        }
         SetTimer(null_mut(), 0, 1000, None);
+        hwnd
+    };
+    if hwnd.is_null() {
+        log::warn!("Steam Controller : fenêtre de réception impossible");
     }
-    let mut pads = Gamepads::default();
+    let mut pads = Gamepads::new(hwnd);
+    pads.find_steam_controllers();
     // SAFETY: boucle de messages standard du thread.
     unsafe {
         let mut msg: MSG = zeroed();
         while GetMessageW(&mut msg, null_mut(), 0, 0) > 0 {
             let moved = match msg.message {
-                WM_TIMER => pads.poll_xinput(),
+                WM_TIMER => pads.tick(),
                 WM_INPUT => pads.raw_input(msg.lParam as HRAWINPUT),
                 _ => false,
             };
@@ -1283,33 +1285,32 @@ fn run_gamepads() {
     }
 }
 
-/// Rapports HID des collections du fabricant (celle du Steam Controller en
-/// fait partie), même sans le premier plan.
-fn register_vendor_hid(hwnd: HWND) {
-    const PAGE_VENDOR: u16 = 0xFF00;
-    let device = RAWINPUTDEVICE {
-        usUsagePage: PAGE_VENDOR,
-        usUsage: 0,
-        dwFlags: RIDEV_INPUTSINK | RIDEV_PAGEONLY,
-        hwndTarget: hwnd,
-    };
-    // SAFETY: tableau d'un élément, taille correcte.
-    if unsafe { RegisterRawInputDevices(&device, 1, size_of::<RAWINPUTDEVICE>() as u32) } == 0 {
-        log::warn!("Steam Controller : lecture impossible (Raw Input refusé)");
-    }
-}
-
-#[derive(Default)]
 struct Gamepads {
+    /// Fenêtre qui reçoit les rapports du Steam Controller (nulle : aucun).
+    hwnd: HWND,
     watch: GamepadWatch,
     xinput: [bool; 4],
-    tick: u32,
-    /// Périphériques Raw Input déjà vus : Steam Controller ou non.
+    ticks: u32,
+    /// Collections HID (page, usage) des Steam Controller, déjà demandées.
+    collections: HashSet<(u16, u16)>,
+    /// Périphériques Raw Input dont un rapport est arrivé : Steam Controller ou non.
     steam: HashMap<usize, bool>,
     notified_at: Option<Instant>,
 }
 
 impl Gamepads {
+    fn new(hwnd: HWND) -> Gamepads {
+        Gamepads {
+            hwnd,
+            watch: GamepadWatch::default(),
+            xinput: [false; 4],
+            ticks: 0,
+            collections: HashSet::new(),
+            steam: HashMap::new(),
+            notified_at: None,
+        }
+    }
+
     /// Au plus un message par seconde au thread des hooks.
     fn notify(&mut self) {
         if self.notified_at.is_none_or(|t| t.elapsed() >= Duration::from_secs(1)) {
@@ -1318,13 +1319,19 @@ impl Gamepads {
         }
     }
 
-    fn poll_xinput(&mut self) -> bool {
-        /// Un emplacement vide n'est sondé qu'un tour sur `PROBE_EMPTY`.
+    /// Chaque seconde : manettes XInput ; toutes les 30 s, Steam Controller
+    /// branché entre-temps.
+    fn tick(&mut self) -> bool {
+        /// Un emplacement XInput vide n'est sondé qu'un tour sur `PROBE_EMPTY`.
         const PROBE_EMPTY: u32 = 5;
-        self.tick = self.tick.wrapping_add(1);
+        const RESCAN: u32 = 30;
+        self.ticks = self.ticks.wrapping_add(1);
+        if self.ticks.is_multiple_of(RESCAN) {
+            self.find_steam_controllers();
+        }
         let mut moved = false;
         for slot in 0..4u32 {
-            if self.xinput[slot as usize] || self.tick.is_multiple_of(PROBE_EMPTY) {
+            if self.xinput[slot as usize] || self.ticks.is_multiple_of(PROBE_EMPTY) {
                 moved |= self.poll_slot(slot);
             }
         }
@@ -1343,10 +1350,49 @@ impl Gamepads {
         found && self.watch.moved_any(u64::from(slot), &xinput_levels(&state.Gamepad))
     }
 
+    /// Demande les rapports des collections HID des Steam Controller
+    /// branchés, quelles qu'elles soient, même sans le premier plan.
+    fn find_steam_controllers(&mut self) {
+        if self.hwnd.is_null() {
+            return;
+        }
+        let first = self.ticks == 0;
+        let new: Vec<(u16, u16)> = steam_collections().into_iter().filter(|c| !self.collections.contains(c)).collect();
+        if new.is_empty() {
+            if first {
+                log::info!("Steam Controller : aucun branché");
+            }
+            return;
+        }
+        let devices: Vec<RAWINPUTDEVICE> = new
+            .iter()
+            .map(|&(page, usage)| RAWINPUTDEVICE {
+                usUsagePage: page,
+                usUsage: usage,
+                dwFlags: RIDEV_INPUTSINK,
+                hwndTarget: self.hwnd,
+            })
+            .collect();
+        // SAFETY: tableau de `devices.len()` éléments, taille correcte.
+        let ok = unsafe {
+            RegisterRawInputDevices(devices.as_ptr(), devices.len() as u32, size_of::<RAWINPUTDEVICE>() as u32)
+        };
+        if ok == 0 {
+            // SAFETY: appel sans précondition.
+            let err = unsafe { GetLastError() };
+            log::warn!("Steam Controller : lecture refusée par Windows (erreur {err})");
+            return;
+        }
+        for (page, usage) in new {
+            log::info!("Steam Controller : lecture de la collection HID 0x{page:04X}/0x{usage:04X}");
+            self.collections.insert((page, usage));
+        }
+    }
+
     /// Rapports d'un message `WM_INPUT` ; `true` pour un vrai geste.
     fn raw_input(&mut self, handle: HRAWINPUT) -> bool {
         let Some((device, size, reports)) = read_raw_hid(handle) else { return false };
-        if size == 0 || !self.is_steam_controller(device) {
+        if size == 0 || !self.is_steam_controller(device, &reports) {
             return false;
         }
         // Les 4 emplacements XInput ont les identifiants 0 à 3.
@@ -1358,15 +1404,46 @@ impl Gamepads {
         moved
     }
 
-    fn is_steam_controller(&mut self, device: HANDLE) -> bool {
+    fn is_steam_controller(&mut self, device: HANDLE, reports: &[u8]) -> bool {
         *self.steam.entry(device as usize).or_insert_with(|| {
-            let steam = hid_ids(device).is_some_and(|(vendor, product)| gamepad::is_steam_controller(vendor, product));
+            let steam = hid_info(device).is_some_and(|h| gamepad::is_steam_controller(h.dwVendorId, h.dwProductId));
             if steam {
-                log::info!("Steam Controller détecté");
+                let start = &reports[..reports.len().min(8)];
+                log::info!("Steam Controller : premières données reçues ({start:02x?})");
             }
             steam
         })
     }
+}
+
+/// Collections HID (page, usage) des Steam Controller branchés.
+fn steam_collections() -> Vec<(u16, u16)> {
+    const PAGE_VENDOR: u16 = 0xFF00;
+    let item = size_of::<RAWINPUTDEVICELIST>() as u32;
+    let mut count = 0u32;
+    // SAFETY: demande du nombre de périphériques seulement.
+    if unsafe { GetRawInputDeviceList(null_mut(), &mut count, item) } == u32::MAX {
+        return Vec::new();
+    }
+    let mut list = vec![RAWINPUTDEVICELIST::default(); count as usize];
+    // SAFETY: tableau de `count` éléments, taille correcte.
+    let read = unsafe { GetRawInputDeviceList(list.as_mut_ptr(), &mut count, item) };
+    if read == u32::MAX {
+        return Vec::new();
+    }
+    let mut collections: Vec<(u16, u16)> = list[..(read as usize).min(list.len())]
+        .iter()
+        .filter(|d| d.dwType == RIM_TYPEHID)
+        .filter_map(|d| hid_info(d.hDevice))
+        .filter(|h| gamepad::is_steam_controller(h.dwVendorId, h.dwProductId))
+        // Ses rapports d'état sont dans une collection du fabricant ; les autres
+        // (clavier et souris émulés, touches multimédia) n'en sont pas.
+        .filter(|h| h.usUsagePage >= PAGE_VENDOR)
+        .map(|h| (h.usUsagePage, h.usUsage))
+        .collect();
+    collections.sort_unstable();
+    collections.dedup();
+    collections
 }
 
 /// Position de chaque commande : 16 boutons, 2 gâchettes, 4 axes.
@@ -1413,8 +1490,8 @@ fn read_raw_hid(handle: HRAWINPUT) -> Option<(HANDLE, usize, Vec<u8>)> {
     Some((raw.header.hDevice, each, reports.to_vec()))
 }
 
-/// Fabricant et produit d'un périphérique HID.
-fn hid_ids(device: HANDLE) -> Option<(u32, u32)> {
+/// Fabricant, produit et collection d'un périphérique HID.
+fn hid_info(device: HANDLE) -> Option<RID_DEVICE_INFO_HID> {
     let mut info = RID_DEVICE_INFO { cbSize: size_of::<RID_DEVICE_INFO>() as u32, ..Default::default() };
     let mut size = info.cbSize;
     // SAFETY: structure de la taille annoncée.
@@ -1423,8 +1500,7 @@ fn hid_ids(device: HANDLE) -> Option<(u32, u32)> {
         return None;
     }
     // SAFETY: champ valide pour un périphérique HID, d'après `dwType`.
-    let hid = unsafe { info.Anonymous.hid };
-    Some((hid.dwVendorId, hid.dwProductId))
+    Some(unsafe { info.Anonymous.hid })
 }
 
 // ---------------------------------------------------------------------------
