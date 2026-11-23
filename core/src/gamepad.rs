@@ -20,6 +20,14 @@ const USAGE_HAT: u32 = 0x39;
 const USAGE_ACCELERATOR: u32 = 0xC4;
 const USAGE_BRAKE: u32 = 0xC5;
 
+const VALVE: u32 = 0x28DE;
+const STEAM_CONTROLLER_WIRED: u32 = 0x1102;
+const STEAM_CONTROLLER_DONGLE: u32 = 0x1142;
+const STEAM_REPORT_VERSION: [u8; 2] = [0x01, 0x00];
+const STEAM_REPORT_STATE: u8 = 0x01;
+/// Boutons (48), gâchettes (2), pavés tactiles et stick (4 axes).
+pub const STEAM_CONTROLS: usize = 54;
+
 /// Dernière position comptée de chaque commande (bouton, gâchette, axe d'un
 /// stick), par manette.
 #[derive(Debug, Default)]
@@ -76,6 +84,39 @@ pub fn hid_level(page: u32, usage: u32, value: i64, min: i64, max: i64) -> Optio
     }
 }
 
+/// Steam Controller, par câble ou par son dongle (les autres manettes de
+/// Valve envoient d'autres rapports).
+pub fn is_steam_controller(vendor: u32, product: u32) -> bool {
+    vendor == VALVE && matches!(product, STEAM_CONTROLLER_WIRED | STEAM_CONTROLLER_DONGLE)
+}
+
+/// Rapport HID d'un Steam Controller : position de chaque commande pour un
+/// rapport d'état, `None` pour les autres (connexion sans fil, batterie…).
+/// Le gyroscope et l'accéléromètre sont ignorés. Format : `controller_structs.h`
+/// de SDL. Sous Windows, le rapport commence par son numéro, toujours 0.
+pub fn steam_controller_levels(report: &[u8]) -> Option<[f32; STEAM_CONTROLS]> {
+    let r = match report {
+        [0, rest @ ..] => rest,
+        _ => report,
+    };
+    if r.len() < 24 || r[..2] != STEAM_REPORT_VERSION || r[2] != STEAM_REPORT_STATE {
+        return None;
+    }
+    let buttons = u64::from_le_bytes(r[8..16].try_into().ok()?);
+    let axis = |i: usize| f32::from(i16::from_le_bytes([r[i], r[i + 1]])) / 32768.0;
+    let mut levels = [0.0; STEAM_CONTROLS];
+    // Octets 3 et 4 du champ des boutons : les gâchettes.
+    for (level, bit) in levels.iter_mut().zip((0..24).chain(40..64)) {
+        *level = ((buttons >> bit) & 1) as f32;
+    }
+    levels[48] = f32::from(r[11]) / 255.0;
+    levels[49] = f32::from(r[12]) / 255.0;
+    for (level, i) in levels[50..].iter_mut().zip([16, 18, 20, 22]) {
+        *level = axis(i);
+    }
+    Some(levels)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,6 +148,49 @@ mod tests {
         w.forget(0);
         assert!(!w.moved_any(0, &[0.0, 0.0, 0.0]));
         assert!(!w.moved_any(1, &[1.0, 1.0, 1.0]));
+    }
+
+    /// Rapport d'état tel que Windows le donne : numéro 0, en-tête, état.
+    fn steam_report(buttons: u32, left_trigger: u8, left_x: i16, gyro: i16) -> Vec<u8> {
+        let mut r = vec![0u8; 65];
+        r[1..5].copy_from_slice(&[0x01, 0x00, STEAM_REPORT_STATE, 60]);
+        r[5..9].copy_from_slice(&7u32.to_le_bytes());
+        r[9..12].copy_from_slice(&buttons.to_le_bytes()[..3]);
+        r[12] = left_trigger;
+        r[17..19].copy_from_slice(&left_x.to_le_bytes());
+        r[25..27].copy_from_slice(&u16::from(left_trigger).to_le_bytes());
+        r[35..37].copy_from_slice(&gyro.to_le_bytes());
+        r
+    }
+
+    #[test]
+    fn steam_controller_reports_are_read() {
+        assert!(is_steam_controller(0x28DE, 0x1142));
+        assert!(!is_steam_controller(0x28DE, 0x1205));
+        let rest = steam_controller_levels(&steam_report(0, 0, 0, 0)).unwrap();
+        assert!(rest.iter().all(|l| *l == 0.0));
+        // Bouton A, gâchette gauche à fond, stick à droite.
+        let pressed = steam_controller_levels(&steam_report(0x80, 255, 32767, 0)).unwrap();
+        assert_eq!((pressed[7], pressed[48], pressed[49]), (1.0, 1.0, 0.0));
+        assert!(pressed[50] > 0.99);
+        // Sans le numéro de rapport (macOS), même lecture.
+        assert_eq!(steam_controller_levels(&steam_report(0x80, 255, 32767, 0)[1..]), Some(pressed));
+        // Rapport sans fil (connexion), ou trop court : ignoré.
+        let mut wireless = steam_report(0, 0, 0, 0);
+        wireless[3] = 0x03;
+        assert_eq!(steam_controller_levels(&wireless), None);
+        assert_eq!(steam_controller_levels(&[0, 1, 0, 1, 4]), None);
+    }
+
+    #[test]
+    fn a_still_steam_controller_is_not_activity() {
+        let mut w = GamepadWatch::default();
+        let levels = |r: Vec<u8>| steam_controller_levels(&r).unwrap();
+        assert!(!w.moved_any(0, &levels(steam_report(0, 0, 120, 0))));
+        // Posé sur le bureau : seul le gyroscope bouge, avec un peu de bruit du stick.
+        assert!(!w.moved_any(0, &levels(steam_report(0, 0, -300, 5000))));
+        assert!(!w.moved_any(0, &levels(steam_report(0, 0, 200, -8000))));
+        assert!(w.moved_any(0, &levels(steam_report(0x80, 0, 200, 0))));
     }
 
     #[test]
